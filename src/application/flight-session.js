@@ -38,8 +38,9 @@ function rampSample(launch, weather, elapsed, gustOffset) {
     updraft: wind.updraft ?? 0,
     pitch: LAUNCH.pitchDeg * RADIANS_PER_DEGREE,
     speed: Math.hypot(
-      ramp.speed * Math.cos(launch.heading) + wind.headwind,
-      ramp.speed * Math.sin(launch.heading) + (wind.crosswind ?? 0),
+      ramp.speed * launch.forwardStep + wind.headwind,
+      ramp.speed * launch.rightStep + (wind.crosswind ?? 0),
+      -ramp.speed * launch.dropStep - (wind.updraft ?? 0),
     ),
   };
 }

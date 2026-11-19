@@ -2,7 +2,7 @@ import { LAUNCH } from './launch.js';
 import { bodyShiftFromCg, cgShiftFromBody, limitBodyShift, PILOT_SHIFT } from './pilot-shift.js';
 import { courseAt } from './race2025.js';
 import { GRAVITY, RADIANS_PER_DEGREE } from './units.js';
-import { WIND_RISE_METRES, windAt } from './weather.js';
+import { WEATHER, WIND_RISE_METRES, windAt } from './weather.js';
 
 export const BASE_DESIGN = Object.freeze({ span: 25.1, incidence: 3.2 });
 export const CG_HEIGHT = 0.45;
@@ -95,6 +95,9 @@ export function aircraftDynamics({ span, incidence }, launch, options) {
   const area = TATSUMI.area * span / BASE_DESIGN.span;
   const effectiveSpan = span * (TATSUMI.span / BASE_DESIGN.span);
   const aspectRatio = effectiveSpan ** 2 / area;
+  const resolveWingGust = !referenceControl && Boolean(WEATHER[weather].field);
+  // Centroid of a semi-elliptical span load, measured from the aircraft centreline.
+  const halfWingArm = effectiveSpan * 2 / (3 * Math.PI);
   const wingSlope = (TATSUMI.wingLiftSlopePerDegree / RADIANS_PER_DEGREE)
     * (1 + 2 / (efficiency * TATSUMI.aspectRatio)) / (1 + 2 / (efficiency * aspectRatio));
   const tailSlope = TATSUMI.tailLiftSlopePerDegree / RADIANS_PER_DEGREE;
@@ -116,7 +119,7 @@ export function aircraftDynamics({ span, incidence }, launch, options) {
   }
   function airflow(state, time, position = location(state)) {
     const { pathLength, u, w, v, pitch, bank, heading } = state;
-    const wind = windAt(weather, { ...position, pathLength, height: state.height, gustOffset }, time, windRiseLength);
+    const wind = windAt(weather, { ...position, pathLength, height: position.height ?? state.height, gustOffset }, time, windRiseLength);
     // Fixed wind cards are in platform axes, including on the prescribed reference track.
     // The historical scalar wind scenario is the calibrated longitudinal component.
     const windHeading = referenceControl && wind.crosswind !== undefined
@@ -147,7 +150,25 @@ export function aircraftDynamics({ span, incidence }, launch, options) {
     const cl = liftCoefficient(wingAngle, wingSlope);
     const downwash = (wingCL0 - groundFactor * cl) / (Math.PI * efficiency * aspectRatio);
     const tailCL = liftCoefficient(tailCL0 / tailSlope + alpha + downwash + q * tailArm / speed, tailSlope);
-    const wingLift = pressure * area * cl, tailLift = pressure * tailArea * tailCL;
+    let wingLift = pressure * area * cl, gustRoll = 0;
+    if (resolveWingGust) {
+      const center = location(state);
+      // Project the lateral wing axis using the same heading/pitch/bank as the rendered model.
+      const ch = Math.cos(heading), sh = Math.sin(heading);
+      const wingRight = ch * cb + sh * sp * sb, wingForward = -sh * cb + ch * sp * sb;
+      const halfLift = arm => {
+        const air = airflow(state, time, {
+          right: center.right + arm * wingRight, forward: center.forward + arm * wingForward,
+          height: wingHeight - arm * cp * sb, heading,
+        });
+        const localCL = liftCoefficient(wingAngle + air.alpha - alpha, wingSlope);
+        return .25 * airDensity * air.speed ** 2 * area * localCL;
+      };
+      const left = halfLift(-halfWingArm), right = halfLift(halfWingArm);
+      wingLift = left + right;
+      gustRoll = (left - right) * halfWingArm * Math.cos(alpha);
+    }
+    const tailLift = pressure * tailArea * tailCL;
     const lift = wingLift + tailLift;
     const wingStall = Math.max(0, Math.abs(wingAngle) - TATSUMI.maxLiftCoefficient / wingSlope);
     const inducedDrag = groundFactor * (lift / (pressure * area)) ** 2 / (Math.PI * aspectRatio * efficiency);
@@ -181,7 +202,7 @@ export function aircraftDynamics({ span, incidence }, launch, options) {
       pitch: q * cb - r * sb, q: (moment + (yawInertia - rollInertia) * r * p) / pitchInertia,
       bodyShift: shiftRate, bank: p + headingRate * sp, heading: headingRate,
       right: u * sh + v * ch, forward: u * ch - v * sh, v: rightForce / LAUNCH.mass - headingRate * u,
-      p: (loads.roll + (pitchInertia - yawInertia) * q * r) / rollInertia,
+      p: (loads.roll + gustRoll + (pitchInertia - yawInertia) * q * r) / rollInertia,
       r: (loads.yaw + (rollInertia - pitchInertia) * p * q) / yawInertia,
     };
   }

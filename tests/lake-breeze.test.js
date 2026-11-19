@@ -18,8 +18,9 @@ test('湖風と陸風は逆向き、突風の三成分は空間・時刻に沿�
     for (const key of Object.keys(a)) assert.ok(Math.abs(a[key] - b[key]) < .002);
     samples.push(a);
   }
-  for (const key of ['headwind', 'crosswind', 'updraft']) {
-    assert.ok(Math.max(...samples.map(p => p[key])) - Math.min(...samples.map(p => p[key])) > .5);
+  for (const [key, amplitude] of [['headwind', 'along'], ['crosswind', 'lateral'], ['updraft', 'vertical']]) {
+    const range = Math.max(...samples.map(p => p[key])) - Math.min(...samples.map(p => p[key]));
+    assert.ok(range > WEATHER['day-hard'].field[amplitude]);
   }
   const nearWater = { right: 5, forward: 105 };
   const surface = windAt('day-hard', { ...nearWater, height: 0 }, 15);
@@ -105,4 +106,14 @@ test('昼夜の各難易度で背景風と三成分の揺らぎを段階的に�
       for (const key of ['along', 'lateral', 'vertical']) assert.ok(a.field[key] < b.field[key]);
     }
   }
+});
+
+test('斜めの助走中も、三次元の対地速度と風の差から対気速度が決まる', () => {
+  const session = new FlightSession(hull, 'night-hard', () => 4.25);
+  session.select('night-hard', 25);
+  const attempt = session.startAttempt();
+  const s = attempt.advance(session.launch.duration * .8, 0, 0).sample;
+  const wind = windAt(session.weather, s, s.windTime);
+  close(s.speed, Math.hypot(s.groundSpeed * Math.cos(s.track) + wind.headwind,
+    s.groundSpeed * Math.sin(s.track) + wind.crosswind, s.verticalSpeed - wind.updraft));
 });

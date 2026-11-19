@@ -1,4 +1,4 @@
-import { WIND_CELL_METRES, WIND_GRID_SIZE } from '../domain/lake-breeze.js';
+import { WIND_OFFSET_ROW_STRIDE, WIND_GRID_SIZE } from '../domain/lake-breeze.js';
 
 export const atmosphere = `
 uniform float nightScene;
@@ -43,10 +43,11 @@ uniform vec4 localWind; // incoming head/cross, along/lateral amplitudes, in pla
 uniform vec2 windPlatform; // cos and sin of the platform's world yaw
 uniform float windOffset;
 uniform float fieldTime;
+uniform float windCellMetres;
 float surfaceWindSpeed(vec2 world){
   vec2 platform=vec2(dot(world,vec2(windPlatform.x,-windPlatform.y)),
                      dot(world,vec2(-windPlatform.y,-windPlatform.x)));
-  vec2 cell=(platform+localWind.yx*fieldTime)/${WIND_CELL_METRES}.0+vec2(windOffset,0.);
+  vec2 cell=(platform+localWind.yx*fieldTime)/windCellMetres+windOffset*vec2(1.,${WIND_OFFSET_ROW_STRIDE}.);
   vec2 f=fract(cell);
   vec2 uv=(floor(cell)+f*f*(3.-2.*f)+.5)/${WIND_GRID_SIZE}.0;
   vec2 disturbance=texture2D(localWindGrid,uv).rg*2.-1.;

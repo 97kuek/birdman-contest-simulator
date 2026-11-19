@@ -2,7 +2,8 @@
 // RGB encodes signed longitudinal, lateral and vertical perturbations. The water
 // shader samples the same byte grid with the same interpolation as the flight.
 export const WIND_GRID_SIZE = 32;
-export const WIND_CELL_METRES = 34;
+// Coprime with the grid size: trial offsets visit different rows as well as columns.
+export const WIND_OFFSET_ROW_STRIDE = 7;
 const CHANNELS = 4;
 export const windGrid = new Uint8Array(WIND_GRID_SIZE ** 2 * CHANNELS);
 let seed = 202507;
@@ -22,8 +23,8 @@ function knot(right, forward) {
 
 export function breezeAt(field, right, forward, seconds, gustOffset = 0) {
   // Positive head/cross components mean flow toward the shore/left.
-  const x = (right + field.cross * seconds) / WIND_CELL_METRES + gustOffset;
-  const y = (forward + field.head * seconds) / WIND_CELL_METRES;
+  const x = (right + field.cross * seconds) / field.cellMetres + gustOffset;
+  const y = (forward + field.head * seconds) / field.cellMetres + gustOffset * WIND_OFFSET_ROW_STRIDE;
   const ix = Math.floor(x), iy = Math.floor(y);
   const fx = smooth(x - ix), fy = smooth(y - iy);
   const a = knot(ix, iy), b = knot(ix + 1, iy), c = knot(ix, iy + 1), d = knot(ix + 1, iy + 1);

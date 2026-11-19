@@ -108,10 +108,12 @@ async function start() {
   bindViewerControls(host, renderer, cameraRig, atWater);
   const compass = document.querySelector('.compass svg');
   const motorPosition = new THREE.Vector3();
-  let last = 0, sceneTime = 0;
+  let last = 0, sceneTime = 0, lastImpactRun;
+  const impactDirection = new THREE.Vector3(), impactPoint = new THREE.Vector3();
   renderer.setAnimationLoop(now => {
     if (now - last < 30) return;
     const elapsed = last ? Math.min((now - last) / 1000, 0.15) : 0;
+    if (last && !document.hidden) sceneTime += (now - last) / 1000;
     last = now;
     trials?.tick(now);
     const underway = boat.update(modelBase, elapsed, reduceMotion.matches, firstLand);
@@ -128,14 +130,22 @@ async function start() {
     const period = weather.period ?? 'day';
     if (document.body.dataset.period !== period) document.body.dataset.period = period;
     setNight?.(period === 'night');
-    sceneTime += elapsed;
     const sample = trials ? display.sample : null;
     const windTime = sample?.windTime ?? sample?.t ?? 0;
-    const visualTime = reduceMotion.matches ? 0 : weather.field ? windTime : sceneTime;
+    const visualTime = reduceMotion.matches ? 0 : trials?.waveTime() ?? sceneTime;
+    const age = reduceMotion.matches ? -1 : trials?.contactAge(now) ?? -1;
+    const run = trials?.contactRun;
+    if (age >= 0 && run && run !== lastImpactRun) {
+      const contact = run.samples.at(-1);
+      impactDirection.set(Math.sin(contact.track), 0, -Math.cos(contact.track)).transformDirection(facility.matrixWorld);
+      facility.localToWorld(impactPoint.set(run.contactRight, 0, -run.contactForward));
+      lake.touch(impactPoint, impactDirection, Math.abs(contact.verticalSpeed));
+      lastImpactRun = run;
+    }
     const fluctuation = !weather.field && weather.gustSpeed ? windAt(weatherMode, 150, windTime).headwind - weather.lakeWindSpeed : 0;
     const angle = Math.atan2(weather.field?.cross ?? weather.crosswind ?? 0, weather.field?.head ?? weather.headwind ?? 1);
     lake.update(cameraRig.camera, visualTime, weather.lakeWindSpeed, fluctuation, angle, weather.field, windTime, facility.rotation.y,
-      sample?.gustOffset ?? 0);
+      sample?.gustOffset ?? 0, age);
     compass.style.transform = 'rotate(' + cameraRig.compassBearing() + 'rad)';
     renderer.render(scene, cameraRig.camera);
   });
@@ -149,7 +159,6 @@ async function start() {
   const session = new FlightSession(modelHull(aircraft), selectedWeather(), drawWindOffset, firstLand);
   const display = createCockpitDisplay(aircraft, {
     weather: () => trials?.weather ?? session.weather,
-    platformBearing: -facility.rotation.y,
     describe: text => renderer.domElement.setAttribute('aria-description', text),
   });
   const aircraftPose = createAircraftPose({ modelBase, aircraft, crew, view, moveCamera, display });
@@ -159,12 +168,7 @@ async function start() {
     crewTime: time => crew.update(session.launch, time, (side, contact) => sound.step(side, contact, view())),
     playSplash: sample => sound.splash(sample),
     makeTrail: (run, color) => createFlightTrail(run, color, { facility, release }),
-    onWaterContact: (right, forward, sample) => {
-      if (reduceMotion.matches) return;
-      const direction = new THREE.Vector3(Math.sin(sample.track), 0, -Math.cos(sample.track)).transformDirection(facility.matrixWorld);
-      const point = facility.localToWorld(new THREE.Vector3(right, 0, -forward));
-      lake.touch(point, direction, Math.abs(sample.verticalSpeed));
-    },
+    sceneSeconds: () => sceneTime,
   });
   status.hidden = true;
   host.dataset.ready = 'true';

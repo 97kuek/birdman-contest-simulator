@@ -9,25 +9,25 @@ function steadyWind(label, headwind, crosswind) {
 }
 // The east shore faces the lake. Components are resolved about the launch
 // platform, whose bearing is 295°. A westerly is 25° left of its forward axis.
-function localWeather(period, level, speed, along, lateral, vertical) {
+function localWeather(period, level, speed, along, lateral, vertical, cellMetres) {
   const day = period === 'day';
   const westWind = day ? speed : -speed;
   const label = (day ? '昼の湖風' : '夜の陸風') + '・' + level;
   const angle = -25 * Math.PI / 180;
   const field = Object.freeze({ head: westWind * Math.cos(angle), cross: westWind * Math.sin(angle),
-    along, lateral, vertical });
+    along, lateral, vertical, cellMetres });
   return Object.freeze({ label, period, field, lakeWindSpeed: Math.abs(westWind), gustSpeed: along });
 }
 export const WEATHER = Object.freeze({
   head: steadyWind('向かい風', STEADY_WIND_SPEED, 0),
   tail: steadyWind('追い風', -STEADY_WIND_SPEED, 0),
   cross: steadyWind('横風', 0, -STEADY_WIND_SPEED),
-  'day-easy': localWeather('day', '初級', 0.85, 0.25, 0.22, 0.055),
-  'day-normal': localWeather('day', '中級', 1.50, 0.75, 0.60, 0.18),
-  'day-hard': localWeather('day', '上級', 2.10, 1.55, 1.35, 0.35),
-  'night-easy': localWeather('night', '初級', 0.60, 0.20, 0.18, 0.045),
-  'night-normal': localWeather('night', '中級', 1.00, 0.55, 0.50, 0.14),
-  'night-hard': localWeather('night', '上級', 1.45, 0.95, 1.05, 0.29),
+  'day-easy': localWeather('day', '初級', 0.70, 0.17, 0.16, 0.04, 55),
+  'day-normal': localWeather('day', '中級', 1.20, 0.52, 0.65, 0.14, 36),
+  'day-hard': localWeather('day', '上級', 1.65, 0.90, 1.35, 0.27, 24),
+  'night-easy': localWeather('night', '初級', 0.40, 0.14, 0.15, 0.035, 55),
+  'night-normal': localWeather('night', '中級', 0.70, 0.34, 0.56, 0.12, 36),
+  'night-hard': localWeather('night', '上級', 0.95, 0.52, 1.20, 0.24, 24),
   reference: Object.freeze({ label: '基準風', lakeWindSpeed: STEADY_WIND_SPEED, gustSpeed: 0,
     description: 'ログに合わせた推定向かい風 0〜1.2 m/s' }),
   calm: Object.freeze({ label: '無風', lakeWindSpeed: 0, gustSpeed: 0,

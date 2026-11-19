@@ -84,3 +84,17 @@ test('傾斜・偏向した機体外形の最低点と最後尾が独立した3D
     near(landing.distance, Math.hypot(pose.right + tail.x - launch.edgeRight, pose.forward - tail.z - launch.edgeForward));
   }
 });
+
+test('局所風で左右の半翼に生じる揚力差が正負のロールを生む', () => {
+  const launch = launchProfile();
+  const state = { ...releaseState(launch, true, true), u: 10.5, w: 0, q: 0 };
+  function rollingAccelerationBeyondSideslip(weather, gustOffset) {
+    const d = aircraftDynamics(BASE_DESIGN, launch, { weather, gustOffset, wind: true, pilot: true, returnSeconds: .45 });
+    const air = d.airflow(state, 0);
+    const rollFromBeta = -.004723 * air.beta * (.5 * 1.164 * air.speed ** 2) * 17.92 * 24.514 / 993.022;
+    return d.rates(state, 0, 0, 0).p - rollFromBeta;
+  }
+  near(rollingAccelerationBeyondSideslip('cross', 0), 0);
+  assert.ok(rollingAccelerationBeyondSideslip('day-hard', 1) > .01);
+  assert.ok(rollingAccelerationBeyondSideslip('day-hard', 2) < -.01);
+});

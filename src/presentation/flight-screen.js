@@ -33,7 +33,7 @@ export function setupTrials({
   setView,
   view,
   startLandingCamera,
-  onWaterContact,
+  sceneSeconds,
   playSplash,
 }) {
   const weatherControls = document.querySelectorAll('input[name="period"],input[name="difficulty"]');
@@ -49,6 +49,7 @@ export function setupTrials({
   let countdown = null;
   let resultRecord = null;
   let landing = null, ruling = null;
+  const releaseWaveTimes = new WeakMap();
   function stage(name) {
     stopHeading();
     screen = name;
@@ -207,6 +208,7 @@ export function setupTrials({
     const attempt = session.startAttempt();
     const color = trialColor(attempt.number);
     const record = {
+      releaseWaveTime: sceneSeconds() + session.launch.duration - elapsed,
       label: '試技 ' + attempt.number,
       color,
       trail: makeTrail(null, color),
@@ -222,6 +224,7 @@ export function setupTrials({
     if (!active) return;
     const { record, commentary } = active;
     record.run = run;
+    releaseWaveTimes.set(run, record.releaseWaveTime);
     records.record(run);
     record.trail.extend(run.samples);
     latestRecord?.trail.dispose();
@@ -230,7 +233,6 @@ export function setupTrials({
     const last = run.samples.at(-1);
     pose(last);
     playSplash(last);
-    onWaterContact?.(run.contactRight, run.contactForward, last);
     active = null;
     atWater = true;
     clearInput();
@@ -373,8 +375,19 @@ export function setupTrials({
     get atWater() {
       return atWater && !review;
     },
-    get weatherTime() {
-      return review ? replay.time : active ? Math.max(0, active.clock - session.launch.duration) : null;
+    waveTime() {
+      if (review) return releaseWaveTimes.get(review.record.run) + replay.time;
+      if (active) return active.record.releaseWaveTime + active.clock - session.launch.duration;
+      if (landing) return landing.record.releaseWaveTime + landing.record.run.duration + (performance.now() - landing.start) / 1000;
+      return sceneSeconds();
+    },
+    get contactRun() {
+      return landing?.record.run ?? review?.record.run;
+    },
+    contactAge(now) {
+      if (landing) return Math.max(0, (now - landing.start) / 1000);
+      if (review) return replay.time - review.record.run.duration;
+      return -1;
     },
     get trackBounds() {
       const bounds = { left: 0, right: 0, near: 0, far: 0 };

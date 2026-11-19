@@ -45,7 +45,7 @@ export function addLakeAndSky(scene, compact = false) {
     textureWidth:compact ? 384 : 640,textureHeight:compact ? 288 : 480,multisample:0,
     shader:{name:'BiwaWater',uniforms:{...env,
       localWindGrid:{value:null},localWind:{value:new THREE.Vector4()},windPlatform:{value:new THREE.Vector2()},
-      windOffset:{value:-1},fieldTime:{value:0},tDiffuse:{value:null},color:{value:null},textureMatrix:{value:null},
+      windOffset:{value:-1},fieldTime:{value:0},windCellMetres:{value:1},tDiffuse:{value:null},color:{value:null},textureMatrix:{value:null},
       boatWake:{value:new THREE.Vector4()},wakeStrength:{value:0},
       impact:{value:new THREE.Vector3(0,0,-100)},impactDirection:{value:new THREE.Vector2(0,-1)},impactPower:{value:1},landMask:{value:null},landReady:{value:0},
       landBounds:{value:new THREE.Vector4(0,0,1,1)},shoreBounds:{value:new THREE.Vector4(0,0,1,1)},shoreReady:{value:0},shallowMask:{value:null},bottomPhoto:{value:null}},
@@ -161,7 +161,6 @@ export function addLakeAndSky(scene, compact = false) {
   scene.add(spray);
   const droplet=new THREE.Object3D(), velocities=[];
   const stern=new THREE.Vector3(), aftAxis=new THREE.Vector3();
-  let impactTime=-Infinity;
   return {
     setNight(night, direction) {
       env.nightScene.value=uniforms.nightScene.value=night ? 1 : 0;
@@ -178,7 +177,6 @@ export function addLakeAndSky(scene, compact = false) {
       uniforms.boatWake.value.set(stern.x, stern.z, aftAxis.x, aftAxis.z);
     },
     touch(point,direction,sink){
-      impactTime=performance.now();
       const power=THREE.MathUtils.clamp(.8+sink*.35,.8,2.2);
       uniforms.impact.value.set(point.x,point.z,0);
       uniforms.impactPower.value=power;
@@ -198,17 +196,17 @@ export function addLakeAndSky(scene, compact = false) {
       uniforms.shallowMask.value=mask;uniforms.bottomPhoto.value=photo;
       uniforms.shoreBounds.value.fromArray(bounds);uniforms.shoreReady.value=1;
     },
-    update(camera,t,windSpeed,gustSpeed,angle=0,field,fieldTime=0,platformYaw=0,gustOffset=0){
+    update(camera,t,windSpeed,gustSpeed,angle=0,field,fieldTime=0,platformYaw=0,gustOffset=0,age=-1){
       uniforms.windOffset.value=field ? gustOffset : -1;
       if(field){
         uniforms.localWind.value.set(field.head,field.cross,field.along,field.lateral);
         uniforms.windPlatform.value.set(Math.cos(platformYaw),Math.sin(platformYaw));
         uniforms.fieldTime.value=fieldTime;
+        uniforms.windCellMetres.value=field.cellMetres;
       }
       env.windAngle.value=uniforms.windAngle.value=angle;
-      const age=(performance.now()-impactTime)/1000;
       uniforms.impact.value.z=age<7?age:-100;
-      spray.visible=age<1.8;
+      spray.visible=age>=0 && age<1.8;
       if(spray.visible){
         for(let i=0;i<velocities.length;i++){
           droplet.position.copy(velocities[i]).multiplyScalar(age);
