@@ -1,12 +1,11 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { BASE_DESIGN } from '../domain/flight.js';
 
 const attachedModes = new Set(['pilot', 'boat']);
 const blendSeconds = 1.6;
 
 export function createFlightCamera({
-  canvas, facility, modelBase, aircraft, span, atWater, trackBounds, visibleTrackFraction, reduceMotion, onViewChange,
+  canvas, facility, modelBase, aircraft, boat, trackBounds, visibleTrackFraction, reduceMotion, onViewChange,
 }) {
   const camera = new THREE.PerspectiveCamera(38, 1, 0.18, 56000);
   const controls = new OrbitControls(camera, canvas);
@@ -22,12 +21,27 @@ export function createFlightCamera({
   const eye = new THREE.Vector3(), focus = new THREE.Vector3();
   const orientation = new THREE.Quaternion();
   const world = (x, y, z) => facility.localToWorld(new THREE.Vector3(x, y, z));
-  let mode = 'aircraft', boatApproach = 0, boatTime = 0, boatTransition = null;
+  let mode = 'aircraft', hasView = false, transition = null;
+  let attachedZoom = 1, baseLens = 76;
+  const cockpitTilt = Math.tan(THREE.MathUtils.degToRad(7.5));
+
+  function setAttachedLens(degrees) {
+    baseLens = degrees;
+    const fov = THREE.MathUtils.clamp(baseLens * attachedZoom, 25, 96);
+    if (transition) transition.destinationFov = fov;
+    else if (camera.fov !== fov) {
+      camera.fov = fov;
+      camera.updateProjectionMatrix();
+    }
+  }
 
   function followPilot() {
     // Keep the lens just ahead of the face and move it with the prone pilot.
     eye.set(0, 0.304, -0.86 + pilotBody.position.z);
     focus.set(0, 0.304, -12 + pilotBody.position.z);
+    const shortLandscape = canvas.clientHeight > 0 && canvas.clientHeight <= 500 && camera.aspect > 1;
+    if (shortLandscape) focus.y -= (eye.z - focus.z) * cockpitTilt;
+    setAttachedLens(shortLandscape ? 48 : 76);
     camera.position.copy(modelBase.localToWorld(eye));
     controls.target.copy(modelBase.localToWorld(focus));
     camera.up.set(0, 1, 0).applyQuaternion(modelBase.getWorldQuaternion(orientation));
@@ -36,53 +50,65 @@ export function createFlightCamera({
   }
 
   function followBoat() {
-    const now = performance.now();
-    const landed = atWater();
-    boatApproach = landed ? Math.min(1, boatApproach + Math.min(100, now - boatTime) / 3500) : 0;
-    boatTime = now;
-    const { x, z } = modelBase.position;
-    const reach = Math.max(1, 1.05 / camera.aspect);
-    eye.set(x + 19 * reach, 1.65, z - 33 * reach);
-    if (landed) {
-      // Stay alongside the glider after contact, including on narrow displays.
-      const heading = -modelBase.rotation.y;
-      const scale = THREE.MathUtils.clamp(span / BASE_DESIGN.span, 0.85, 1.2);
-      const side = 19 * scale, ahead = 9 * scale;
-      focus.set(x + side * Math.cos(heading) + ahead * Math.sin(heading), 2.1,
-        z + side * Math.sin(heading) - ahead * Math.cos(heading));
-      eye.lerp(focus, THREE.MathUtils.smoothstep(boatApproach, 0, 1));
-    }
-    camera.position.copy(facility.localToWorld(eye));
+    boat.eye.getWorldPosition(camera.position);
     controls.target.copy(modelBase.localToWorld(focus.set(0, 0.45, 0)));
+    // Leave the glider above centre, with some of the gunwale and water in the foreground.
+    const range = Math.hypot(camera.position.x - controls.target.x, camera.position.z - controls.target.z);
+    controls.target.y -= range * 0.065;
+    // Widen the shot while alongside; a longer lens keeps a distant launch legible.
+    const landscape = THREE.MathUtils.smoothstep(camera.aspect, 0.55, 1.3);
+    const closeLens = THREE.MathUtils.lerp(73, 59, landscape);
+    const distantLens = THREE.MathUtils.lerp(47, 38, landscape);
+    setAttachedLens(THREE.MathUtils.lerp(closeLens, distantLens, THREE.MathUtils.smoothstep(range, 35, 100)));
     camera.up.set(0, 1, 0);
     camera.lookAt(controls.target);
-
-    if (boatTransition) {
-      const from = boatTransition;
-      const progress = THREE.MathUtils.smoothstep((now - from.start) / 1000, 0, blendSeconds);
-      camera.position.lerp(from.eye, 1 - progress);
-      camera.position.y += Math.sin(Math.PI * progress) * 1.4;
-      camera.quaternion.slerp(from.rotation, 1 - progress);
-      controls.target.lerp(from.focus, 1 - progress);
-      camera.fov = THREE.MathUtils.lerp(from.fov, 45, progress);
-      camera.updateProjectionMatrix();
-      if (progress === 1) boatTransition = null;
-    }
     camera.updateMatrixWorld();
+  }
+
+  function captureView() {
+    return {
+      eye: camera.position.clone(), focus: controls.target.clone(), rotation: camera.quaternion.clone(),
+      fov: camera.fov,
+    };
+  }
+
+  function blendView() {
+    if (!transition) return;
+    const { from, start, destinationFov } = transition;
+    const progress = THREE.MathUtils.smoothstep((performance.now() - start) / 1000, 0, blendSeconds);
+    camera.position.lerp(from.eye, 1 - progress);
+    camera.position.y += Math.sin(Math.PI * progress) * 1.4;
+    camera.quaternion.slerp(from.rotation, 1 - progress);
+    controls.target.lerp(from.focus, 1 - progress);
+    camera.fov = THREE.MathUtils.lerp(from.fov, destinationFov, progress);
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld();
+    if (progress === 1) transition = null;
   }
 
   function update() {
     if (mode === 'pilot') followPilot();
     else if (mode === 'boat') followBoat();
-    else controls.update();
+    else if (transition?.orbit) {
+      // Rebuild the destination each frame before blending the outgoing boat view.
+      camera.position.copy(transition.orbit.eye);
+      controls.target.copy(transition.orbit.focus);
+      camera.lookAt(controls.target);
+      camera.updateMatrixWorld();
+    } else controls.update();
+    blendView();
   }
 
   function setView(nextMode) {
-    boatTransition = null;
+    const changingBoat = hasView && nextMode !== mode && (nextMode === 'boat' || mode === 'boat');
+    const from = changingBoat && !reduceMotion.matches ? captureView() : null;
+    transition = null;
+    hasView = true;
     mode = nextMode;
     const attached = attachedModes.has(mode);
     controls.enabled = !attached;
-    camera.fov = mode === 'pilot' ? 76 : attached ? 45 : 38;
+    attachedZoom = 1;
+    camera.fov = mode === 'pilot' ? 76 : 38;
     camera.near = mode === 'pilot' ? 0.02 : 0.18;
     camera.updateProjectionMatrix();
     if (!attached) {
@@ -103,22 +129,22 @@ export function createFlightCamera({
       }
     }
     update();
+    if (from) {
+      transition = { from, start: performance.now(), destinationFov: camera.fov, orbit: attached ? null : captureView() };
+      blendView();
+    }
     onViewChange(mode, attached);
   }
 
   function startLandingCamera() {
-    const from = {
-      eye: camera.position.clone(), focus: controls.target.clone(), rotation: camera.quaternion.clone(),
-      fov: camera.fov, start: performance.now(),
-    };
-    boatApproach = 1;
-    setView('boat');
-    if (!reduceMotion.matches) boatTransition = from;
+    if (mode !== 'boat') setView('boat');
   }
 
   function zoom(factor) {
+    transition = null;
     if (attachedModes.has(mode)) {
       camera.fov = THREE.MathUtils.clamp(camera.fov * factor, 25, 96);
+      attachedZoom = camera.fov / baseLens;
       camera.updateProjectionMatrix();
       return;
     }
@@ -131,6 +157,10 @@ export function createFlightCamera({
   function moveCamera(delta) {
     camera.position.add(delta);
     controls.target.add(delta);
+    if (transition?.orbit) {
+      transition.orbit.eye.add(delta);
+      transition.orbit.focus.add(delta);
+    }
   }
 
   const north = new THREE.Vector3(), center = new THREE.Vector3();

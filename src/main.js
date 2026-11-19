@@ -7,6 +7,7 @@ import { setupTrials } from './presentation/flight-screen.js';
 import { bindViewerControls, setupViewerShell, showCameraMode, trackViewportFraction } from './presentation/viewer-shell.js';
 import { createAircraft } from './rendering/aircraft.js';
 import { createAircraftPose } from './rendering/aircraft-pose.js';
+import { createChaseBoat } from './rendering/chase-boat.js';
 import { modelHull } from './rendering/collision-hull.js';
 import { createLaunchCrew } from './rendering/crew.js';
 import { createFlightCamera } from './rendering/flight-camera.js';
@@ -89,8 +90,12 @@ async function start() {
   let trials;
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const atWater = () => trials?.atWater;
+  const boat = createChaseBoat();
+  facility.add(boat.group);
+  enableReflection(boat.group);
+  boat.update(modelBase, 0, reduceMotion.matches);
   const cameraRig = createFlightCamera({
-    canvas: renderer.domElement, facility, modelBase, aircraft, span: BASE_DESIGN.span, atWater, reduceMotion,
+    canvas: renderer.domElement, facility, modelBase, aircraft, boat, reduceMotion,
     trackBounds: () => trials.trackBounds, visibleTrackFraction: () => trackViewportFraction(host), onViewChange: showCameraMode,
   });
   bindViewerControls(host, renderer, cameraRig, atWater);
@@ -101,6 +106,7 @@ async function start() {
     const elapsed = last ? Math.min((now - last) / 1000, 0.15) : 0;
     last = now;
     trials?.tick(now);
+    boat.update(modelBase, elapsed, reduceMotion.matches);
     cameraRig.update();
     const weatherMode = trials?.weather ?? selectedWeather();
     const weather = WEATHER[weatherMode];
