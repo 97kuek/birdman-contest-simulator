@@ -54,10 +54,12 @@ export function rigHalfWing(group, side, aircraftId, halfSpan, rootStation, spar
   });
   const key = side > 0 ? 'right' : 'left';
   return sample => {
-    const wing = sample.wing;
-    const tip = sample.t === undefined ? 0 : wing?.[key + 'Tip'] ?? referenceTip;
-    const twist = sample.t === undefined ? 0 : wing?.[key + 'Twist'] ?? 0;
-    const fold = sample.t === undefined ? 0 : wingFoldDirection(wing, key);
+    const inFlight = sample.t !== undefined;
+    // Ramp samples carry the solver's bending state before the flight clock starts.
+    const wing = inFlight || sample.rampTravel !== undefined ? sample.wing : undefined;
+    const tip = wing?.[key + 'Tip'] ?? (inFlight ? referenceTip : 0);
+    const twist = wing?.[key + 'Twist'] ?? 0;
+    const fold = inFlight ? wingFoldDirection(wing, key) : 0;
     for (const part of moving) {
       const weights = part.morphTargetInfluences;
       weights[0] = tip;
