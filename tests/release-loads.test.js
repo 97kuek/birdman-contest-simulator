@@ -72,3 +72,16 @@ test('正面・水平で翼持ちの左右を入れ替えると自由飛行の�
     close(p.wing.leftTip,right[i].wing.rightTip);
   }
 });
+
+test('片翼の局所風は計器位置の気流を変えず、風を当てた翼の揚力を増やし、左右入替でロールの向きが反転する', () => {
+  const withWind = side => solve({ freeLateral:true,
+    wingWindAt:(_,wing) => wing === side ? {updraft:.25} : undefined });
+  const left = withWind('left'), right = withWind('right');
+  const plain = solve({freeLateral:true}).loadsAt(state,0);
+  const l = left.loadsAt(state,0), r = right.loadsAt(state,0);
+  assert.deepEqual(l.air,plain.air);
+  assert.ok(l.structure.leftLift>plain.structure.leftLift);
+  close(l.structure.rightLift,plain.structure.rightLift);
+  close(l.gustRoll,-r.gustRoll);
+  assert.ok(left.rates(state,0,0,0,l).p>0);
+});

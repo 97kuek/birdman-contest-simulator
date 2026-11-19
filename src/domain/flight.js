@@ -66,10 +66,12 @@ export function createFlight(design, hull, {
   const rampWing = rigidWing ? null : rampWingMotion(launch, state, loadsAt, DT);
   if (rampWing) Object.assign(state, rampWing.release);
   if (releaseExperiment?.freeLateral) {
-    const { bank = 0, rollRate = 0 } = releaseExperiment;
-    if (![bank, rollRate].every(Number.isFinite)) throw new RangeError('Release bank and roll rate must be finite.');
+    const { bank = 0, rollRate = 0, lateralVelocity = 0, yawRate = 0 } = releaseExperiment;
+    if (![bank, rollRate, lateralVelocity, yawRate].every(Number.isFinite)) throw new RangeError('Release lateral state must be finite.');
     state.bank = bank;
     state.p = rollRate;
+    state.v = lateralVelocity;
+    state.r = yawRate;
   }
   let loads = loadsAt(state, 0);
   let rudderDeg = 0;

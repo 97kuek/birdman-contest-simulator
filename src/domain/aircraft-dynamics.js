@@ -95,7 +95,7 @@ export function aircraftDynamics(design, launch, options) {
       forward: launch.edgeForward + course.forward * launchCos - course.right * launchSin,
       heading: launch.heading + course.heading };
   }
-  function airflow(state, time, position = location(state)) {
+  function airflow(state, time, position = location(state), localWind) {
     const { pathLength, u, w, v, pitch, bank, heading } = state;
     const wind = windAt(weather, { ...position, pathLength, height: position.height ?? state.height, gustOffset }, time, windRiseLength);
     // Fixed wind cards are in platform axes, including on the prescribed reference track.
@@ -104,8 +104,9 @@ export function aircraftDynamics(design, launch, options) {
       ? position.heading : heading;
     const headingCos = Math.cos(windHeading), headingSin = Math.sin(windHeading);
     const crosswind = wind.crosswind ?? 0;
-    const headwind = wind.headwind * headingCos + crosswind * headingSin;
-    const airU = u + headwind, airW = w - wind.updraft;
+    const headwind = wind.headwind * headingCos + crosswind * headingSin + (localWind?.headwind ?? 0);
+    const updraft = wind.updraft + (localWind?.updraft ?? 0);
+    const airU = u + headwind, airW = w - updraft;
     const airV = prescribedCourse && wind.crosswind === undefined ? 0 : v - wind.headwind * headingSin + crosswind * headingCos;
     const speed = Math.hypot(airU, airW, airV);
     const cp = Math.cos(pitch), sp = Math.sin(pitch), cb = Math.cos(bank), sb = Math.sin(bank);
@@ -114,7 +115,7 @@ export function aircraftDynamics(design, launch, options) {
     const axialSpeed = cp * airU + sp * airW;
     const downSpeed = cb * down - sb * airV;
     const alpha = Math.atan2(downSpeed, axialSpeed);
-    return { speed, alpha, beta, axialSpeed, downSpeed, airU, airW, cp, sp, cb, sb, headwind, updraft: wind.updraft };
+    return { speed, alpha, beta, axialSpeed, downSpeed, airU, airW, cp, sp, cb, sb, headwind, updraft };
   }
 
   // One bending mode per half-wing, sampled at its lift centroid.
@@ -127,7 +128,7 @@ export function aircraftDynamics(design, launch, options) {
     const { speed, alpha, cp, sp, cb, sb } = air;
     const wingHeight = height + wingMountHeight - CG_HEIGHT;
     const wingAngle = wingCL0 / wingSlope + alpha + (incidence - profile.design.incidence) * RADIANS_PER_DEGREE;
-    const centre = resolveWingGust ? location(state) : null;
+    const centre = resolveWingGust || experiment?.wingWindAt ? location(state) : null;
     const ch = Math.cos(heading), sh = Math.sin(heading);
     const wingRight = ch * cb + sh * sp * sb, wingForward = -sh * cb + ch * sp * sb;
 
@@ -138,7 +139,7 @@ export function aircraftDynamics(design, launch, options) {
         right: centre.right + arm * wingRight + bend * (ch * sb - sh * sp * cb),
         forward: centre.forward + arm * wingForward - bend * (sh * sb + ch * sp * cb),
         height: localHeight,
-      }) : air;
+      }, experiment?.wingWindAt?.(time, arm < 0 ? 'left' : 'right')) : air;
       // The right wing moves down during positive roll. Upward elastic motion
       // opposes that incidence change. Both act on the load carried by the spar.
       const baseAngle = wingAngle + local.alpha - alpha;
