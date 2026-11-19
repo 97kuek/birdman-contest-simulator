@@ -245,7 +245,7 @@ export function setupTrials({
   function disqualify(sample, now) {
     const { trail } = active.record;
     trail.extend([...active.attempt.samples, sample]);
-    ruling = { trail, start: now, cameraMoved: false };
+    ruling = { trail, samples: active.attempt.samples, stopTime: sample.t, start: now, cameraMoved: false };
     active = null;
     atWater = false;
     clearInput();
@@ -376,6 +376,14 @@ export function setupTrials({
     },
     get atWater() {
       return atWater && !review;
+    },
+    boatRoute(now) {
+      if (ruling) return { samples: ruling.samples, time: ruling.stopTime + (now - ruling.start) / 1000, stopTime: ruling.stopTime };
+      if (active) return { samples: active.attempt.samples, time: active.clock - session.launch.duration };
+      const run = review?.record.run ?? landing?.record.run ?? resultRecord?.run;
+      if (!run) return {};
+      const time = review ? replay.time : run.duration + (landing ? (now - landing.start) / 1000 : WATER_RUNOUT_SECONDS);
+      return { samples: run.samples, time, stopTime: run.duration };
     },
     waveTime() {
       if (review) return releaseWaveTimes.get(review.record.run) + replay.time;

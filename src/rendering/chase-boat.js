@@ -1,3 +1,4 @@
+import { createChaseCourse } from './chase-course.js';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
@@ -161,46 +162,14 @@ export function createChaseBoat() {
   eye.position.set(-.65, 1.53, -.85);
   group.add(eye);
 
-  const waiting = new THREE.Vector3(-15, 0, -96);
-  const waitingYaw = -1.85;
-  const alongside = new THREE.Vector3();
-  let clock = 0;
-  function update(aircraft, seconds, reducedMotion, firstLand) {
-    const { x, y, z } = aircraft.position;
-    const yaw = aircraft.rotation.y;
-    // Wait ahead of the ramp. The glider overtakes the launch, which then runs off its port quarter.
-    // The route depends only on the aircraft pose, including when a replay seeks backward.
-    const distance = Math.hypot(x, Math.min(0, z));
-    const underway = THREE.MathUtils.smoothstep(distance, 80, 145);
-    const afloat = 1 - THREE.MathUtils.smoothstep(y, 0.45, 2.5);
-    const lateral = -19 + 2 * afloat, aft = 9 - afloat;
-    const cos = Math.cos(yaw), sin = Math.sin(yaw);
-    alongside.set(x + lateral * cos + aft * sin, 0, z - lateral * sin + aft * cos);
-    group.position.lerpVectors(waiting, alongside, underway);
-
-    // If a turn takes the glider toward the waiting station, keep the boat outside the port wingtip.
-    const crossTrack = (group.position.x - x) * cos - (group.position.z - z) * sin;
-    const clearance = Math.max(0, crossTrack - lateral) * THREE.MathUtils.smoothstep(distance, 20, 65);
-    group.position.x -= clearance * cos;
-    group.position.z += clearance * sin;
-    if (firstLand) {
-      // Keep the hull and camera on the lake side, even on a direct replay seek.
-      // The half diagonal of the boat including its outboard is under 3.3 m.
-      let safe = 1;
-      for (const [dx, dz] of [[0, 0], [-3.3, -3.3], [3.3, -3.3], [-3.3, 3.3], [3.3, 3.3]]) {
-        const fraction = firstLand(waiting.x + dx, -waiting.z - dz, group.position.x + dx, -group.position.z - dz);
-        if (fraction !== null) safe = Math.min(safe, fraction);
-      }
-      if (safe < 1) group.position.lerp(waiting, 1 - Math.max(0, safe - 0.001));
-    }
-    const turn = Math.atan2(Math.sin(yaw - waitingYaw), Math.cos(yaw - waitingYaw));
-    group.rotation.y = waitingYaw + turn * underway;
-    clock += seconds;
-    group.position.y = reducedMotion ? 0 : .022 * Math.sin(clock * 1.7);
-    group.rotation.x = reducedMotion ? 0 : .007 * Math.sin(clock * 1.25);
-    group.rotation.z = reducedMotion ? 0 : .010 * Math.sin(clock * 1.52);
-    return underway;
+  const positionAt = createChaseCourse();
+  function update(samples, time, waveTime, firstLand, stopTime) {
+    const state = positionAt(samples, time, firstLand, stopTime);
+    group.position.set(state.right, .022 * Math.sin(waveTime * 1.7), -state.forward);
+    const heel = Math.atan(state.turn * state.speed / 9.81) * .48;
+    group.rotation.set(.007 * Math.sin(waveTime * 1.25), -state.heading,
+      -heel + .010 * Math.sin(waveTime * 1.52), 'YXZ');
+    return state.speed;
   }
-
   return { group, eye, update };
 }

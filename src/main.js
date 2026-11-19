@@ -100,7 +100,7 @@ async function start() {
   const boat = createChaseBoat();
   facility.add(boat.group);
   enableReflection(boat.group);
-  boat.update(modelBase, 0, reduceMotion.matches);
+  boat.update(null, 0, 0);
   const cameraRig = createFlightCamera({
     canvas: renderer.domElement, facility, modelBase, aircraft, boat, reduceMotion,
     trackBounds: () => trials.trackBounds, visibleTrackFraction: () => trackViewportFraction(host), onViewChange: showCameraMode,
@@ -112,12 +112,12 @@ async function start() {
   const impactDirection = new THREE.Vector3(), impactPoint = new THREE.Vector3();
   renderer.setAnimationLoop(now => {
     if (now - last < 30) return;
-    const elapsed = last ? Math.min((now - last) / 1000, 0.15) : 0;
     if (last && !document.hidden) sceneTime += (now - last) / 1000;
     last = now;
     trials?.tick(now);
-    const underway = boat.update(modelBase, elapsed, reduceMotion.matches, firstLand);
-    const boatSpeed = trials ? (display.sample.groundSpeed ?? 0) * underway : 0;
+    const visualTime = reduceMotion.matches ? 0 : trials?.waveTime() ?? sceneTime;
+    const route = trials?.boatRoute(now) ?? {};
+    const boatSpeed = boat.update(route.samples, route.time, visualTime, firstLand, route.stopTime);
     lake.setWake(boat.group, THREE.MathUtils.smoothstep(boatSpeed, 0.4, 6));
     cameraRig.update();
     if (trials) {
@@ -132,7 +132,6 @@ async function start() {
     setNight?.(period === 'night');
     const sample = trials ? display.sample : null;
     const windTime = sample?.windTime ?? sample?.t ?? 0;
-    const visualTime = reduceMotion.matches ? 0 : trials?.waveTime() ?? sceneTime;
     const age = reduceMotion.matches ? -1 : trials?.contactAge(now) ?? -1;
     const run = trials?.contactRun;
     if (age >= 0 && run && run !== lastImpactRun) {

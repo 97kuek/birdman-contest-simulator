@@ -74,13 +74,20 @@ test('接水直前の陸地進入と、記録確定後の湖岸で止まる滑�
 test('追走艇の本体と観測席を岸の手前に保ち、水上に戻る試技に追従する', () => {
   const boat = createChaseBoat();
   const coast = createShoreline([[[20, -600], [200, -600], [200, 200], [20, 200]]], 0);
-  const aircraft = { position: { x: 100, y: 2, z: -195 }, rotation: { y: 0 } };
-  boat.update(aircraft, 0, true, coast);
-  assert.ok(boat.group.position.x + 3.3 < 20);
-  assert.ok(boat.group.position.x > -15);
-  aircraft.position.x = 0;
-  boat.update(aircraft, 0, true, coast);
+  const samples = Array.from({length: 801}, (_, i) => {
+    const t = i / 20;
+    return { t, right: t <= 20 ? 5 * t : 100 - 7 * (t - 20), forward: 9 * t,
+      groundSpeed: 10, track: t <= 20 ? .51 : -.66 };
+  });
+  for (const { t } of samples) {
+    boat.update(samples, t, 0, coast);
+    assert.ok(boat.group.position.x + 3.3 < 20);
+  }
   assert.ok(boat.group.position.x < 0 && boat.group.position.z < -180);
+  const end = boat.group.position.clone();
+  boat.update(samples, 10, 0, coast);
+  boat.update(samples, 40, 0, coast);
+  assert.deepEqual(boat.group.position, end);
 });
 
 test('岸まで同じ距離でも、翼を含む対地進路が陸に届く場合だけ警告する', () => {
@@ -89,4 +96,33 @@ test('岸まで同じ距離でも、翼を含む対地進路が陸に届く場�
   assert.equal(session.shoreAhead(s), true);
   assert.equal(session.shoreAhead({ ...s, track: Math.PI }), false);
   assert.equal(session.shoreAhead({ ...s, groundSpeed: .5 }), false);
+});
+
+test('追走艇は旋回でも船首方向へ進み、着水後は惰性で減速する', () => {
+  const boat = createChaseBoat();
+  const samples = Array.from({length: 721}, (_, i) => {
+    const t = i / 20, turn = Math.max(0, t - 24) * .09;
+    return {t, right: 100 * (1 - Math.cos(turn)), forward: Math.min(t, 24) * 9 + 100 * Math.sin(turn),
+      track: turn, groundSpeed: 9};
+  });
+  boat.update(samples, 0, 0);
+  let previous = boat.group.position.clone(), yaw = boat.group.rotation.y, speed = 0;
+  for (const {t} of samples.slice(1)) {
+    const nextSpeed = boat.update(samples, t, 0);
+    const delta = boat.group.position.clone().sub(previous);
+    const middle = (yaw + boat.group.rotation.y) / 2;
+    assert.ok(Math.abs(delta.x * Math.cos(middle) - delta.z * Math.sin(middle)) < .00001);
+    assert.ok(Math.abs(nextSpeed - speed) <= 2 / 20 + .00001);
+    assert.ok(Math.abs(boat.group.rotation.y - yaw) <= Math.PI / 8 / 20 + .00001);
+    previous.copy(boat.group.position);
+    yaw = boat.group.rotation.y;
+    speed = nextSpeed;
+  }
+  assert.ok(speed > 5);
+  const coastSpeed = boat.update(samples, 37, 0, null, 36);
+  assert.ok(coastSpeed > 0 && coastSpeed < speed);
+  assert.equal(boat.update(samples, 41, 0, null, 36), 0);
+  const stopped = boat.group.position.clone();
+  boat.update(samples, 40, 0, null, 36);
+  assert.deepEqual(boat.group.position, stopped);
 });
