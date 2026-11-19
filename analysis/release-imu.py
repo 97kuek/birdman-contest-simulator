@@ -57,6 +57,10 @@ def main():
     print("\n center start   end  n  main θ  main θ̇   air θ   air θ̇ (s, °, °/s)")
     for center in (3.7, 3.8, 3.9, 4.0, 4.1, 4.15, 4.4, 4.65, 4.9, 5.15):
         print_fit(raw, center, center - 0.2, center + 0.2)
+    print("At release + 0.75 s, both IMUs across candidate log origins")
+    for origin in (3.70, 3.90, 3.95, 3.98, 4.00, 4.10):
+        center = origin + 0.75
+        print_fit(raw, center, center - 0.20, center + 0.20)
     print("Window sensitivity at t = 3.90")
     for half_width in (0.15, 0.25, 0.30):
         print_fit(raw, 3.9, 3.9 - half_width, 3.9 + half_width)
