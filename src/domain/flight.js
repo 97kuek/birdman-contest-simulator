@@ -1,5 +1,6 @@
 import { aircraftDynamics, referenceTiming, releaseState } from './aircraft-dynamics.js';
 import { aircraftProfile } from './aircraft-profiles.js';
+import { advanceElevator, replayElevator } from './elevator.js';
 import { aircraftShoreContact } from './shoreline.js';
 import { cgShiftFromBody } from './pilot-shift.js';
 import { launchProfile } from './launch.js';
@@ -21,11 +22,11 @@ const STEP_ROUNDING_TOLERANCE = 1e-9;
 // Switches used by the calibration experiments to isolate early-flight assumptions.
 export const previousFactors = Object.freeze({ release: false, pilot: false, wind: false });
 
-function advanceState(state, rates, seconds) {
+function advanceState(state, rates, seconds, elevatorDeg) {
   return {
     pathLength: state.pathLength + seconds * rates.pathLength, height: state.height + seconds * rates.height,
     u: state.u + seconds * rates.u, w: state.w + seconds * rates.w,
-    pitch: state.pitch + seconds * rates.pitch, q: state.q + seconds * rates.q, bodyShift: state.bodyShift + seconds * rates.bodyShift,
+    elevatorDeg, pitch: state.pitch + seconds * rates.pitch, q: state.q + seconds * rates.q, bodyShift: state.bodyShift + seconds * rates.bodyShift,
     bank: state.bank + seconds * rates.bank, heading: state.heading + seconds * rates.heading,
     right: state.right + seconds * rates.right, forward: state.forward + seconds * rates.forward,
     v: state.v + seconds * rates.v, p: state.p + seconds * rates.p, r: state.r + seconds * rates.r,
@@ -53,17 +54,26 @@ export function createFlight(design, hull, {
   const launch = launchProfile(push, coast, direction, profile.deckClearance);
   const { airflow, rates, location } = aircraftDynamics(design, launch, { aircraftId, pilot, wind, weather, gustOffset, referenceControl, returnSeconds, onsetMetres });
   let state = releaseState(launch, release, pilot, profile);
-  let rudderDeg = 0, elevatorDeg = 0, collisionHull = hull;
+  let rudderDeg = 0, hullRudder = 0, hullElevator = 0, collisionHull = hull;
   const shoreContact = aircraftShoreContact(hull, firstLand);
   let step = 0, result = null, disqualified = null;
   const inputs = [], turnInputs = [];
 
-  function bottomHeight({ height, pitch, bank }) {
-    return height + geometryAt(pitch, collisionHull, bank).bottom;
+  function controlHull({ elevatorDeg }) {
+    if (rudderDeg !== hullRudder || elevatorDeg !== hullElevator) {
+      collisionHull = hullAtControls(hull, rudderDeg, elevatorDeg);
+      hullRudder = rudderDeg;
+      hullElevator = elevatorDeg;
+    }
+    return collisionHull;
+  }
+
+  function bottomHeight(state) {
+    return state.height + geometryAt(state.pitch, controlHull(state), state.bank).bottom;
   }
 
   function sample(t, state) {
-    const { pathLength, height, u, v, w, pitch, bank, bodyShift, p, q, r } = state;
+    const { pathLength, height, u, v, w, pitch, bank, bodyShift, elevatorDeg, p, q, r } = state;
     const position = location(state);
     const { heading, right, forward } = position;
     const { speed, headwind, updraft, beta } = airflow(state, t, position);
@@ -82,8 +92,10 @@ export function createFlight(design, hull, {
   function integrate(pilotInput, turnInput) {
     // Fixed-step midpoint integration keeps the trajectory independent of display cadence.
     const t = step * DT;
-    const midpoint = advanceState(state, rates(state, t, pilotInput, turnInput), DT / 2);
-    const next = advanceState(state, rates(midpoint, t + DT / 2, pilotInput, turnInput), DT);
+    const halfAngle = advanceElevator(state.elevatorDeg, pilotInput, DT / 2, profile);
+    const midpoint = advanceState(state, rates(state, t, pilotInput, turnInput), DT / 2, halfAngle);
+    const endAngle = advanceElevator(state.elevatorDeg, pilotInput, DT, profile);
+    const next = advanceState(state, rates(midpoint, t + DT / 2, pilotInput, turnInput), DT, endAngle);
     step++;
     const nextClearance = bottomHeight(next);
     const touching = nextClearance <= 0 || clearance <= 0;
@@ -92,6 +104,7 @@ export function createFlight(design, hull, {
       if (f === 1) return next;
       const hit = { ...state };
       for (const key of Object.keys(hit)) hit[key] += f * (next[key] - state[key]);
+      hit.elevatorDeg = advanceElevator(state.elevatorDeg, pilotInput, f * DT, profile);
       return hit;
     }
     const hit = stateAt(fraction);
@@ -105,7 +118,7 @@ export function createFlight(design, hull, {
       }
     }
     if (touching) {
-      const shape = geometryAt(hit.pitch, collisionHull, hit.bank);
+      const shape = geometryAt(hit.pitch, controlHull(hit), hit.bank);
       hit.height = -shape.bottom;
       const last = sample((step - 1 + fraction) * DT, hit);
       const { distance, ...positions } = landingMeasurement(last, shape, launch);
@@ -134,11 +147,8 @@ export function createFlight(design, hull, {
       turnInput = Math.max(-1, Math.min(1, turnInput));
       pilotInput = Math.max(-1, Math.min(1, pilotInput));
       const turnDegrees = turnInput * profile.rudderLimitDeg;
-      const pitchDegrees = profile.elevatorLimitDeg ? pilotInput * profile.elevatorLimitDeg : 0;
-      if (turnDegrees !== rudderDeg || pitchDegrees !== elevatorDeg) {
+      if (turnDegrees !== rudderDeg) {
         rudderDeg = turnDegrees;
-        elevatorDeg = pitchDegrees;
-        collisionHull = hullAtControls(hull, rudderDeg, elevatorDeg);
         clearance = bottomHeight(state);
       }
       while (step < target && !result && !disqualified) integrate(pilotInput, turnInput);
@@ -160,15 +170,15 @@ export function simulateFlight(design, hull, options) {
 
 export function poseAt(run, t) {
   if (t >= run.duration) return run.samples.at(-1);
-  // Surface commands are held across sample boundaries, even on a quick reversal.
+  // The rudder follows the held command; the elevator travels between deflections.
   const profile = aircraftProfile(run.aircraftId);
   const time = Math.max(0, t);
   const held = inputs => inputs?.find(input => input.start <= time && time < input.end)?.direction ?? 0;
   const rudderDeg = held(run.turnInputs) * profile.rudderLimitDeg;
-  const elevatorDeg = profile.elevatorLimitDeg ? held(run.inputs) * profile.elevatorLimitDeg : 0;
-  if (t <= 0) return { ...run.samples[0], rudderDeg, elevatorDeg };
+  if (t <= 0) return { ...run.samples[0], rudderDeg };
   const i = Math.min(Math.floor(t * SAMPLES_PER_SECOND), run.samples.length - 2);
   const a = run.samples[i], b = run.samples[i + 1], fraction = (t - a.t) / (b.t - a.t);
+  const elevatorDeg = replayElevator(a, t, run.inputs ?? [], profile);
   const lerp = key => a[key] + fraction * (b[key] - a[key]);
   return {
     t, gustOffset: run.gustOffset ?? 0, right: lerp('right'), forward: lerp('forward'), heading: lerp('heading'), bank: lerp('bank'), track: lerp('track'),

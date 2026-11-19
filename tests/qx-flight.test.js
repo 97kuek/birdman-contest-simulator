@@ -21,7 +21,7 @@ test('QXの図面値から全機重心と尾翼モーメントを計算し、同
   const state = { ...releaseState(launch, true, true, qx), u: 9.5, w: 0, pitch: 0, q: 0 };
   const neutral = rates(state, 0, 0, 0);
   for (const command of [-1, 1]) {
-    const rate = rates(state, 0, command, 0);
+    const rate = rates({ ...state, elevatorDeg: command * qx.elevatorLimitDeg }, 0, command, 0);
     // At identical pilot position, only the elevator changes the aerodynamic loads.
     const tailForceChange = -.5 * qx.airDensity * state.u ** 2 * 1.88
       * qx.tailLiftSlopePerDegree * command * 10 * qx.elevatorEffectiveness;
@@ -50,9 +50,9 @@ test('QXの基準は同じ発進条件の無操作飛行で、操舵反転を記
   assert.deepEqual(session.referenceFor(run), ref);
   assert.equal(run.samples.at(-1).bottomHeight, 0);
   assert.notEqual(run.distance, ref.distance);
-  for (const [t, elevator, rudder] of [[0, -10, 17], [.123, -10, 17], [.125, 10, -17], [.25, 0, 0]]) {
+  for (const [t, elevator, rudder] of [[0, 0, 17], [.123, -1.968, 17], [.125, -2, -17], [.25, 4 / 3, 0], [.3, 0, 0]]) {
     const sample = poseAt(run, t);
-    assert.equal(sample.elevatorDeg, elevator);
+    near(sample.elevatorDeg, elevator);
     assert.equal(sample.rudderDeg, rudder);
     near(sample.shift, cgShiftFromBody(sample.bodyShift, aircraftProfile('qx25')));
   }
@@ -94,4 +94,61 @@ test('機体を省略した竜海の操舵試技と基準飛行が従来の数�
     near(run.duration, duration, 1e-7);
     near(run.distance, distance, 1e-7);
   }
+});
+
+test('QXの短い前後入力は長押しより浅く、離しても機首が跳ねず、逆方向にも同じように効く', () => {
+  const response = (command, duration) => {
+    const flight = createFlight(QX25_DESIGN, hull, { weather: 'calm' });
+    flight.advanceTo(4);
+    flight.advanceTo(4 + duration, command);
+    const pressed = flight.current();
+    flight.advanceTo(7);
+    return { pressed, pitches: flight.samples.map(s => s.pitch) };
+  };
+  const neutral = response(0, .1);
+  for (const sign of [-1, 1]) {
+    const tap = response(sign, .1);
+    const peak = Math.max(...tap.pitches.map((pitch, i) => sign * (pitch - neutral.pitches[i]) * 180 / Math.PI));
+    assert.ok(peak > .1 && peak < 1, '0.1 s tap, including the response after release: ' + peak);
+    near(tap.pressed.elevatorDeg, sign * 1.6);
+    near(response(sign, .25).pressed.elevatorDeg, sign * 4);
+    near(response(sign * .3, 1).pressed.elevatorDeg, sign * 3);
+    near(response(sign, 1).pressed.elevatorDeg, sign * 10);
+  }
+});
+
+test('QXの舵角は20 Hz記録の間の短い操作も再生でき、描画周期に依存しない', () => {
+  const f = createFlight(QX25_DESIGN, hull, { weather: 'head' });
+  const live = [];
+  for (let i = 1; i <= 18; i++) {
+    f.advanceTo(i / 120, i <= 2 ? .8 : i < 5 ? -1 : 0);
+    live.push(f.current());
+  }
+  f.advanceTo(120);
+  for (const sample of live) {
+    near(poseAt(f.result, sample.t).elevatorDeg, sample.elevatorDeg);
+  }
+  const batched = createFlight(QX25_DESIGN, hull, { weather: 'head' });
+  batched.advanceTo(2 / 120, .8);
+  batched.advanceTo(4 / 120, -1);
+  batched.advanceTo(120);
+  assert.deepEqual(batched.result.samples, f.result.samples);
+});
+
+test('QXは離台直後に頭を上げ、前後一度ずつの修正で約5秒後に姿勢が落ち着く', () => {
+  const session = new FlightSession(hull, 'head', undefined, undefined, 'qx25');
+  const attempt = session.startAttempt();
+  const release = session.launch.duration;
+  const at = (time, input = 0) => attempt.advance(release + time, input).sample;
+  const first = at(0);
+  near(first.verticalSpeed, -session.launch.speed * session.launch.dropStep);
+  assert.ok(at(.3).pitch > first.pitch);
+  at(1);
+  const noseDown = at(1.4, -1);
+  const trough = at(2.05);
+  assert.ok(trough.pitch < noseDown.pitch && noseDown.pitch < 0);
+  at(2.45, 1);
+  const recovery = at(3.5);
+  assert.ok(recovery.pitch > trough.pitch && recovery.pitch < 0);
+  assert.ok(Math.abs(at(5).pitchRate) < Math.PI / 180);
 });

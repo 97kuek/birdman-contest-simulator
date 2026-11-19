@@ -17,7 +17,7 @@ const ryukai = Object.freeze({
   // Published fin area and arm, see docs/steering-validation.md.
   finArea: 0.62, finArm: 3.5, rudderEffectiveness: 1,
   rudderLimitDeg: RUDDER_LIMIT_DEG, elevatorLimitDeg: 0, elevatorEffectiveness: 0,
-  deckClearance: LAUNCH.deckClearance, releaseCgShift: -0.04, releasePitchRateDeg: LAUNCH.pitchRateDeg,
+  deckClearance: LAUNCH.deckClearance, releasePathDeg: LAUNCH.pathDeg, releaseCgShift: -0.04, releasePitchRateDeg: LAUNCH.pitchRateDeg,
 });
 
 // Kyushu University, QX-25 three-view, 主要諸元 and tail dimension lines:
@@ -34,6 +34,7 @@ const qx25 = Object.freeze({
   cruiseSpeed: 9.50, wingMomentArmChords: 0.365 - 0.25,
   finArea: qxFinArea, finArm: qxFinVolume * 26.2 * 20.62 / qxFinArea,
   rudderLimitDeg: 17, elevatorLimitDeg: 10,
+  elevatorControl: Object.freeze({ pressDegPerSecond: 16, returnDegPerSecond: 48 }),
   // Assumptions rather than measured QX aerodynamic derivatives or telemetry.
   // The tail response and drag are estimates. Torica lift slopes and lateral
   // derivatives serve as starting values. Inertias scale with mass and length².
@@ -42,7 +43,7 @@ const qx25 = Object.freeze({
   rollInertia: 993.022 * (117 / 100) * (26.2 / 25.1) ** 2,
   yawInertia: 1028.254 * (117 / 100) * (26.2 / 25.1) ** 2,
   // The pilot reported a nose-up tendency on release. Its rate is unmeasured.
-  deckClearance: 0.635, releaseCgShift: 0, releasePitchRateDeg: 3,
+  deckClearance: 0.635, releasePathDeg: null, releaseCgShift: 0, releasePitchRateDeg: 14,
 });
 
 export function aircraftProfile(aircraftId = 'ryukai') {

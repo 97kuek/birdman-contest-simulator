@@ -34,11 +34,14 @@ const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 
 export function releaseState(launch, release, pilot, profile = aircraftProfile()) {
   const pitch = (release ? LAUNCH.pitchDeg : LAUNCH.deckDeg) * RADIANS_PER_DEGREE;
-  const flightPath = (release ? LAUNCH.pathDeg : LAUNCH.deckDeg) * RADIANS_PER_DEGREE;
+  // QX has no measured release velocity. Carry its ramp velocity through the edge.
+  const flightPath = release
+    ? (profile.releasePathDeg == null ? -Math.asin(launch.dropStep) : profile.releasePathDeg * RADIANS_PER_DEGREE)
+    : LAUNCH.deckDeg * RADIANS_PER_DEGREE;
   return {
     pathLength: 0, height: launch.edgeHeight + CG_HEIGHT + profile.deckClearance,
     u: launch.speed * Math.cos(flightPath), w: launch.speed * Math.sin(flightPath),
-    pitch, q: release ? profile.releasePitchRateDeg * RADIANS_PER_DEGREE : 0, bodyShift: pilot ? bodyShiftFromCg(profile.releaseCgShift, profile) : 0,
+    pitch, elevatorDeg: 0, q: release ? profile.releasePitchRateDeg * RADIANS_PER_DEGREE : 0, bodyShift: pilot ? bodyShiftFromCg(profile.releaseCgShift, profile) : 0,
     bank: 0, heading: launch.heading, right: 0, forward: 0, v: 0, p: 0, r: 0,
   };
 }
@@ -155,7 +158,7 @@ export function aircraftDynamics(design, launch, options) {
     const downwash = (wingCL0 - groundFactor * cl) / (Math.PI * efficiency * aspectRatio);
     // Positive input moves the pilot aft and raises the elevator trailing edge.
     // Less upward tail force about the CG produces a nose-up moment.
-    const elevatorAngle = pilotInput * profile.elevatorLimitDeg * RADIANS_PER_DEGREE;
+    const elevatorAngle = state.elevatorDeg * RADIANS_PER_DEGREE;
     const tailAngle = tailCL0 / tailSlope + alpha + downwash + q * tailArm / speed
       - elevatorAngle * profile.elevatorEffectiveness;
     const tailCL = liftCoefficient(tailAngle, tailSlope, profile.maxLiftCoefficient);
