@@ -40,6 +40,22 @@
       <div id="align-panel" hidden><div class="direction-field" role="group" aria-label="発進方向">
         <button id="direction-left" aria-label="機首を左へ">←</button><span aria-hidden="true">発進方向</span><button id="direction-right" aria-label="機首を右へ">→</button>
         </div><button id="confirm-heading" class="primary" aria-keyshortcuts="Space"><kbd>Space</kbd> 発進</button></div>
+      <div id="touch-controls">
+        <div class="touch-axis weight-axis" role="group" aria-label="体重移動">
+          <span>体重移動</span>
+          <div class="axis-buttons">
+            <button type="button" data-command="-1" aria-label="体重を前へ"><b aria-hidden="true">↑</b> 前</button>
+            <button type="button" data-command="1" aria-label="体重を後ろへ"><b aria-hidden="true">↓</b> 後</button>
+          </div>
+        </div>
+        <div class="touch-axis" role="group" aria-label="ラダー">
+          <span>ラダー</span>
+          <div class="axis-buttons">
+            <button type="button" data-command="-2" aria-label="左ラダー">←</button>
+            <button type="button" data-command="2" aria-label="右ラダー">→</button>
+          </div>
+        </div>
+      </div>
       <div id="launch-call" role="status" hidden><small>プラットフォーム <b>／</b> 竜海</small><strong id="call-text"></strong></div>
       <div id="commentary" role="status" hidden><b>実況</b><span id="commentary-text"></span></div>
       <div id="landing-call" role="status" hidden>着水</div>
