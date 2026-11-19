@@ -1,9 +1,10 @@
+import './mobile-view.css';
 import { byId } from './dom.js';
 
 const paths = {
   play:'M7 4.5 19 12 7 19.5z', pause:'M7 5h3v14H7z M14 5h3v14h-3z',
-  more:'M5 11.75a.25.25 0 1 0 0 .5.25.25 0 0 0 0-.5z M12 11.75a.25.25 0 1 0 0 .5.25.25 0 0 0 0-.5z M19 11.75a.25.25 0 1 0 0 .5.25.25 0 0 0 0-.5z',
   book:'M3 5q5-2 9 1 4-3 9-1v14q-5-2-9 1-4-3-9-1z M12 6v14',
+  camera:'M3 7h4l2-3h6l2 3h4v13H3z M16 13a4 4 0 1 1-8 0 4 4 0 1 1 8 0z',
   pin:'M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0z M14 10a2 2 0 1 1-4 0 2 2 0 0 1 4 0z',
   plus:'M5 12h14m-7-7v14', minus:'M5 12h14', frame:'M3 9V4h5m8 0h5v5m0 6v5h-5m-8 0H3v-5',
   undo:'M3 6v5h5m-5 0a8 8 0 1 1 2 7', close:'m6 6 12 12m0-12L6 18'
@@ -23,18 +24,28 @@ export function setupViewerShell() {
     if (event.clientX < left || event.clientX > right || event.clientY < top || event.clientY > bottom) dialog.close();
   };
 
-  const cameraMenu = byId('camera-menu');
-  function toggleCameraTools(open) {
-    cameraMenu.setAttribute('aria-expanded', String(open));
-    cameraMenu.setAttribute('aria-label', open ? 'カメラ操作を閉じる' : 'カメラ操作を開く');
+  const hudToggle = byId('camera-hud-toggle');
+  const hud = hudToggle.parentElement;
+  const hudOpen = () => hudToggle.getAttribute('aria-expanded') === 'true';
+  function closeHud(restoreFocus) {
+    hudToggle.setAttribute('aria-expanded', 'false');
+    if (restoreFocus) hudToggle.focus({ preventScroll: true });
   }
-  cameraMenu.onclick = () => toggleCameraTools(cameraMenu.getAttribute('aria-expanded') !== 'true');
-  document.addEventListener('pointerdown', event => {
-    if (cameraMenu.getAttribute('aria-expanded') === 'true' && !event.target.closest('.camera-tools')) toggleCameraTools(false);
+  hudToggle.onclick = () => hudToggle.setAttribute('aria-expanded', String(!hudOpen()));
+  hud.addEventListener('click', event => {
+    if (hudOpen() && event.target.closest('[data-view], #camera-reset, #fullscreen')) closeHud(true);
   });
-  cameraMenu.parentElement.addEventListener('keydown', event => {
-    if (event.key === 'Escape') { toggleCameraTools(false); cameraMenu.focus(); }
+  hud.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && hudOpen()) {
+      event.stopPropagation();
+      closeHud(true);
+    }
   });
+  const dismissOutside = event => {
+    if (hudOpen() && !hud.contains(event.target)) closeHud(false);
+  };
+  document.addEventListener('pointerdown', dismissOutside);
+  document.addEventListener('focusin', dismissOutside);
 
   const fullscreen = byId('fullscreen');
   if (!document.fullscreenEnabled) fullscreen.hidden = true;
@@ -64,6 +75,7 @@ export function showCameraMode(mode, attached) {
   for (const button of document.querySelectorAll('[data-view]')) {
     const pressed = button.dataset.view === mode || (button.dataset.view === 'aircraft' && !attached);
     button.setAttribute('aria-pressed', String(pressed));
+    if (pressed) byId('camera-hud-toggle').setAttribute('aria-label', '視点（現在は' + button.textContent + '）');
   }
 }
 

@@ -1,0 +1,90 @@
+.camera-hud,
+#camera-hud-panel {
+  display: contents;
+}
+
+#camera-hud-toggle {
+  display: none;
+}
+
+@media (max-width: 740px) and (orientation: portrait),
+       (max-height: 540px) and (orientation: landscape),
+       (any-pointer: coarse) and (max-width: 1000px) {
+  .flight-lab .scene-foot {
+    display: none;
+  }
+
+  .camera-hud {
+    position: absolute;
+    top: calc(var(--edge-top) + 50px);
+    left: var(--edge-left);
+    z-index: 3;
+    display: block;
+  }
+
+  #camera-hud-toggle {
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+    gap: 5px;
+    padding: 0 10px;
+    border-radius: 6px;
+    color: var(--rally-navy);
+    background: #f7fbfff2;
+    box-shadow: 0 1px 5px #10285938;
+    font-size: 12px;
+    font-weight: 700;
+    touch-action: manipulation;
+  }
+
+  #camera-hud-toggle[aria-expanded=true] {
+    color: white;
+    background: var(--rally-navy);
+  }
+
+  #camera-hud-panel {
+    position: absolute;
+    top: calc(100% + 3px);
+    left: 0;
+    display: none;
+    width: max-content;
+    padding: 4px;
+    border-radius: 7px;
+    background: #f8fbff;
+    box-shadow: 0 3px 15px #10285940;
+  }
+
+  #camera-hud-toggle[aria-expanded=true] + #camera-hud-panel {
+    display: block;
+  }
+
+  #camera-hud-panel :is(.camera-tools, .view-switch) {
+    position: static;
+    display: flex;
+    justify-content: space-between;
+    gap: 2px;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  #camera-hud-panel .camera-tools {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid var(--rule);
+  }
+
+  #camera-hud-panel button {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 4px 9px;
+    touch-action: manipulation;
+  }
+}
+
+@media (max-height: 540px) and (orientation: landscape) {
+  .flight-lab .compass {
+    left: calc(var(--edge-left) + 78px);
+  }
+}

@@ -1406,7 +1406,8 @@ dialog a {
     gap: 6px;
     align-items: center;
   }
-  .setup-title { margin: 0; }
+  .setup-title { grid-column: 1 / -1; margin: 0; }
+  .identity { grid-column: 1 / -1; }
   .setup-title::before { width: 12px; }
   .identity { margin: 0; padding: 4px 6px; }
   .model-year { display: none; }
@@ -1439,14 +1440,37 @@ dialog a {
   border-color: #f2d774;
 }
 
-#tilt-option label { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
-#tilt-option input { width: 18px; height: 18px; accent-color: var(--rally-navy); }
-#tilt-option small { display: block; font-size: 12px; }
-#tilt-option:not(:has(input:checked)) #tilt-tip { display: none; }
-body[data-stage=flight][data-tilt=active] #touch-controls { display: none; }
-
-#camera-menu { display: none; }
-@media (any-pointer: coarse) and (max-width: 1000px) {
-  .flight-lab:is([data-stage=align],[data-stage=countdown],[data-stage=flight]) #camera-menu { display: inline-grid; }
-  .flight-lab:is([data-stage=align],[data-stage=countdown],[data-stage=flight]) #camera-menu[aria-expanded=false] ~ button { display: none; }
+#mobile-intro {
+  width: min(320px, calc(100vw - 32px));
+  padding: 22px;
+  border-top: 4px solid var(--rally-sky);
 }
+#mobile-intro h2 { margin: 0 0 8px; color: var(--rally-navy); font-size: 20px; }
+#mobile-intro p { margin: 0 0 16px; line-height: 1.6; }
+#mobile-intro .primary { width: 100%; min-height: 44px; }
+#input-notice { display: block; margin-top: 8px; }
+#mobile-input-settings { border-top: 1px solid var(--rule); }
+#mobile-input-settings select { margin-left: auto; }
+#sensor-status:empty { display: none; }
+.swipe-launch { display: none; }
+@media (any-pointer: coarse) and (max-width: 1000px) {
+  #align-panel {
+    inset: auto auto max(16px, env(safe-area-inset-bottom)) 50%;
+    transform: translateX(-50%);
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+  }
+  #align-panel .direction-field, #align-panel .keyboard-launch { display: none; }
+  #align-panel .swipe-launch { display: inline; }
+  #align-panel .primary {
+    min-height: 44px;
+    padding: 6px 14px;
+    background: #102649dd;
+    border: 1px solid #afc7d9;
+    border-radius: 24px;
+    font-size: 12px;
+  }
+}
+body[data-stage=flight][data-tilt=active] #touch-controls { display: none; }

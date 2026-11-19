@@ -1,3 +1,4 @@
+import { MAX_LAUNCH_HEADING_DEGREES } from '../domain/launch.js';
 import { setupTiltControl } from './tilt-control.js';
 import { byId as $ } from './dom.js';
 
@@ -163,6 +164,37 @@ export function bindPilotControls({
   });
   // A held drag on the pilot's viewport gives touch screens the same two input axes.
   const canvas = $('canvas-host');
+  // On the platform, a touch belongs to aiming, even in the orbit camera.
+  // Half a screen of travel takes the nose from centre to the heading limit.
+  const tapSlop = 8;
+  let swipe = null;
+  canvas.addEventListener('pointerdown', e => {
+    if (!isAiming() || e.pointerType !== 'touch') return;
+    e.stopPropagation();
+    if (swipe) { swipe.cancelled = true; return; }
+    if (!e.isPrimary) return;
+    canvas.setPointerCapture(e.pointerId);
+    swipe = { id: e.pointerId, x: e.clientX, y: e.clientY, start: readHeading(), dragged: false, cancelled: false };
+  }, true);
+  function aimTouch(e) {
+    if (e.pointerId !== swipe?.id || swipe.cancelled || !isAiming()) return;
+    const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+    if (!swipe.dragged && Math.hypot(dx, dy) <= tapSlop) return;
+    if (!swipe.dragged && Math.abs(dy) > Math.abs(dx)) { swipe.cancelled = true; return; }
+    swipe.dragged = true;
+    setHeading(swipe.start + dx / canvas.clientWidth * 2 * MAX_LAUNCH_HEADING_DEGREES);
+  }
+  canvas.addEventListener('pointermove', aimTouch, true);
+  canvas.addEventListener('pointerup', e => {
+    if (e.pointerId !== swipe?.id) return;
+    aimTouch(e);
+    const tap = !swipe.dragged && !swipe.cancelled && isAiming();
+    swipe = null;
+    if (tap) confirmHeading();
+  }, true);
+  for (const event of ['pointercancel', 'lostpointercapture']) {
+    canvas.addEventListener(event, e => { if (swipe?.id === e.pointerId) swipe = null; });
+  }
   canvas.addEventListener('pointerdown', (e) => {
     if (e.pointerType !== 'touch' || !isFlying() || view() !== 'pilot' || touch) return;
     touch = { id: e.pointerId, x: e.clientX, y: e.clientY };
@@ -184,6 +216,7 @@ export function bindPilotControls({
     });
   function releaseInput() {
     heading.cancel();
+    swipe = null;
     if (isFlying()) advanceToInputTime();
     clearInput();
   }

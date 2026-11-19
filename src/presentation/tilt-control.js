@@ -20,78 +20,121 @@ export function tiltCommand(angle, neutral) {
   return Math.sign(delta) * Math.min(1, (Math.abs(delta) - DEAD_ZONE) / (FULL_INPUT - DEAD_ZONE));
 }
 
+const preferenceKey = 'birdman.mobile-input.v1';
+const sensorTimeout = 2500;
+
 export function setupTiltControl() {
-  const toggle = byId('tilt-enable'), status = byId('tilt-status');
+  const mobile = matchMedia('(any-pointer: coarse) and (max-width: 1000px)').matches;
   const api = window.DeviceOrientationEvent;
-  const supported = api && window.isSecureContext && navigator.maxTouchPoints > 0;
-  byId('tilt-option').hidden = !supported;
+  const supported = Boolean(api && window.isSecureContext);
+  const dialog = byId('mobile-intro'), select = byId('input-mode');
+  let last, neutral, angle, timer, generation = 0, listening = false, pending = false;
+  let mode = 'touch', calibrated = false;
   const screenAngle = () => screen.orientation?.angle ?? window.orientation ?? 0;
-  let last, neutral, angle, timer, generation = 0, listening = false;
-  function hint(text) {
-    status.textContent = text;
-    status.hidden = !text;
+
+  function notice(text) {
+    byId('sensor-status').textContent = text;
+    byId('input-notice').textContent = text;
+    byId('input-notice').hidden = !text;
+  }
+  function remember(value) {
+    try { localStorage.setItem(preferenceKey, value); } catch { /* Per-visit settings still work. */ }
   }
   function stop(message = '') {
     generation++;
     clearTimeout(timer);
     window.removeEventListener('deviceorientation', receive);
-    listening = false;
+    listening = pending = calibrated = false;
     last = neutral = null;
-    toggle.checked = false;
+    mode = select.value = 'touch';
     delete document.body.dataset.tilt;
-    hint(message);
+    notice(message);
+  }
+  function awaitSensor() {
+    clearTimeout(timer);
+    timer = setTimeout(() => stop('傾きを取得できないため、タッチで操縦します。'), sensorTimeout);
   }
   function receive(event) {
-    if (document.hidden) return;
-    if (!Number.isFinite(event.beta) || !Number.isFinite(event.gamma)) {
-      if (neutral) stop('傾きを取得できないためタッチで操縦します');
-      return;
-    }
+    if (document.hidden || !Number.isFinite(event.beta) || !Number.isFinite(event.gamma)) return;
+    clearTimeout(timer);
     const nextAngle = screenAngle();
-    const rotated = angle !== nextAngle;
+    if (nextAngle !== angle) neutral = null;
     angle = nextAngle;
     last = screenTilt(event.beta, event.gamma, angle);
-    if (timer) { clearTimeout(timer); timer = null; }
-    if (!status.hidden) hint('');
-    if (document.body.dataset.tilt && (!neutral || rotated)) neutral = last;
+    if (calibrated && !neutral) {
+      neutral = last;
+      document.body.dataset.tilt = 'active';
+    }
   }
-  toggle.onchange = async () => {
-    if (!toggle.checked) return stop();
+  async function enable() {
+    if (!supported) return stop('この端末ではタッチで操縦します。');
+    if (listening || pending) return;
+    pending = true;
+    mode = select.value = 'tilt';
     const request = ++generation;
-    hint('センサーを確認中…');
     try {
-      const permitted = !api.requestPermission || await api.requestPermission() === 'granted';
+      const allowed = !api.requestPermission || await api.requestPermission() === 'granted';
       if (request !== generation) return;
-      if (!permitted) return stop('許可されなかったためタッチで操縦します');
+      if (!allowed) return stop('傾きの利用が許可されなかったため、タッチで操縦します。');
       listening = true;
       window.addEventListener('deviceorientation', receive);
-      timer = setTimeout(() => stop('傾きを取得できないためタッチで操縦します'), 2500);
+      notice('');
+      awaitSensor();
     } catch {
-      if (request === generation) stop('センサーを使えないためタッチで操縦します');
-    }
-  };
-  function resetSample() {
-    last = neutral = null;
-    if (document.body.dataset.tilt) {
-      clearTimeout(timer);
-      if (!document.hidden) timer = setTimeout(() => stop('傾きを取得できないためタッチで操縦します'), 2500);
+      if (request === generation) stop('傾きを利用できないため、タッチで操縦します。');
+    } finally {
+      if (request === generation) pending = false;
     }
   }
-  document.addEventListener('visibilitychange', resetSample);
-  window.addEventListener('orientationchange', resetSample);
-  screen.orientation?.addEventListener('change', resetSample);
+  if (mobile) {
+    byId('mobile-input-settings').hidden = false;
+    select.options[0].disabled = !supported;
+    let saved;
+    try { saved = localStorage.getItem(preferenceKey); } catch { /* Show the welcome for this visit. */ }
+    if (!supported) {
+      byId('mobile-intro-title').textContent = 'タッチで操縦';
+      byId('mobile-intro-body').textContent = '横スワイプで発進方向を決めます。飛行中は画面の前・後と左右のラダーで操縦できます。';
+    }
+    if (saved === 'tilt' && supported) mode = select.value = 'tilt';
+    else select.value = 'touch';
+    if (!saved) dialog.showModal();
+    function accept() {
+      remember(supported ? 'tilt' : 'touch');
+      if (supported) enable(); // iOS needs the OK button's user activation.
+      dialog.close();
+    }
+    byId('accept-mobile-input').onclick = accept;
+    dialog.oncancel = () => stop();
+    select.onchange = () => {
+      remember(select.value);
+      if (select.value === 'tilt') {
+        calibrated = ['countdown', 'flight'].includes(document.body.dataset.stage);
+        enable();
+      } else stop();
+    };
+    function resetSample() {
+      if (!listening) return;
+      last = neutral = null;
+      clearTimeout(timer);
+      if (!document.hidden) awaitSensor();
+    }
+    document.addEventListener('visibilitychange', resetSample);
+    screen.orientation?.addEventListener('change', resetSample);
+    window.addEventListener('orientationchange', resetSample);
+  }
   return {
+    prepare() { if (mode === 'tilt') enable(); },
     calibrate() {
-      if (listening && last && angle === screenAngle()) {
+      if (mode !== 'tilt') return;
+      calibrated = true;
+      if (last && angle === screenAngle()) {
         neutral = last;
         document.body.dataset.tilt = 'active';
-        return true;
-      }
-      if (toggle.checked) stop('傾きを取得できないためタッチで操縦します');
-      return false;
+      } else if (listening) awaitSensor();
     },
     end() {
       neutral = null;
+      calibrated = false;
       delete document.body.dataset.tilt;
     },
     value(axis) {

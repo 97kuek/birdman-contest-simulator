@@ -177,6 +177,7 @@ export function setupTrials({
   function aim() {
     clearRuling();
     resultRecord = null;
+    tilt.prepare();
     session.prepareAttempt();
     latestRecord?.trail.setVisible(false);
     atWater = false;

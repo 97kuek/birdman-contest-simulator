@@ -12,21 +12,33 @@
 <body class="flight-lab" data-stage="setup">
   <header class="topbar">
     <div class="brand"><div><h1>鳥人間コンテストシミュレーター</h1><span class="broadcast-class">滑空機部門 <b>／</b> <span id="broadcast-team">東京理科大学・鳥科</span></span></div></div>
-    <div class="lab-actions"><button id="flight-action" hidden></button><button id="sound-settings" popovertarget="sound-options" title="音の設定" aria-label="音の設定"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h4l5-4v14l-5-4H3z"/><path class="waves" d="M16 8q4 4 0 8m3-11q7 7 0 14"/><path class="mute" d="m16 9 5 6m0-6-5 6"/></svg></button><button id="sources" class="text-button" title="資料・出典"><i data-icon="book"></i>資料・出典</button></div>
+    <div class="lab-actions"><button id="flight-action" hidden></button><button id="sound-settings" popovertarget="sound-options" title="設定" aria-label="設定"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h4l5-4v14l-5-4H3z"/><path class="waves" d="M16 8q4 4 0 8m3-11q7 7 0 14"/><path class="mute" d="m16 9 5 6m0-6-5 6"/></svg><span class="settings-label">設定</span></button><button id="sources" class="text-button" title="資料・出典"><i data-icon="book"></i>資料・出典</button></div>
   </header>
-  <div id="sound-options" popover aria-label="音の設定">
+  <div id="sound-options" popover aria-label="設定">
     <label><input id="instrument-audio" type="checkbox" checked><span>計器の電子音<small>音の高さは対気速度、低空での間隔は高度</small></span></label>
     <label><input id="environment-audio" type="checkbox" checked><span>環境音・効果音<small>波、風切り音、助走、着水、追走艇</small></span></label>
+    <div id="mobile-input-settings" hidden>
+      <label for="input-mode">操縦方法 <select id="input-mode"><option value="tilt">傾き</option><option value="touch">タッチ</option></select></label>
+      <small id="sensor-status" role="status"></small>
+    </div>
   </div>
+  <dialog id="mobile-intro" aria-labelledby="mobile-intro-title" aria-describedby="mobile-intro-body">
+    <h2 id="mobile-intro-title">スマホを傾けて操縦</h2>
+    <p id="mobile-intro-body">発進時の持ち方が水平の基準です。手前に起こすと機首が上がり、右に傾けると右に旋回します。</p>
+    <button class="primary" id="accept-mobile-input" autofocus>OK</button>
+  </dialog>
   <main class="workspace">
     <div class="scene-column">
     <section id="viewer" tabindex="-1" aria-label="松原湖岸と滑空機の3Dビュー">
       <div id="canvas-host"></div>
+      <div class="camera-hud"><button id="camera-hud-toggle" type="button" aria-expanded="false" aria-controls="camera-hud-panel"><i data-icon="camera"></i>視点</button><div id="camera-hud-panel">
       <nav class="view-switch" aria-label="カメラ視点">
         <button data-view="pilot" aria-pressed="false">パイロット</button>
         <button data-view="boat" aria-pressed="false">ボート</button>
         <button data-view="aircraft" aria-pressed="true">俯瞰</button>
       </nav>
+      <div class="camera-tools" aria-label="視点の操作"><button id="zoom-in" aria-label="拡大"><i data-icon="plus"></i></button><button id="zoom-out" aria-label="縮小"><i data-icon="minus"></i></button><button id="camera-reset" aria-label="現在の視点に戻す"><i data-icon="undo"></i></button><button id="fullscreen" aria-label="全画面表示" title="全画面表示"><i data-icon="frame"></i></button></div>
+      </div></div>
       <canvas id="flag-inset" width="192" height="192" role="img" aria-label="風見旗（上が機首方向）" hidden></canvas>
       <div class="compass" aria-label="画面上の北方向"><span>N</span><svg viewBox="0 0 28 28" aria-hidden="true"><path fill="#e6f5ed" d="m14 1 4.5 17-4.5-3-4.5 3z"/><path fill="#789493" d="m14 27-4.5-13 4.5 2 4.5-2z"/></svg></div>
       <section id="wind-meter" aria-label="機首を上にした風の流れ" hidden>
@@ -39,7 +51,7 @@
       </section>
       <div id="align-panel" hidden><div class="direction-field" role="group" aria-label="発進方向">
         <button id="direction-left" aria-label="機首を左へ">←</button><span aria-hidden="true">発進方向</span><button id="direction-right" aria-label="機首を右へ">→</button>
-        </div><button id="confirm-heading" class="primary" aria-keyshortcuts="Space"><kbd>Space</kbd> 発進</button></div>
+        </div><button id="confirm-heading" class="primary" aria-keyshortcuts="Space"><span class="keyboard-launch"><kbd>Space</kbd> 発進</span><span class="swipe-launch">横スワイプで向き調整 · タップで発進</span></button></div>
       <div id="touch-controls">
         <div class="touch-axis weight-axis" role="group" aria-labelledby="pitch-label">
           <span id="pitch-label">体重移動</span>
@@ -60,7 +72,7 @@
       <div id="commentary" role="status" hidden><b>実況</b><span id="commentary-text"></span></div>
       <div id="loading" role="status">3Dシーンを読み込み中…</div>
       <div class="scene-foot"><div class="place"><i data-icon="pin"></i><span>彦根・松原湖岸</span></div><div class="map-credit">地形・写真・水域：国土地理院／国土数値情報</div></div>
-      <div class="camera-tools" aria-label="視点の操作"><button id="camera-menu" aria-label="カメラ操作を開く" aria-expanded="false" aria-controls="zoom-in zoom-out camera-reset fullscreen" title="カメラ操作"><i data-icon="more"></i></button><button id="zoom-in" aria-label="拡大"><i data-icon="plus"></i></button><button id="zoom-out" aria-label="縮小"><i data-icon="minus"></i></button><button id="camera-reset" aria-label="現在の視点に戻す"><i data-icon="undo"></i></button><button id="fullscreen" aria-label="全画面表示" title="全画面表示"><i data-icon="frame"></i></button></div>
+
     </section>
     <section id="comparison" role="dialog" aria-labelledby="result-heading" hidden>
       <div class="record-board" id="record-board">
@@ -104,11 +116,7 @@
           <label title="強さや向きが変わる風で飛ぶ"><input type="radio" name="difficulty" value="normal"><span>中級</span></label>
           <label title="強い風や突風の中で飛ぶ"><input type="radio" name="difficulty" value="hard"><span>上級</span></label>
         </fieldset>
-        <div id="tilt-option" hidden>
-          <label><input id="tilt-enable" type="checkbox" aria-describedby="tilt-tip">傾きで操縦</label>
-          <small id="tilt-tip">発進時の持ち方が中立。前後で体重移動、左右でラダー。</small>
-          <small id="tilt-status" role="status" hidden></small>
-        </div>
+        <small id="input-notice" role="status" hidden></small>
       </div>
       <div class="setup-launch"><button class="primary" id="launch" disabled>開始する</button><button id="previous-result" hidden>この条件の飛行記録</button></div>
     </aside>
