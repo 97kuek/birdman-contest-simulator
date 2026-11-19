@@ -1,6 +1,6 @@
 # 人力プロペラ機を追加するときの設計
 
-2026年の単座・二人乗り機を対象に、設計点と実飛行データを比較した。[CygnusとS-320の調査・実装案](human-powered-propeller.md)
+基準機には東北大学Windnautsの2023年機「聯」を推奨する。三面図と巡航設計点に加えて、大会での飛距離・滞空時間・旋回を同じ機体で照合できる。[Windnauts・Meister・NASGの実績と実装案](human-powered-propeller.md)
 
 最初の1機は三面図にプロペラの設計点が載っている機体を選ぶと、外形と推力を別々に照合できる。たとえば京都大学の2025年機 *Fregata* は全幅29 m、プロペラ半径1.40 m、回転数140 rpm、推力26 N、巡航速度7.9 m/s、必要パワー227 Wと公表している。これらは設計値で、飛行中の実測にはトルク・回転数・対気速度の同期記録が要る。[京都大学ShootingStarsの三面図](https://shootingstars.hannnari.com/about/siryou/sanmenzu2025.pdf)
 
