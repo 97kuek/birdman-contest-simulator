@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { FlightSession } from './application/flight-session.js';
 import { BASE_DESIGN } from './domain/flight.js';
+import { createShoreline } from './domain/shoreline.js';
 import { WIND_GRID_SIZE } from './domain/lake-breeze.js';
 import { WEATHER, windAt } from './domain/weather.js';
 import { byId } from './presentation/dom.js';
@@ -93,7 +94,7 @@ async function start() {
   enableReflection(aircraft);
   modelBase.add(aircraft);
 
-  let trials, setNight;
+  let trials, setNight, firstLand;
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const atWater = () => trials?.atWater;
   const boat = createChaseBoat();
@@ -113,7 +114,7 @@ async function start() {
     const elapsed = last ? Math.min((now - last) / 1000, 0.15) : 0;
     last = now;
     trials?.tick(now);
-    const underway = boat.update(modelBase, elapsed, reduceMotion.matches);
+    const underway = boat.update(modelBase, elapsed, reduceMotion.matches, firstLand);
     const boatSpeed = trials ? (display.sample.groundSpeed ?? 0) * underway : 0;
     lake.setWake(boat.group, THREE.MathUtils.smoothstep(boatSpeed, 0.4, 6));
     cameraRig.update();
@@ -143,8 +144,9 @@ async function start() {
   enableReflection(landscape);
   setNight = createDaylight({ scene, skyLight: ambient, directLight: sun, platform, landscape, lake });
   lake.setShallows(landscape.userData.shallows);
+  firstLand = createShoreline(landscape.userData.shoreRings, facility.rotation.y);
   const { view, setView, startLandingCamera, moveCamera } = cameraRig;
-  const session = new FlightSession(modelHull(aircraft), selectedWeather(), drawWindOffset);
+  const session = new FlightSession(modelHull(aircraft), selectedWeather(), drawWindOffset, firstLand);
   const display = createCockpitDisplay(aircraft, {
     weather: () => trials?.weather ?? session.weather,
     platformBearing: -facility.rotation.y,

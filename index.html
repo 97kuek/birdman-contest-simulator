@@ -62,11 +62,18 @@
       <div class="camera-tools" aria-label="視点の操作"><button id="zoom-in" aria-label="拡大"><i data-icon="plus"></i></button><button id="zoom-out" aria-label="縮小"><i data-icon="minus"></i></button><button id="camera-reset" aria-label="現在の視点に戻す"><i data-icon="undo"></i></button><button id="fullscreen" aria-label="全画面表示" title="全画面表示"><i data-icon="frame"></i></button></div>
     </section>
     <section id="comparison" role="dialog" aria-labelledby="result-heading" hidden>
-      <div class="record-board">
-        <h2 id="result-heading" tabindex="-1">ただ今の記録</h2>
-        <p class="flight-score" aria-label="飛行距離"><b id="result-distance"></b><span>m</span></p>
+      <div class="record-board" id="record-board">
+        <h2 id="result-heading" tabindex="-1" aria-describedby="result-score record-official record-personal">ただ今の記録</h2>
+        <p class="flight-score" id="result-score"><b id="result-distance"></b><span>m</span></p>
+        <p id="record-official" hidden></p>
+        <p id="record-personal"></p>
       </div>
       <div class="result-actions"><button class="primary" id="retry">再挑戦</button><button id="result-replay">リプレイ</button><a id="share-result" target="_blank" rel="noopener noreferrer" aria-label="飛行記録をXで共有（新しいタブ）">Xで共有 ↗</a></div>
+    </section>
+    <section id="disqualification" role="dialog" aria-labelledby="disqualification-heading" aria-describedby="disqualification-reason" hidden>
+      <h2 id="disqualification-heading" tabindex="-1">飛行禁止区域侵入で失格</h2>
+      <p id="disqualification-reason">陸地上空に入りました。この試技の飛距離は記録されません。</p>
+      <div><button class="primary" id="retry-disqualified">再挑戦</button><button id="return-disqualified">準備に戻る</button></div>
     </section>
     <section id="replay-panel" hidden aria-label="操縦リプレイ">
       <div class="replay-transport">
@@ -117,6 +124,7 @@
     <h3>飛行モデル</h3><p>全試行で質量100 kg。台の正面へ標準の力で台端まで押すと、離台時の対地速度は8 m/sです。鳥科の訓練用モデルの空力係数を使い、主翼・尾翼の空気力とピッチ運動を計算します。昼は湖から岸へ吹く湖風、夜は岸から湖へ吹く陸風を想定しています。難易度を上げると背景風も突風も強まります。風の分布は試技ごとに変わり、基準機とリプレイはその試技と同じ風を使います。対地速度から風速を引いた対気速度で揚力・抗力を計算します。主翼が水面に近づくと誘導抗力が減り、尾翼への吹き下ろしも変わります。手動飛行では左右キーがラダーを左右10°動かし、離すと中立になります。鳥科の訓練モデルの係数で、ラダー・横滑り・機体の回転による横力とモーメントを計算します。三面図の設計舵角は左右20°です。サーボの遅れは未計測のため、舵角は指令に即応させています。比較用の基準機はGPS由来のコースと推定体重移動を使います。記録は離台点から最初の接水時の機体最後尾までの水平距離です。</p>
     <p>映像では2:03〜2:04に離台し、2:58〜2:59に着水。ログでは離台後約33秒に、実機は約290 m先を高度約2.6 mで飛んでいました。</p>
     <a href="https://www.youtube.com/watch?v=brdhsnknoKs&amp;t=123s" target="_blank" rel="noreferrer">大会公式映像 ↗</a>　<a href="https://github.com/torica-org/25th_Analysis/blob/115723c24ce9e64c07c79215770acc7559518d42/flightDataPlot/src/2025_Tatsumi.csv" target="_blank" rel="noreferrer">鳥科の飛行ログ ↗</a>　<a href="https://github.com/Kimama-2005/torica-sim2025-unity/blob/3bddd0106db223ed864c4938ef3194a9af173682/TORICA%20sim%20Develop/Assets/Tatsumi.csv" target="_blank" rel="noreferrer">訓練用モデルの係数 ↗</a>
+    <h3>ゲーム内の飛行区域</h3><p>松原湖岸の水域データをもとに、陸地上空を飛行禁止区域としています。機体が区域に入ると、その試技は失格です。</p>
     <h3>プラットフォーム</h3><p>大会規定の水面上10 m、助走路10 m、勾配3.5°を使用。大会公式映像の青緑のシャツと3人の配置を参考に翼持ちと胴体担当を造形しました。支持位置・歩幅・手を離した後の姿勢は近似です。固定した扇形の台の上で機体の向きと離台点を変えます。左右30°は比較用の設定範囲です。2025年の許容角と竜海の台上の機首角は未確認です。開き角・足場・配置方位は近似です。大会概要の寸法は2026年版を参照しています。鳥科のGPSで離台をまたぐ約1.1秒の対地進行方位は北から時計回りに約304°です。</p><a href="https://www.ytv.co.jp/birdman/about/" target="_blank" rel="noreferrer">読売テレビの大会概要 ↗</a>　<a href="https://jhf.hangpara.or.jp/jhfreport/pdf/jhfreport_247.pdf#page=7" target="_blank" rel="noreferrer">風上に向けた発進例（JHF・2024年）↗</a>
   </dialog>
   <script type="module" src="./src/main.js"></script>

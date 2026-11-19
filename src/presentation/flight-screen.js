@@ -1,5 +1,8 @@
 import { MAX_LAUNCH_HEADING_DEGREES, WATER_RUNOUT_SECONDS } from '../domain/flight.js';
+import { createRaceCommentary } from '../application/race-commentary.js';
 import { launchCue } from '../application/launch-sequence.js';
+import { FlightRecords } from '../application/flight-records.js';
+import { showRecordBoard } from './record-board.js';
 import { byId as $ } from './dom.js';
 import { setupCaptions } from './captions.js';
 import { setupReplay } from './replay.js';
@@ -9,8 +12,8 @@ import { updateWindMeter } from './wind-meter.js';
 const colors = ['#b7441c', '#65489b', '#217547', '#bd3468', '#0567a5'];
 const trialColor = (number) => colors[(number - 1) % colors.length];
 const GO_CAPTION_SECONDS = 0.65;
-const LANDING_CAMERA_DELAY_SECONDS = 3.0;
-const RECORD_REVEAL_DELAY_MS = 5000;
+const LANDING_CAMERA_DELAY_SECONDS = 2.5;
+const RECORD_REVEAL_DELAY_MS = 3500;
 
 // FlightSession holds the history; only the current trial needs a visible trail.
 export function selectedWeather() {
@@ -32,6 +35,7 @@ export function setupTrials({
 }) {
   const weatherControls = document.querySelectorAll('input[name="period"],input[name="difficulty"]');
   const { pose } = aircraftPose;
+  const records = new FlightRecords(() => window.localStorage);
   const renderWind = (s) => updateWindMeter(visibleWeather(), s);
   let latestRecord = null;
   let screen = 'setup';
@@ -48,6 +52,7 @@ export function setupTrials({
     document.body.dataset.stage = screen;
     $('flight-settings').hidden = name !== 'setup';
     $('comparison').hidden = name !== 'result';
+    $('disqualification').hidden = name !== 'disqualified';
     $('replay-panel').hidden = name !== 'replay';
     $('align-panel').hidden = name !== 'align';
     $('launch-call').hidden = name !== 'countdown';
@@ -119,7 +124,7 @@ export function setupTrials({
 
   function showResult(record) {
     resultRecord = record;
-    $('result-distance').textContent = record.run.distance.toFixed(2);
+    showRecordBoard(record.run, records.forRun(record.run));
     const share = new URL('https://twitter.com/intent/tweet');
     share.searchParams.set('text', '竜海で ' + record.run.distance.toFixed(2) + ' m 飛びました！ #鳥人間コンテストシミュレーター');
     share.searchParams.set('url', 'https://97kuek.github.io/birdman-contest-simulator/');
@@ -158,6 +163,8 @@ export function setupTrials({
     showResult(previous);
     setView('boat');
   };
+  $('retry-disqualified').onclick = aim;
+  $('return-disqualified').onclick = prepare;
   $('retry').onclick = () => {
     aim();
   };
@@ -202,15 +209,16 @@ export function setupTrials({
     };
     atWater = false;
     clearInput();
-    active = { record, attempt, clock: elapsed, previousTime: now, airborne: false, distanceCall: 0 };
+    active = { record, attempt, clock: elapsed, previousTime: now, airborne: false, commentary: createRaceCommentary(attempt.number) };
     stage('flight');
     $('viewer').focus({ preventScroll: true });
     tick(active.previousTime);
   }
   function finish(run) {
     if (!active) return;
-    const { record } = active;
+    const { record, commentary } = active;
     record.run = run;
+    records.record(run);
     record.trail.extend(run.samples);
     latestRecord?.trail.dispose();
     latestRecord = record;
@@ -223,8 +231,19 @@ export function setupTrials({
     atWater = true;
     clearInput();
     stage('landing');
-    captions.show('竜海、ここで着水です！', 3900);
+    captions.show(commentary.landing(run), 3200);
     landing = { record, start: performance.now(), boatAt: null };
+  }
+  function disqualify(sample) {
+    active.record.trail.dispose();
+    active = null;
+    atWater = false;
+    clearInput();
+    captions.clear();
+    pose(sample);
+    setView('aircraft');
+    stage('disqualified');
+    $('disqualification-heading').focus({ preventScroll: true });
   }
   function tick(now) {
     if (screen === 'align') {
@@ -271,6 +290,10 @@ export function setupTrials({
     const { record, attempt } = active;
     $('launch-call').hidden = active.clock >= GO_CAPTION_SECONDS;
     const frame = attempt.advance(active.clock, pilotInput(), pilotInput(2));
+    if (frame.phase === 'disqualified') {
+      disqualify(frame.sample);
+      return;
+    }
     if (frame.phase === 'touchdown') {
       finish(frame.run);
       return;
@@ -278,14 +301,9 @@ export function setupTrials({
     const s = frame.sample;
     if (frame.phase === 'release' || frame.phase === 'glide') {
       record.trail.extend(attempt.samples);
-      const mark = Math.min(400, Math.floor(s.distance / 100) * 100);
-      if (!active.airborne) {
-        active.airborne = true;
-        captions.show('竜海、飛び出した！');
-      } else if (mark > active.distanceCall) {
-        active.distanceCall = mark;
-        captions.show(mark + 'メートルを越えてきました！');
-      }
+      active.airborne = true;
+      const call = active.commentary.airborne(s);
+      if (call) captions.show(call);
     }
     pose(s);
     renderWind(s);
