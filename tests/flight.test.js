@@ -1,14 +1,14 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createAircraft} from './aircraft.js';
-import {BASE_DESIGN, CG_HEIGHT, LAUNCH, launchProfile, rampAt, createFlight, previousFactors, simulateFlight, poseAt, WATER_RUNOUT_SECONDS, waterRunoutPose} from './flight.js';
-import {observations, officialDistance, courseAt} from './race2025.js';
-import {pullupLog} from './pullup-data.js';
-import {pullupErrors, pullupSeries, recoveryErrors, recoveryEvents} from './pullup-analysis.js';
-import {launchCue} from './captions.js';
-import {openingTrace} from './replay.js';
-import {modelHull} from './trials.js';
-import {WEATHER, windAt} from './weather.js';
+import {createAircraft} from '../src/rendering/aircraft.js';
+import {BASE_DESIGN, CG_HEIGHT, LAUNCH, launchProfile, rampAt, createFlight, previousFactors, simulateFlight, poseAt, WATER_RUNOUT_SECONDS, waterRunoutPose} from '../src/domain/flight.js';
+import {observations, officialDistance, courseAt} from '../src/domain/race2025.js';
+import {pullupLog} from '../src/domain/pullup-data.js';
+import {pullupErrors, pullupSeries, recoveryErrors, recoveryEvents} from '../analysis/pullup-analysis.js';
+import {launchCue} from '../src/application/launch-sequence.js';
+import {openingTrace} from '../src/application/opening-trace.js';
+import {modelHull} from '../src/rendering/collision-hull.js';
+import {WEATHER, windAt} from '../src/domain/weather.js';
 
 function calculate(design) {
   const hull=modelHull(createAircraft(design.span,design.incidence));
