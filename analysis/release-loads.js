@@ -82,10 +82,12 @@ for (let centiseconds = 370; centiseconds <= 410; centiseconds++) {
   }
   const paired = run(fixedBody, obs.releaseAttitude);
   const pairedStandard = run(undefined, obs.releaseAttitude);
+  const mid = errors(standard,obs,2,5), late = errors(standard,obs,5,10);
   offsets.push({ origin, imu:round(imu), model:round(model), gap:round(gap),
     pairedGap:round(rateAt(paired,obs,target).gap), initialPitch:round(obs.releaseAttitude.pitchDeg),
     initialRate:round(obs.releaseAttitude.pitchRateDeg), early:errors(standard,obs,.5,1.25).pitch,
-    mid:errors(standard,obs,2,5).pitch, late:errors(standard,obs,5,10).pitch,
+    mid:mid.pitch, late:late.pitch, midHeight:mid.height, lateHeight:late.height,
+    midSpeed:mid.speed, lateSpeed:late.speed,
     pairedMid:errors(pairedStandard,obs,2,5).pitch, pairedLate:errors(pairedStandard,obs,5,10).pitch });
 }
 

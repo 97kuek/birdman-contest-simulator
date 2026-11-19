@@ -57,6 +57,13 @@ def main():
     print("\n center start   end  n  main θ  main θ̇   air θ   air θ̇ (s, °, °/s)")
     for center in (3.7, 3.8, 3.9, 4.0, 4.1, 4.15, 4.4, 4.65, 4.9, 5.15):
         print_fit(raw, center, center - 0.2, center + 0.2)
+    print("Candidate origin, n, pitch rate main/air, roll rate main/air (deg/s)")
+    for origin in (3.80, 3.85, 3.90, 3.95, 3.98, 4.05):
+        sample = window(raw, origin - 0.20, origin + 0.20)
+        axes = (("bno_pitch", -1), ("data_air_bno_pitch", 1),
+                ("bno_roll", 1), ("data_air_bno_roll", 1))
+        rates = [line_at(sample, column, sign, origin)[1] for column, sign in axes]
+        print(f"{origin:.2f} {len(sample):2d}", *(f"{rate:+.2f}" for rate in rates))
     print("At release + 0.75 s, both IMUs across candidate log origins")
     for origin in (3.70, 3.90, 3.95, 3.98, 4.00, 4.10):
         center = origin + 0.75
