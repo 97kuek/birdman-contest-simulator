@@ -111,11 +111,16 @@ export function addCockpit(group, m) {
   rod(hardware, [-0.173, 0.10, -0.99], [0.173, 0.10, -0.99], 0.014, m.frame, 'floor-crossmember');
   rod(hardware, [-0.165, 0.14, -0.42], [0.165, 0.14, -0.42], 0.015, m.carbon, 'rest-crossmember');
   box(hardware, [0, 0.149, -0.42], [0.26, 0.043, 0.39], m.helmet, 'prone-chest-rest');
-  const panel = box(hardware, [0, 0.201, -1.042], [0.122, 0.031, 0.089], m.carbon, 'airspeed-display');
-  panel.rotation.x = -0.48;
-  const lens = box(hardware, [0, 0.219, -1.035], [0.089, 0.008, 0.058], m.display, 'instrument-face');
-  lens.rotation.x = panel.rotation.x;
-  bentTube(hardware, [[0.07, 0.176, -1.04], [0.12, 0.105, -0.92], [0.17, 0.112, -0.58],
+  rod(hardware, [0, 0.10, -1.24], [0, 0.205, -1.192], 0.008, m.frame, 'instrument-bracket');
+  const panel = box(hardware, [0, 0.209, -1.18], [0.158, 0.083, 0.018], m.carbon, 'instrument-case');
+  panel.rotation.x = -0.47;
+  const displayMount = new THREE.Object3D();
+  displayMount.name = 'cockpit-display-mount';
+  displayMount.position.copy(panel.position);
+  displayMount.rotation.copy(panel.rotation);
+  displayMount.translateZ(0.0095);
+  group.add(displayMount);
+  bentTube(hardware, [[0.052, 0.182, -1.20], [0.09, 0.13, -1.21], [0.12, 0.105, -0.92], [0.17, 0.112, -0.58],
     [0.174, 0.36, -0.49], [0.106, 0.523, -0.39]], 0.004, m.carbon, 'sensor-cable');
   addPilot(group,m);
   addRigidAssembly(group, hardware);

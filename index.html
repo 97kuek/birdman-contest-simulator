@@ -31,12 +31,6 @@
         </svg>
         <strong id="wind-value"></strong>
       </section>
-      <section class="flight-hud" id="flight-hud" aria-label="飛行計器" hidden>
-        <div class="instrument-head"><strong id="phase"></strong><span id="course-value"></span><span id="instrument-time"></span></div>
-        <dl class="flight-readings"><div><dt>水面まで</dt><dd><b id="height-value">0.0</b> m</dd></div><div><dt>対気速度</dt><dd><b id="speed-value">0.0</b> m/s</dd></div><div><dt id="climb-label">昇降</dt><dd><b id="climb-value">0.0</b> m/s</dd></div></dl>
-        <div class="pitch-gauge"><div class="horizon" aria-hidden="true"><i id="pitch-horizon"></i></div>
-          <span>機首 <b id="pitch-value"></b></span><span>傾き <b id="bank-value"></b></span><span>ラダー <b id="rudder-value"></b></span></div>
-      </section>
       <div id="align-panel" hidden><div class="direction-field" role="group" aria-label="発進方向">
         <button id="direction-left" aria-label="機首を左へ">←</button><span aria-hidden="true">発進方向</span><button id="direction-right" aria-label="機首を右へ">→</button>
         </div><button id="confirm-heading" class="primary" aria-keyshortcuts="Space"><kbd>Space</kbd> 発進</button></div>
@@ -108,7 +102,7 @@
     </aside>
   </main>
   <dialog id="source-dialog" aria-labelledby="source-title"><div class="dialog-top"><h2 id="source-title">資料・出典</h2><button id="close-sources" aria-label="閉じる"><i data-icon="close"></i></button></div>
-    <h3>機体</h3><p>鳥科の2025年機「竜海」の三面図をもとに再構成。主翼の桁とリブ、透明機首のフレーム、伏臥姿勢のパイロットと操縦グリップ、胴体の塗り分け、風向ベーンも造形しています。断面・外装・内部構造はいずれも写真と図面をもとにした近似を含みます。</p><a href="https://torica-tus.com/2025/11/14/2025/" target="_blank" rel="noreferrer">鳥科の実機資料と三面図 ↗</a>
+    <h3>機体</h3><p>鳥科の2025年機「竜海」の三面図をもとに再構成。主翼の桁とリブ、透明機首のフレーム、伏臥姿勢のパイロットと操縦グリップ、胴体の塗り分け、風向ベーンも造形しています。操縦席の液晶は対気速度、機体の最下点から水面までの高さ、姿勢、昇降速度、風を飛行計算から表示します。計器のレイアウトと追走艇の形状・航路はシミュレーター用に設定しました。断面・外装・内部構造はいずれも写真と図面をもとにした近似を含みます。</p><a href="https://torica-tus.com/2025/11/14/2025/" target="_blank" rel="noreferrer">鳥科の実機資料と三面図 ↗</a>
     <h3>松原湖岸・湖面</h3><p>国土地理院の標高データと航空写真を加工しています。プラットフォーム近くの湖岸と河口には水域の輪郭を使った地形メッシュと高解像度の航空写真を重ねています。樹木の位置・形は推定です。湖面は風向に沿う波、空と湖岸の反射、浅瀬の色と着水の波紋を描きます。波高は仮定し、飛距離は平均湖面で計測します。</p><a href="https://maps.gsi.go.jp/#16/35.294222/136.254333/" target="_blank" rel="noreferrer">松原湖岸の地理院地図 ↗</a>　<a href="./terrain/source.md" target="_blank">使用データの詳細 ↗</a>
     <h3>飛行モデル</h3><p>全試行で質量100 kg。台の正面へ標準の力で台端まで押すと、離台時の対地速度は8 m/sです。鳥科の訓練用モデルの空力係数を使い、主翼・尾翼の空気力とピッチ運動を計算します。風向は台の正面を基準とし、横風は左から吹きます。有風時の風速は1.2 m/sです。対地速度から風速を引いた対気速度で揚力・抗力を計算します。主翼が水面に近づくと誘導抗力が減り、尾翼への吹き下ろしも変わります。手動飛行では左右キーがラダーを左右10°動かし、離すと中立になります。鳥科の訓練モデルの係数で、ラダー・横滑り・機体の回転による横力とモーメントを計算します。三面図の設計舵角は左右20°です。サーボの遅れは未計測のため、舵角は指令に即応させています。比較用の基準機はGPS由来のコースと推定体重移動を使います。記録は離台点から最初の接水時の機体最後尾までの水平距離です。</p>
     <p>映像では2:03〜2:04に離台し、2:58〜2:59に着水。ログでは離台後約33秒に、実機は約290 m先を高度約2.6 mで飛んでいました。</p>

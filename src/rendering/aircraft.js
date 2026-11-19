@@ -41,7 +41,7 @@ export function createAircraft(span = BASE_DESIGN.span, incidence = BASE_DESIGN.
     white: shaded('#f2f1e7'),
     glass: shaded('#b0d5da', { transparent: true, opacity: 0.20, depthWrite: false, roughness: 0.09, side: THREE.FrontSide }),
     frame: shaded('#b4b29a', { metalness: 0.45 }),
-    mint: shaded('#159e8f'), gold: shaded('#efc142'), display: shaded('#92c3ba'),
+    mint: shaded('#159e8f'), gold: shaded('#efc142'),
     carbon: shaded('#394848'), skin: shaded('#c59370'), helmet: shaded('#335266'), suit: shaded('#306986'),
   };
   for (const [name, material] of Object.entries(materials)) material.name = name;

@@ -13,6 +13,25 @@ import {
 import { RADIANS_PER_DEGREE } from '../domain/units.js';
 import { windAt } from '../domain/weather.js';
 
+function rampSample(launch, weather, elapsed) {
+  const ramp = rampAt(launch, elapsed);
+  const remaining = RAMP_LENGTH - ramp.travel;
+  const wind = windAt(weather, 0, 0);
+  const bottomHeight = launch.edgeHeight + LAUNCH.deckClearance + remaining * launch.dropStep;
+  return {
+    bottomHeight,
+    height: bottomHeight + CG_HEIGHT,
+    right: launch.edgeRight - remaining * launch.rightStep,
+    forward: launch.edgeForward - remaining * launch.forwardStep,
+    heading: launch.heading,
+    pitch: LAUNCH.pitchDeg * RADIANS_PER_DEGREE,
+    speed: Math.hypot(
+      ramp.speed * Math.cos(launch.heading) + wind.headwind,
+      ramp.speed * Math.sin(launch.heading) + (wind.crosswind ?? 0),
+    ),
+  };
+}
+
 // One browser session. A trial keeps the launch conditions it started with.
 export class FlightSession {
   #history = new Map();
@@ -48,6 +67,10 @@ export class FlightSession {
     return (this.#baseline ??= simulateFlight(BASE_DESIGN, this.hull, this.options));
   }
 
+  get onDeck() {
+    return rampSample(this.launch, this.weather, 0);
+  }
+
   startAttempt() {
     const launch = this.launch;
     const weather = this.weather;
@@ -64,22 +87,9 @@ export class FlightSession {
       advance(elapsed, weightShift, rudder) {
         const airTime = elapsed - launch.duration;
         if (airTime < 0) {
-          const ramp = rampAt(launch, elapsed);
-          const remaining = RAMP_LENGTH - ramp.travel;
-          const wind = windAt(weather, 0, 0);
           return {
             phase: elapsed < launch.handoffTime ? 'push' : 'handoff',
-            sample: {
-              height: launch.edgeHeight + LAUNCH.deckClearance + CG_HEIGHT + remaining * launch.dropStep,
-              right: launch.edgeRight - remaining * launch.rightStep,
-              forward: launch.edgeForward - remaining * launch.forwardStep,
-              heading: launch.heading,
-              pitch: LAUNCH.pitchDeg * RADIANS_PER_DEGREE,
-              speed: Math.hypot(
-                ramp.speed * Math.cos(launch.heading) + wind.headwind,
-                ramp.speed * Math.sin(launch.heading) + (wind.crosswind ?? 0),
-              ),
-            },
+            sample: rampSample(launch, weather, elapsed),
           };
         }
         flight.advanceTo(airTime, weightShift, rudder);

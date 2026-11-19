@@ -43,3 +43,12 @@ export function windAt(mode, pathLength, elapsed, riseLength = WIND_RISE_METRES.
     updraft: blend * (wave(LIFT, pathLength, elapsed) + wave(SINK, pathLength, elapsed)),
   };
 }
+
+// Angles on the wind dial are clockwise from the aircraft nose, pointing downwind.
+export function windReading(mode, heading, pathLength, elapsed) {
+  const { headwind, crosswind = 0 } = windAt(mode, pathLength, elapsed);
+  return {
+    speed: Math.hypot(headwind, crosswind),
+    angle: Math.PI - heading - Math.atan2(-crosswind, headwind),
+  };
+}

@@ -548,43 +548,6 @@ dialog a {
 
 /* Instruments, controls and captions */
 
-#flight-hud {
-  position: absolute;
-  z-index: 1;
-  bottom: 82px;
-  left: 20px;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  max-width: calc(100% - 34px);
-  display: block;
-  background: var(--lake-panel);
-  border: 1px solid #94c8ee79;
-  border-radius: 5px;
-  padding: 9px 13px;
-  color: #f2f6ed;
-  pointer-events: none;
-  border-left: 3px solid var(--rally-sky);
-}
-
-.flight-hud strong {
-  color: #c4efe5;
-}
-
-[data-stage=replay] #flight-hud {
-  top: 118px;
-  bottom: auto;
-}
-
-.instrument-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid #92afa759;
-  gap: 15px;
-  padding-bottom: 4px;
-  letter-spacing: .06em;
-}
-
 .direction-field {
   display: flex;
   align-items: center;
@@ -604,71 +567,6 @@ dialog a {
 
 .direction-field button:hover {
   background: #e5efec;
-}
-
-.pitch-gauge {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  line-height: 1.4;
-  border-top: 1px solid #92afa744;
-  padding-top: 5px;
-}
-
-.pitch-gauge span {
-  font-size: 11px;
-  color: #d3e5de;
-}
-
-.pitch-gauge b {
-  color: white;
-}
-
-.flight-readings {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-  margin: 7px 0;
-}
-
-.flight-readings dt {
-  font-size: 11px;
-  color: #d3e5de;
-}
-
-.flight-readings dd {
-  margin: 1px 0;
-  font-size: 10px;
-}
-
-.flight-readings b {
-  font: 600 22px/1.2 ui-monospace, monospace;
-}
-
-.horizon {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 1px solid #9eb6af;
-  position: relative;
-  overflow: hidden;
-}
-
-.horizon i {
-  position: absolute;
-  inset: -100%;
-  background: linear-gradient(#5490ac 49%, #fff 50%, #926f47 51%);
-  transform-origin: center;
-}
-
-.horizon::after {
-  content: '';
-  position: absolute;
-  left: 13%;
-  right: 13%;
-  top: 50%;
-  height: 2px;
-  background: #f7d768;
 }
 
 #landing-call {
@@ -767,7 +665,7 @@ dialog a {
   position: absolute;
   z-index: 2;
   left: 50%;
-  bottom: 30%;
+  bottom: 45%;
   transform: translateX(-50%);
   width: max-content;
   max-width: calc(100% - 24px);
@@ -783,6 +681,11 @@ dialog a {
   pointer-events: none;
 }
 
+[data-camera=pilot] #commentary {
+  top: max(112px, 24%);
+  bottom: auto;
+}
+
 #commentary b {
   font-size: 11px;
   white-space: nowrap;
@@ -791,6 +694,11 @@ dialog a {
 }
 
 [data-stage=landing] #commentary {
+  display: none;
+}
+
+[data-camera=pilot] .compass,
+[data-camera=pilot] #wind-meter {
   display: none;
 }
 
@@ -1291,15 +1199,6 @@ dialog a {
     font-size: 10px;
   }
 
-  #flight-hud {
-    left: 8px;
-    padding: 6px 9px;
-  }
-
-  [data-stage=replay] #flight-hud {
-    top: 100px;
-  }
-
   #wind-meter {
     top: 112px;
     right: 8px;
@@ -1447,11 +1346,6 @@ dialog a {
     pointer-events: none;
   }
 
-  [data-stage=flight] #flight-hud {
-    top: 174px;
-    bottom: auto;
-  }
-
   .touch-axis {
     pointer-events: auto;
     user-select: none;
@@ -1510,18 +1404,12 @@ dialog a {
     bottom: max(14px, env(safe-area-inset-bottom));
   }
 
-  [data-stage=flight] #flight-hud {
-    top: 110px;
-    left: max(86px, calc(env(safe-area-inset-left) + 74px));
-    bottom: auto;
-    padding: 5px 8px;
-  }
-
   [data-stage=flight] #commentary {
     left: auto;
     right: 12px;
     top: auto;
-    bottom: 102px;
+    bottom: auto;
+    top: 36%;
     transform: none;
     max-width: calc(100% - 380px);
   }

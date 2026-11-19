@@ -4,11 +4,10 @@ import { byId as $ } from './dom.js';
 import { setupCaptions } from './captions.js';
 import { setupReplay } from './replay.js';
 import { bindPilotControls } from './pilot-controls.js';
-import { createInstruments } from './instruments.js';
+import { updateWindMeter } from './wind-meter.js';
 
 const colors = ['#b7441c', '#65489b', '#217547', '#bd3468', '#0567a5'];
 const trialColor = (number) => colors[(number - 1) % colors.length];
-const phaseLabels = { push: '助走・押走', handoff: '助走・手放し', release: '離台', glide: '滑空中' };
 const GO_CAPTION_SECONDS = 0.65;
 const LANDING_CAMERA_DELAY_SECONDS = 2;
 const RECORD_REVEAL_DELAY_MS = 2600;
@@ -27,7 +26,7 @@ export function setupTrials({
   const weatherControls = [...document.querySelectorAll('input[name="weather"]')];
   const selectedWeather = () => weatherControls.find((control) => control.checked).value;
   const { pose } = aircraftPose;
-  const { renderWind, instruments } = createInstruments(() => session.weather);
+  const renderWind = (s) => updateWindMeter(session.weather, s);
   const records = new Map();
   const baseKey = 'reference';
   function showTrails(visible) {
@@ -48,7 +47,6 @@ export function setupTrials({
     $('flight-settings').hidden = name !== 'setup';
     $('comparison').hidden = name !== 'result';
     $('replay-panel').hidden = name !== 'replay';
-    $('flight-hud').hidden = !['flight', 'replay', 'landing'].includes(name);
     $('landing-call').hidden = name !== 'landing';
     $('align-panel').hidden = name !== 'align';
     $('launch-call').hidden = name !== 'countdown';
@@ -96,8 +94,8 @@ export function setupTrials({
       const { record } = review;
       if (afterContact > 0) s = session.waterPose(record.run, afterContact);
       pose(s);
-      const touched = record.trail.replayTo(record.run, s.t);
-      instruments(s, touched ? '着水・リプレイ' : 'リプレイ');
+      record.trail.replayTo(record.run, s.t);
+      renderWind(s);
     },
     onClose() {
       const prior = review;
@@ -132,7 +130,7 @@ export function setupTrials({
     atWater = false;
     showTrails(false);
     resultRecord = null;
-    aircraftPose.placeOnDeck(session.launch);
+    aircraftPose.placeOnDeck(session.launch, session.onDeck);
     setView('aircraft');
     stage('setup');
     document.querySelector('.setup-title').focus({ preventScroll: true });
@@ -164,11 +162,11 @@ export function setupTrials({
   function aim() {
     showTrails(false);
     atWater = false;
-    aircraftPose.placeOnDeck(session.launch);
+    aircraftPose.placeOnDeck(session.launch, session.onDeck);
     stage('align');
     captions.show('東京理科大学・鳥科の竜海です。');
     setView('pilot');
-    renderWind(session.launch.heading, 0, 0);
+    renderWind(session.onDeck);
     $('viewer').focus({ preventScroll: true });
   }
   function confirmHeading() {
@@ -214,7 +212,6 @@ export function setupTrials({
     active = null;
     atWater = true;
     clearInput();
-    instruments(last, '着水');
     stage('landing');
     captions.clear();
     landing = { record, start: performance.now(), boatAt: null };
@@ -242,12 +239,10 @@ export function setupTrials({
       const seconds = (now - landing.start) / 1000;
       const floating = session.waterPose(record.run, seconds);
       pose(floating);
-      instruments(floating, '着水');
       if (seconds >= LANDING_CAMERA_DELAY_SECONDS && landing.boatAt === null) {
         startLandingCamera();
         landing.boatAt = now;
         $('landing-call').hidden = true;
-        $('flight-hud').hidden = true;
       }
       if (landing.boatAt === null || now - landing.boatAt < RECORD_REVEAL_DELAY_MS) return;
       landing = null;
@@ -280,15 +275,15 @@ export function setupTrials({
       }
     }
     pose(s);
-    instruments(s, phaseLabels[frame.phase]);
+    renderWind(s);
   }
-  aircraftPose.placeOnDeck(session.launch);
+  aircraftPose.placeOnDeck(session.launch, session.onDeck);
   function changeConditions(direction = session.launch.direction) {
     for (const record of records.values()) record.trail.dispose();
     records.clear();
     session.select(selectedWeather(), direction);
-    renderWind(session.launch.heading, 0, 0);
-    aircraftPose.placeOnDeck(session.launch);
+    renderWind(session.onDeck);
+    aircraftPose.placeOnDeck(session.launch, session.onDeck);
     $('previous-result').hidden = !session.latest;
   }
   for (const control of weatherControls) {

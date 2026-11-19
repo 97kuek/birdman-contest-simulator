@@ -7,6 +7,7 @@ import { setupTrials } from './presentation/flight-screen.js';
 import { bindViewerControls, setupViewerShell, showCameraMode, trackViewportFraction } from './presentation/viewer-shell.js';
 import { createAircraft } from './rendering/aircraft.js';
 import { createAircraftPose } from './rendering/aircraft-pose.js';
+import { createCockpitDisplay } from './rendering/aircraft/display.js';
 import { createChaseBoat } from './rendering/chase-boat.js';
 import { modelHull } from './rendering/collision-hull.js';
 import { createLaunchCrew } from './rendering/crew.js';
@@ -125,8 +126,13 @@ async function start() {
   enableReflection(landscape);
   lake.setShallows(landscape.userData.shallows);
   const { view, setView, startLandingCamera, moveCamera } = cameraRig;
-  const aircraftPose = createAircraftPose({ modelBase, aircraft, crew, view, moveCamera });
   const session = new FlightSession(modelHull(aircraft), selectedWeather());
+  const display = createCockpitDisplay(aircraft, {
+    weather: () => session.weather,
+    platformBearing: -facility.rotation.y,
+    describe: text => renderer.domElement.setAttribute('aria-description', text),
+  });
+  const aircraftPose = createAircraftPose({ modelBase, aircraft, crew, view, moveCamera, display });
   trials = setupTrials({
     session, aircraftPose, setView, view, startLandingCamera,
     crewTime: time => crew.update(session.launch, time),

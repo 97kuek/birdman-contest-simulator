@@ -47,6 +47,7 @@ export function trackViewportFraction(host) {
 }
 
 export function showCameraMode(mode, attached) {
+  document.body.dataset.camera = mode;
   for (const button of document.querySelectorAll('[data-view]')) {
     const pressed = button.dataset.view === mode || (button.dataset.view === 'aircraft' && !attached);
     button.setAttribute('aria-pressed', String(pressed));

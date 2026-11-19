@@ -1,14 +1,15 @@
 import * as THREE from 'three';
-import { CG_HEIGHT, LAUNCH, RAMP_LENGTH } from '../domain/flight.js';
+import { CG_HEIGHT } from '../domain/flight.js';
 
 import { RADIANS_PER_DEGREE as radians } from '../domain/units.js';
 const pilotTravelMetres = 0.47;
 
-export function createAircraftPose({ modelBase, aircraft, crew, view, moveCamera }) {
+export function createAircraftPose({ modelBase, aircraft, crew, view, moveCamera, display }) {
   const rudder = aircraft.getObjectByName('rudder-hinge');
   const { setBodyOffset } = aircraft.getObjectByName('pilot').userData;
   const pilotBody = aircraft.getObjectByName('pilot-weight-shift');
   function pose(s) {
+    display.update(s);
     const old = modelBase.getWorldPosition(new THREE.Vector3());
     const { right, forward, heading } = s;
     setBodyOffset(pilotTravelMetres * (s.shift ?? 0));
@@ -18,21 +19,15 @@ export function createAircraftPose({ modelBase, aircraft, crew, view, moveCamera
     modelBase.position.set(right, s.height, -forward).add(offset);
     if (view() === 'aircraft') moveCamera(modelBase.getWorldPosition(new THREE.Vector3()).sub(old));
   }
-  function placeOnDeck(launch) {
+  function placeOnDeck(launch, sample) {
     crew.update(launch, 0);
-    setBodyOffset(0);
-    rudder.rotation.y = 0;
-    modelBase.position.set(
-      launch.edgeRight - RAMP_LENGTH * launch.rightStep,
-      launch.edgeHeight + LAUNCH.deckClearance + RAMP_LENGTH * launch.dropStep,
-      -launch.edgeForward + RAMP_LENGTH * launch.forwardStep,
-    );
-    modelBase.rotation.set(0, -launch.heading, 0);
+    pose(sample);
   }
   function capture() {
     return {
       position: modelBase.position.clone(),
       rotation: modelBase.rotation.clone(),
+      sample: display.sample,
       rudder: rudder.rotation.y,
       pilotZ: pilotBody.position.z,
     };
@@ -42,6 +37,7 @@ export function createAircraftPose({ modelBase, aircraft, crew, view, moveCamera
     modelBase.rotation.copy(snapshot.rotation);
     rudder.rotation.y = snapshot.rudder;
     setBodyOffset(snapshot.pilotZ);
+    display.update(snapshot.sample);
   }
   return { pose, placeOnDeck, capture, restore };
 }
