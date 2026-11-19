@@ -1,3 +1,4 @@
+import { CG_HEIGHT } from '../domain/flight.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
@@ -64,10 +65,14 @@ export function createFlightCamera({
 
   function followBoat() {
     boat.eye.getWorldPosition(camera.position);
-    controls.target.copy(modelBase.localToWorld(focus.set(0, 0.45, 0)));
+    controls.target.copy(modelBase.localToWorld(focus.set(0, CG_HEIGHT, 0)));
     // Leave the glider above centre, with some of the gunwale and water in the foreground.
     const range = Math.hypot(camera.position.x - controls.target.x, camera.position.z - controls.target.z);
-    controls.target.y -= range * 0.065;
+    // Hold the horizon through small height changes while keeping a climbing glider in shot.
+    const aboveEye = controls.target.y - camera.position.y;
+    const deadband = Math.min(1.8, range * .075);
+    controls.target.y = camera.position.y - range * .065 +
+      Math.sign(aboveEye) * Math.max(0, Math.abs(aboveEye) - deadband);
     // Widen the shot while alongside; a longer lens keeps a distant launch legible.
     const landscape = THREE.MathUtils.smoothstep(camera.aspect, 0.55, 1.3);
     const closeLens = THREE.MathUtils.lerp(73, 59, landscape);

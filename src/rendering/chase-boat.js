@@ -1,3 +1,4 @@
+import { bodyLoft, createCrewHead } from './crew-model.js';
 import { createChaseCourse } from './chase-course.js';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -60,10 +61,12 @@ function deckFittings() {
   function add(geometry, color) {
     const shape = geometry.index ? geometry.toNonIndexed() : geometry;
     shape.deleteAttribute('uv');
-    const colors = new Float32Array(shape.attributes.position.count * 3);
-    tint.set(color);
-    for (let i = 0; i < colors.length; i += 3) tint.toArray(colors, i);
-    shape.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    if (color !== undefined) {
+      const colors = new Float32Array(shape.attributes.position.count * 3);
+      tint.set(color);
+      for (let i = 0; i < colors.length; i += 3) tint.toArray(colors, i);
+      shape.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    }
     parts.push(shape);
   }
   function box(center, size, color) {
@@ -110,22 +113,69 @@ function deckFittings() {
   add(wheel, rubber);
   for (const x of [.17, .67]) rod([x, .97, -.35], [x, 1.23, -.40], .014, steel);
 
-  // Helmsman in a bright buoyancy vest, seated forward of the observer.
-  box([.40, .40, .57], [.45, .40, .45], liner);
-  box([.40, .62, .57], [.46, .09, .46], navy);
-  oval([.40, .87, .50], [.22, .31, .17], '#e77638');
-  box([.40, .89, .346], [.34, .045, .035], '#404b4b');
-  oval([.40, 1.26, .47], [.112, .14, .105], '#bd9074');
-  oval([.40, 1.36, .475], [.125, .085, .115], '#dfdfcf');
-  box([.40, 1.346, .375], [.23, .018, .13], navy);
-  for (const s of [-1, 1]) {
-    const x = .40 + .17 * s;
-    rod([x, 1.00, .49], [x + .028 * s, .84, .33], .063, '#78969c');
-    rod([x + .028 * s, .84, .33], [x, .84, .095], .045, '#bb8b6f');
-    oval([x, .84, .10], [.052, .046, .061], '#bb8b6f');
-    rod([.40 + .10 * s, .62, .48], [.40 + .12 * s, .54, .20], .075, navy);
-    rod([.40 + .12 * s, .54, .20], [.40 + .12 * s, .22, .18], .057, navy);
+  // Helm, throttle quadrant and padded seat are dimensioned around the seated driver.
+  // Recessed binnacle faces the driver. Bright needles and bezels remain legible at deck distance.
+  box([.42,.914,.012],[.47,.09,.028],rubber);
+  for (const x of [.32,.45]) {
+    oval([x,.925,.032],[.046,.039,.009],steel);
+    oval([x,.925,.042],[.038,.032,.005],'#243441');
+    rod([x,.925,.047],[x+.016,.942,.048],.0025,'#f4ac55');
   }
+  for (const x of [.54,.573]) oval([x,.914,.031],[.008,.008,.006],'#e9b766');
+  const hub = [.41, .82, .055];
+  oval(hub, [.035, .032, .034], steel);
+  for (const angle of [.55, 2.60, 4.72]) {
+    const rise = .113 * Math.sin(angle);
+    rod(hub, [hub[0] + .113 * Math.cos(angle), hub[1] + rise * Math.cos(.42),
+      hub[2] - rise * Math.sin(.42)], .008, steel);
+  }
+  box([.64, .77, .13], [.08, .09, .13], navy);
+  rod([.64, .79, .14], [.64, .87, .10], .012, steel);
+  oval([.64, .87, .10], [.024, .022, .032], rubber);
+  box([.4, .40, .60], [.31, .42, .32], liner);
+  oval([.4, .62, .60], [.25, .055, .22], '#35495b');
+  oval([.4, .77, .77], [.235, .17, .045], '#35495b');
+
+  const skin = '#b78264', jacket = '#f07832', webbing = '#26323b', tape = '#dedfc8';
+  const body = (rows, x, z, color) => add(bodyLoft(rows).translate(x, 0, z), color);
+  body([[.63,.15,.12],[.75,.16,.125],[.92,.19,.13],[1.10,.207,.12],[1.16,.09,.082]], .40,.55,'#40576a');
+  body([[.76,.165,.14],[.83,.18,.15],[1.03,.21,.146],[1.11,.204,.122],[1.127,.12,.09]], .40,.55,jacket);
+  for (const y of [.80,.91]) {
+    body([[y,.193,.155],[y+.026,.193,.155]], .40,.55,webbing);
+    box([.40,y+.013,.392], [.047,.033,.012], '#859095');
+  }
+  for (const sign of [-1,1]) {
+    oval([.40+sign*.113,1.09,.54],[.067,.086,.139],jacket);
+    box([.40+sign*.118,1.048,.428],[.061,.035,.018],tape);
+    box([.40+sign*.118,1.044,.671],[.064,.035,.015],tape);
+    oval([.4+sign*.11,.63,.50],[.105,.09,.17],navy);
+    const knee = [.4+sign*.125,.53,.22], ankle = [.4+sign*.14,.245,.25];
+    rod([.4+sign*.11,.64,.50], knee,.077,navy);
+    oval(knee,[.076,.075,.073],navy);
+    rod(knee,ankle,.057,navy);
+    oval([ankle[0],.225,.185],[.065,.044,.122],rubber);
+    oval([ankle[0],.2,.18],[.067,.019,.123],'#b7c2be');
+    const shoulder = [.4+sign*.19,1.07,.51], elbow = [.4+sign*.218,.88,.37];
+    const wrist = sign < 0 ? [.317,.875,.077] : [.642,.889,.135];
+    rod(shoulder,elbow,.060,'#40576a');
+    oval(shoulder,[.07,.072,.073],'#40576a');
+    oval(elbow,[.055,.052,.054],skin);
+    rod(elbow,wrist,.038,skin);
+    oval(wrist,[.039,.025,.045],skin);
+    for (let finger=0; finger<4; finger++) {
+      oval([wrist[0]+(finger-1.5)*.012,wrist[1]-.010,wrist[2]-.029],[.007,.016,.023],skin);
+    }
+    oval([wrist[0]-sign*.028,wrist[1]-.009,wrist[2]-.010],[.012,.018,.022],skin);
+  }
+  oval([.40,1.17,.53],[.061,.085,.063],skin);
+  const head = createCrewHead(skin, '#332b26');
+  add(head.geometry.rotateY(-.12).translate(.40,1.294,.518));
+  oval([.40,1.394,.529],[.111,.069,.124],'#e1dfcf');
+  oval([.40,1.371,.423],[.101,.013,.086],navy);
+  // Stitch line, lifejacket zip and radio on the shoulder.
+  rod([.4,.79,.392],[.4,1.07,.409],.006,webbing);
+  box([.54,.99,.425],[.045,.071,.024],webbing);
+  rod([.556,1.021,.426],[.56,1.084,.428],.004,rubber);
 
   // Single outboard, bracket, skeg and propeller below the waterline.
   box([0, .38, 2.49], [.41, .24, .18], rubber);
@@ -142,12 +192,14 @@ function deckFittings() {
 export function createChaseBoat() {
   const group = new THREE.Group();
   group.name = '追走艇';
+  const hull = new THREE.Group();
+  group.add(hull);
   const finish = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: .65 });
   for (const [name, geometry] of [['船体', hullGeometry()], ['甲板・乗員・船外機', deckFittings()]]) {
     const mesh = new THREE.Mesh(geometry, finish);
     mesh.name = name;
     mesh.castShadow = mesh.receiveShadow = true;
-    group.add(mesh);
+    hull.add(mesh);
   }
   const windscreen = new THREE.Mesh(
     new THREE.PlaneGeometry(.50, .265),
@@ -156,7 +208,7 @@ export function createChaseBoat() {
   windscreen.name = '操舵席の風防';
   windscreen.rotation.x = -Math.atan2(.05, .26);
   windscreen.position.set(.42, 1.10, -.375);
-  group.add(windscreen);
+  hull.add(windscreen);
   const eye = new THREE.Object3D();
   eye.name = '前部観測席';
   eye.position.set(-.65, 1.53, -.85);
@@ -165,10 +217,12 @@ export function createChaseBoat() {
   const positionAt = createChaseCourse();
   function update(samples, time, waveTime, firstLand, stopTime) {
     const state = positionAt(samples, time, firstLand, stopTime);
-    group.position.set(state.right, .022 * Math.sin(waveTime * 1.7), -state.forward);
+    group.position.set(state.right, 0, -state.forward);
+    group.rotation.y = -state.heading;
+    // The observation camera rides the mean water level. Only the hull rides the swell.
+    hull.position.y = .009 * Math.sin(waveTime * .72);
     const heel = Math.atan(state.turn * state.speed / 9.81) * .48;
-    group.rotation.set(.007 * Math.sin(waveTime * 1.25), -state.heading,
-      -heel + .010 * Math.sin(waveTime * 1.52), 'YXZ');
+    hull.rotation.set(.003 * Math.sin(waveTime * .58), 0, -heel + .004 * Math.sin(waveTime * .66));
     return state.speed;
   }
   return { group, eye, update };

@@ -6,7 +6,7 @@ const finish=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.88});
 const sphere=new THREE.SphereGeometry(1,16,12);
 
 // Elliptical cross sections define the jaw, shoulders, waist and tapered limbs.
-function loft(rows) {
+export function bodyLoft(rows) {
   const vertices=[], indices=[], n=20;
   for(const [y,width,depth,z=0] of rows){
     for(let j=0;j<n;j++){
@@ -42,22 +42,9 @@ const profiles=[
   {name:'胴体',side:0,scale:1.035,skin:'#c9987c',hair:'#2e2927',shoe:'#374250',phase:2.25},
   {name:'右翼',side:1,scale:1.01,skin:'#d3a187',hair:'#232322',shoe:'#ece9e0',phase:4.55},
 ];
-function person(profile){
-  const {skin,hair,shoe,side}=profile;
-  const root=new THREE.Group();root.name='プッシャー・'+profile.name;
-  const torso=assembly((part,oval)=>{
-    part(loft([[-.09,.145,.108],[0,.168,.117],[.13,.143,.104],[.30,.173,.119],[.43,.205,.117],[.49,.178,.095],[.52,.085,.073]]),cloth);
-    oval('#42949f',0,-.065,.004,.153,.022,.112);
-    oval(trim,0,.501,-.012,.083,.018,.076);
-    oval(skin,0,.542,-.009,.062,.083,.057);
-    // A back print with a pale disc and a split wing motif, as seen from the gantry.
-    oval(trim,0,.305,.114,.097,.098,.008);
-    for(const s of [-1,1])oval('#267d8c',s*.037,.317,.123,.048,.012,.004,s*.34);
-    oval('#237886',0,.282,.124,.009,.038,.005,-.24);
-    oval(trim,-.085,.385,-.108,.029,.024,.007);
-  });
-  const head=assembly((part,oval)=>{
-    part(loft([[-.11,.037,.041,-.028],[-.084,.068,.067,-.018],[-.036,.086,.09],[.033,.093,.10],[.093,.080,.079],[.12,.038,.043]]),skin);
+export function createCrewHead(skin, hair, ponytail = false) {
+  return assembly((part,oval)=>{
+    part(bodyLoft([[-.11,.037,.041,-.028],[-.084,.068,.067,-.018],[-.036,.086,.09],[.033,.093,.10],[.093,.080,.079],[.12,.038,.043]]),skin);
     oval(hair,0,.070,.013,.098,.089,.108);
     oval(hair,-.037,.049,-.072,.061,.026,.039,-.34);
     for(const s of [-1,1]){
@@ -68,22 +55,39 @@ function person(profile){
     }
     oval(skin,0,-.020,-.093,.017,.024,.023);
     oval('#925e53',0,-.062,-.084,.021,.004,.004);
-    if(side===1)oval(hair,0,.041,.108,.052,.048,.045);
+    if(ponytail)oval(hair,0,.041,.108,.052,.048,.045);
   });
+}
+
+function person(profile){
+  const {skin,hair,shoe,side}=profile;
+  const root=new THREE.Group();root.name='プッシャー・'+profile.name;
+  const torso=assembly((part,oval)=>{
+    part(bodyLoft([[-.09,.145,.108],[0,.168,.117],[.13,.143,.104],[.30,.173,.119],[.43,.205,.117],[.49,.178,.095],[.52,.085,.073]]),cloth);
+    oval('#42949f',0,-.065,.004,.153,.022,.112);
+    oval(trim,0,.501,-.012,.083,.018,.076);
+    oval(skin,0,.542,-.009,.062,.083,.057);
+    // A back print with a pale disc and a split wing motif, as seen from the gantry.
+    oval(trim,0,.305,.114,.097,.098,.008);
+    for(const s of [-1,1])oval('#267d8c',s*.037,.317,.123,.048,.012,.004,s*.34);
+    oval('#237886',0,.282,.124,.009,.038,.005,-.24);
+    oval(trim,-.085,.385,-.108,.029,.024,.007);
+  });
+  const head=createCrewHead(skin, hair, side===1);
   head.position.set(0,.665,-.02);torso.add(head);root.add(torso);
   function limb(arm,sign){
     const length=arm?.29:.415, lowerLength=arm?.26:.415;
     const upper=assembly((part,oval)=>{
       const r=arm?.057:.086;
-      part(loft([[-length,.67*r,.7*r],[-length*.75,.83*r,.87*r],[-length*.32,r,r],[0,.85*r,.91*r]]),arm?skin:navy);
+      part(bodyLoft([[-length,.67*r,.7*r],[-length*.75,.83*r,.87*r],[-length*.32,r,r],[0,.85*r,.91*r]]),arm?skin:navy);
       oval(arm?cloth:navy,0,0,0,r,r,r);
       const cuff=arm?.15:.27, width=arm?.077:.105;
-      part(loft([[-cuff,width,width*.95],[-cuff+.018,width*1.03,width],[-.035,width*1.06,width],[0,width*.85,width*.9]]),arm?cloth:'#303c48');
+      part(bodyLoft([[-cuff,width,width*.95],[-cuff+.018,width*1.03,width],[-.035,width*1.06,width],[0,width*.85,width*.9]]),arm?cloth:'#303c48');
       oval(arm?'#4598a4':'#25313b',0,-cuff+.005,0,width*1.02,.010,width*.98);
     });
     const lower=assembly((part,oval)=>{
       const r=arm?.045:.059;
-      part(loft([[-lowerLength,r*.62,r*.72],[-lowerLength*.65,r*.72,r*.85],[-lowerLength*.28,r*1.13,r*1.10],[0,r,r]]),arm?skin:navy);
+      part(bodyLoft([[-lowerLength,r*.62,r*.72],[-lowerLength*.65,r*.72,r*.85],[-lowerLength*.28,r*1.13,r*1.10],[0,r,r]]),arm?skin:navy);
       oval(arm?skin:navy,0,0,0,r,r,r);
       if(!arm)oval('#465059',0,-lowerLength+.035,0,.044,.041,.045);
     });

@@ -53,7 +53,8 @@ function follow(state, plane, dt, side, firstLand) {
   const desired = Math.min(MAX_SPEED, Math.hypot(vx, vy)) * clamp(Math.cos(error), .18, 1);
   const speed = state.speed + clamp(desired - state.speed, -BRAKING * dt, ACCELERATION * dt);
   const maxTurn = Math.min(TURN_LIMIT, LATERAL_ACCELERATION / Math.max(1, speed)) * clamp(speed, .45, 1);
-  const turn = clamp(error / dt, -maxTurn, maxTurn);
+  const orderedTurn = clamp(error / .7, -maxTurn, maxTurn);
+  const turn = state.turn + (orderedTurn - state.turn) * -Math.expm1(-dt / .7);
   return move(state, state.heading + turn * dt, speed, (state.speed + speed) * dt / 2, turn, firstLand);
 }
 
