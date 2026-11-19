@@ -9,29 +9,31 @@ import { updateWindMeter } from './wind-meter.js';
 const colors = ['#b7441c', '#65489b', '#217547', '#bd3468', '#0567a5'];
 const trialColor = (number) => colors[(number - 1) % colors.length];
 const GO_CAPTION_SECONDS = 0.65;
-const LANDING_CAMERA_DELAY_SECONDS = 2;
-const RECORD_REVEAL_DELAY_MS = 2600;
+const LANDING_CAMERA_DELAY_SECONDS = 3.0;
+const RECORD_REVEAL_DELAY_MS = 5000;
 
-// Retain the latest completed flight per wind and heading. Only the active pair needs GPU geometry.
+// FlightSession holds the history; only the current trial needs a visible trail.
+export function selectedWeather() {
+  const choice = name => document.querySelector('input[name="' + name + '"]:checked').value;
+  return choice('period') + '-' + choice('difficulty');
+}
+
 export function setupTrials({
   session,
   aircraftPose,
   crewTime,
+  crewAnswer,
   makeTrail,
   setView,
   view,
   startLandingCamera,
   onWaterContact,
+  playSplash,
 }) {
-  const weatherControls = [...document.querySelectorAll('input[name="weather"]')];
-  const selectedWeather = () => weatherControls.find((control) => control.checked).value;
+  const weatherControls = document.querySelectorAll('input[name="period"],input[name="difficulty"]');
   const { pose } = aircraftPose;
-  const renderWind = (s) => updateWindMeter(session.weather, s);
-  const records = new Map();
-  const baseKey = 'reference';
-  function showTrails(visible) {
-    for (const record of records.values()) record.trail.setVisible(visible);
-  }
+  const renderWind = (s) => updateWindMeter(visibleWeather(), s);
+  let latestRecord = null;
   let screen = 'setup';
   let active = null,
     atWater = false,
@@ -47,7 +49,6 @@ export function setupTrials({
     $('flight-settings').hidden = name !== 'setup';
     $('comparison').hidden = name !== 'result';
     $('replay-panel').hidden = name !== 'replay';
-    $('landing-call').hidden = name !== 'landing';
     $('align-panel').hidden = name !== 'align';
     $('launch-call').hidden = name !== 'countdown';
     $('wind-meter').hidden = !['align', 'countdown', 'flight', 'replay'].includes(name);
@@ -55,16 +56,19 @@ export function setupTrials({
     $('flight-action').textContent = name === 'flight' ? '飛行を中断' : '準備に戻る';
     $('previous-result').hidden = !session.latest;
   }
-  const { pilotInput, clearInput, releaseInput, stopHeading } = bindPilotControls({
+  const { pilotInput, clearInput, releaseInput, advanceHeading, stopHeading } = bindPilotControls({
     isFlying: () => Boolean(active),
     isAiming: () => screen === 'align',
     view,
-    changeDirection,
+    readHeading: () => session.launch.direction,
+    setHeading,
     confirmHeading,
     advanceToInputTime: () => tick(performance.now()),
   });
-  function changeDirection(step) {
-    changeConditions(session.launch.direction + step);
+  function setHeading(value) {
+    const angle = Math.max(-MAX_LAUNCH_HEADING_DEGREES, Math.min(MAX_LAUNCH_HEADING_DEGREES, value));
+    if (angle === session.launch.direction) return;
+    changeConditions(angle);
     $('direction-left').disabled = session.launch.direction === -MAX_LAUNCH_HEADING_DEGREES;
     $('direction-right').disabled = session.launch.direction === MAX_LAUNCH_HEADING_DEGREES;
   }
@@ -83,13 +87,8 @@ export function setupTrials({
     resetCaptionClock();
     if (active) active.previousTime = performance.now();
   });
-  function cacheReference() {
-    const color = '#174d5b';
-    const run = session.reference;
-    const record = { run, color, reference: true, label: '基準機', trail: makeTrail(run, color, true) };
-    records.set(baseKey, record);
-  }
   const replay = setupReplay({
+    playSplash,
     showPose(s, afterContact) {
       const { record } = review;
       if (afterContact > 0) s = session.waterPose(record.run, afterContact);
@@ -100,7 +99,6 @@ export function setupTrials({
     onClose() {
       const prior = review;
       prior.record.trail.showContact(prior.record.run);
-      showTrails(true);
       aircraftPose.restore(prior.pose);
       review = null;
       stage('result');
@@ -112,23 +110,28 @@ export function setupTrials({
     if (!record || active || review) return;
     captions.clear();
     review = { record, button, pose: aircraftPose.capture(), view: view() };
-    for (const r of records.values()) r.trail.setVisible(r === record || r.reference);
+    record.trail.setVisible(true);
     setView('pilot');
     stage('replay');
-    replay.open(record, records.get(baseKey).run);
+    replay.open(record, session.referenceFor(record.run));
   }
   $('result-replay').onclick = () => openReplay(resultRecord, $('result-replay'));
 
   function showResult(record) {
     resultRecord = record;
     $('result-distance').textContent = record.run.distance.toFixed(2);
+    const share = new URL('https://twitter.com/intent/tweet');
+    share.searchParams.set('text', '竜海で ' + record.run.distance.toFixed(2) + ' m 飛びました！ #鳥人間コンテストシミュレーター');
+    share.searchParams.set('url', 'https://97kuek.github.io/birdman-contest-simulator/');
+    $('share-result').href = share.href;
     stage('result');
     $('result-heading').focus({ preventScroll: true });
   }
   function prepare() {
     captions.clear();
+    crewAnswer('', 0);
     atWater = false;
-    showTrails(false);
+    latestRecord?.trail.setVisible(false);
     resultRecord = null;
     aircraftPose.placeOnDeck(session.launch, session.onDeck);
     setView('aircraft');
@@ -136,8 +139,7 @@ export function setupTrials({
     document.querySelector('.setup-title').focus({ preventScroll: true });
   }
   $('previous-result').onclick = () => {
-    if (!records.has(baseKey)) cacheReference();
-    let previous = records.get('latest');
+    let previous = latestRecord;
     if (!previous) {
       const saved = session.latest;
       const color = trialColor(saved.number);
@@ -145,13 +147,13 @@ export function setupTrials({
         ...saved,
         label: '試技 ' + saved.number,
         color,
-        trail: makeTrail(saved.run, color, false),
+        trail: makeTrail(saved.run, color),
       };
-      records.set('latest', previous);
+      latestRecord = previous;
     }
     pose(session.waterPose(previous.run, WATER_RUNOUT_SECONDS));
     atWater = true;
-    showTrails(true);
+    previous.trail.setVisible(true);
     crewTime(Infinity);
     showResult(previous);
     setView('boat');
@@ -160,35 +162,43 @@ export function setupTrials({
     aim();
   };
   function aim() {
-    showTrails(false);
+    resultRecord = null;
+    session.prepareAttempt();
+    latestRecord?.trail.setVisible(false);
     atWater = false;
     aircraftPose.placeOnDeck(session.launch, session.onDeck);
     stage('align');
-    captions.show('東京理科大学・鳥科の竜海です。');
+    captions.clear();
     setView('pilot');
     renderWind(session.onDeck);
     $('viewer').focus({ preventScroll: true });
   }
   function confirmHeading() {
     if (screen !== 'align') return;
-    if (!records.has(baseKey)) cacheReference();
-    showTrails(false);
+    advanceHeading(performance.now());
     countdown = { seconds: 0, last: performance.now() };
     stage('countdown');
-    $('call-text').textContent = launchCue(0).label;
+    displayCall(launchCue(0));
     $('launch-call').classList.remove('go');
     captions.clear();
     $('viewer').focus({ preventScroll: true });
   }
   $('confirm-heading').onclick = confirmHeading;
+  function displayCall(cue) {
+    const call = $('launch-call');
+    if ($('call-text').textContent === cue.label && call.dataset.wing === cue.wing) return;
+    call.dataset.wing = cue.wing;
+    $('call-speaker').hidden = !cue.wing;
+    $('call-speaker').textContent = cue.wing === 'left' ? '左翼' : cue.wing === 'right' ? '右翼' : '';
+    $('call-text').textContent = cue.label;
+  }
   function start(now, elapsed) {
     const attempt = session.startAttempt();
     const color = trialColor(attempt.number);
     const record = {
       label: '試技 ' + attempt.number,
       color,
-      reference: false,
-      trail: makeTrail(null, color, false),
+      trail: makeTrail(null, color),
     };
     atWater = false;
     clearInput();
@@ -202,21 +212,25 @@ export function setupTrials({
     const { record } = active;
     record.run = run;
     record.trail.extend(run.samples);
-    const prior = records.get('latest');
-    if (prior) prior.trail.dispose();
-    records.set('latest', record);
+    latestRecord?.trail.dispose();
+    latestRecord = record;
     record.trail.showContact(run);
     const last = run.samples.at(-1);
     pose(last);
+    playSplash(last);
     onWaterContact?.(run.contactRight, run.contactForward, last);
     active = null;
     atWater = true;
     clearInput();
     stage('landing');
-    captions.clear();
+    captions.show('竜海、ここで着水です！', 3900);
     landing = { record, start: performance.now(), boatAt: null };
   }
   function tick(now) {
+    if (screen === 'align') {
+      advanceHeading(now);
+      return;
+    }
     if (review) {
       replay.tick(now);
       return;
@@ -226,7 +240,8 @@ export function setupTrials({
         countdown.seconds += Math.max(0, now - countdown.last) / 1000;
       countdown.last = Math.max(now, countdown.last);
       const cue = launchCue(countdown.seconds);
-      if ($('call-text').textContent !== cue.label) $('call-text').textContent = cue.label;
+      displayCall(cue);
+      crewAnswer(cue.wing, cue.elapsed);
       if (cue.go) {
         countdown = null;
         $('launch-call').classList.add('go');
@@ -242,11 +257,9 @@ export function setupTrials({
       if (seconds >= LANDING_CAMERA_DELAY_SECONDS && landing.boatAt === null) {
         startLandingCamera();
         landing.boatAt = now;
-        $('landing-call').hidden = true;
       }
       if (landing.boatAt === null || now - landing.boatAt < RECORD_REVEAL_DELAY_MS) return;
       landing = null;
-      showTrails(true);
       showResult(record);
       return;
     }
@@ -268,10 +281,10 @@ export function setupTrials({
       const mark = Math.min(400, Math.floor(s.distance / 100) * 100);
       if (!active.airborne) {
         active.airborne = true;
-        captions.show('竜海が、琵琶湖へ飛び出しました。');
+        captions.show('竜海、飛び出した！');
       } else if (mark > active.distanceCall) {
         active.distanceCall = mark;
-        captions.show(mark + ' m を通過しました。');
+        captions.show(mark + 'メートルを越えてきました！');
       }
     }
     pose(s);
@@ -279,8 +292,8 @@ export function setupTrials({
   }
   aircraftPose.placeOnDeck(session.launch, session.onDeck);
   function changeConditions(direction = session.launch.direction) {
-    for (const record of records.values()) record.trail.dispose();
-    records.clear();
+    latestRecord?.trail.dispose();
+    latestRecord = null;
     session.select(selectedWeather(), direction);
     renderWind(session.onDeck);
     aircraftPose.placeOnDeck(session.launch, session.onDeck);
@@ -300,13 +313,21 @@ export function setupTrials({
     clearInput();
     prepare();
   };
+  function visibleWeather() {
+    return review?.record.run.weather ?? resultRecord?.run.weather ?? session.weather;
+  }
   $('launch').onclick = aim;
   $('launch').disabled = false;
   stage('setup');
   return {
     tick,
+    get soundPhase() {
+      if (review) return replay.playing ? (replay.time < review.record.run.duration ? 'glide' : 'landing') : 'paused';
+      if (active) return active.airborne ? 'glide' : 'run';
+      return screen;
+    },
     get weather() {
-      return session.weather;
+      return visibleWeather();
     },
     get atWater() {
       return atWater && !review;
@@ -316,13 +337,12 @@ export function setupTrials({
     },
     get trackBounds() {
       const bounds = { left: 0, right: 0, near: 0, far: 0 };
-      for (const record of records.values())
-        for (const s of record.run.samples) {
-          bounds.left = Math.min(bounds.left, s.right);
-          bounds.right = Math.max(bounds.right, s.right);
-          bounds.near = Math.min(bounds.near, s.forward);
-          bounds.far = Math.max(bounds.far, s.forward);
-        }
+      for (const s of latestRecord?.run.samples ?? []) {
+        bounds.left = Math.min(bounds.left, s.right);
+        bounds.right = Math.max(bounds.right, s.right);
+        bounds.near = Math.min(bounds.near, s.forward);
+        bounds.far = Math.max(bounds.far, s.forward);
+      }
       return bounds;
     },
   };

@@ -1,13 +1,16 @@
 import * as THREE from 'three';
 import { FlightSession } from './application/flight-session.js';
 import { BASE_DESIGN } from './domain/flight.js';
+import { WIND_GRID_SIZE } from './domain/lake-breeze.js';
 import { WEATHER, windAt } from './domain/weather.js';
 import { byId } from './presentation/dom.js';
-import { setupTrials } from './presentation/flight-screen.js';
+import { setupFlightSound } from './presentation/flight-sound.js';
+import { selectedWeather, setupTrials } from './presentation/flight-screen.js';
 import { bindViewerControls, setupViewerShell, showCameraMode, trackViewportFraction } from './presentation/viewer-shell.js';
 import { createAircraft } from './rendering/aircraft.js';
 import { createAircraftPose } from './rendering/aircraft-pose.js';
 import { createCockpitDisplay } from './rendering/aircraft/display.js';
+import { createDaylight } from './rendering/daylight.js';
 import { createChaseBoat } from './rendering/chase-boat.js';
 import { modelHull } from './rendering/collision-hull.js';
 import { createLaunchCrew } from './rendering/crew.js';
@@ -19,9 +22,10 @@ import { deckHeight } from './rendering/launch-deck.js';
 import { createPlatform } from './rendering/platform.js';
 
 setupViewerShell();
+const sound = setupFlightSound();
 const host = byId('canvas-host');
 const status = byId('loading');
-const selectedWeather = () => document.querySelector('input[name="weather"]:checked').value;
+const drawWindOffset = () => crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32 * WIND_GRID_SIZE;
 
 function release(group) {
   const geometries = new Set(), materials = new Set();
@@ -45,7 +49,8 @@ async function start() {
   });
   host.append(renderer.domElement);
   renderer.domElement.setAttribute('aria-label', '竜海と松原湖岸の3Dモデル。ドラッグで回転、ホイールで拡大縮小');
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  const compact = matchMedia('(pointer:coarse) and (max-width:1000px)').matches;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, compact ? 1.5 : 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -65,7 +70,7 @@ async function start() {
   sun.shadow.bias = -0.00022;
   scene.add(sun);
 
-  const lake = addLakeAndSky(scene);
+  const lake = addLakeAndSky(scene, compact);
   const facility = new THREE.Group();
   facility.rotation.y = THREE.MathUtils.degToRad(65);
   scene.add(facility);
@@ -88,7 +93,7 @@ async function start() {
   enableReflection(aircraft);
   modelBase.add(aircraft);
 
-  let trials;
+  let trials, setNight;
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const atWater = () => trials?.atWater;
   const boat = createChaseBoat();
@@ -107,36 +112,46 @@ async function start() {
     const elapsed = last ? Math.min((now - last) / 1000, 0.15) : 0;
     last = now;
     trials?.tick(now);
-    boat.update(modelBase, elapsed, reduceMotion.matches);
+    if (trials) sound.update(trials.soundPhase, display.sample, display.instruments, cameraRig.view());
+    const underway = boat.update(modelBase, elapsed, reduceMotion.matches);
+    const boatSpeed = trials ? (display.sample.groundSpeed ?? 0) * underway : 0;
+    lake.setWake(boat.group, THREE.MathUtils.smoothstep(boatSpeed, 0.4, 6));
     cameraRig.update();
     const weatherMode = trials?.weather ?? selectedWeather();
     const weather = WEATHER[weatherMode];
-    // Keep the water phase continuous when launching, finishing or skipping a replay.
+    const period = weather.period ?? 'day';
+    if (document.body.dataset.period !== period) document.body.dataset.period = period;
+    setNight?.(period === 'night');
     sceneTime += elapsed;
-    const visualTime = reduceMotion.matches ? 0 : sceneTime;
-    const windTime = reduceMotion.matches ? 0 : (trials?.weatherTime ?? sceneTime);
-    const fluctuation = weather.gustSpeed ? windAt(weatherMode, 150, windTime).headwind - weather.lakeWindSpeed : 0;
-    lake.update(cameraRig.camera, visualTime, weather.lakeWindSpeed, fluctuation,
-      Math.atan2(weather.crosswind ?? 0, weather.headwind ?? 1));
+    const sample = trials ? display.sample : null;
+    const windTime = sample?.windTime ?? sample?.t ?? 0;
+    const visualTime = reduceMotion.matches ? 0 : weather.field ? windTime : sceneTime;
+    const fluctuation = !weather.field && weather.gustSpeed ? windAt(weatherMode, 150, windTime).headwind - weather.lakeWindSpeed : 0;
+    const angle = Math.atan2(weather.field?.cross ?? weather.crosswind ?? 0, weather.field?.head ?? weather.headwind ?? 1);
+    lake.update(cameraRig.camera, visualTime, weather.lakeWindSpeed, fluctuation, angle, weather.field, windTime, facility.rotation.y,
+      sample?.gustOffset ?? 0);
     compass.style.transform = 'rotate(' + cameraRig.compassBearing() + 'rad)';
     renderer.render(scene, cameraRig.camera);
   });
 
   const landscape = await addLandscape(scene);
   enableReflection(landscape);
+  setNight = createDaylight({ scene, skyLight: ambient, directLight: sun, platform, landscape, lake });
   lake.setShallows(landscape.userData.shallows);
   const { view, setView, startLandingCamera, moveCamera } = cameraRig;
-  const session = new FlightSession(modelHull(aircraft), selectedWeather());
+  const session = new FlightSession(modelHull(aircraft), selectedWeather(), drawWindOffset);
   const display = createCockpitDisplay(aircraft, {
-    weather: () => session.weather,
+    weather: () => trials?.weather ?? session.weather,
     platformBearing: -facility.rotation.y,
     describe: text => renderer.domElement.setAttribute('aria-description', text),
   });
   const aircraftPose = createAircraftPose({ modelBase, aircraft, crew, view, moveCamera, display });
   trials = setupTrials({
     session, aircraftPose, setView, view, startLandingCamera,
+    crewAnswer: crew.answer,
     crewTime: time => crew.update(session.launch, time),
-    makeTrail: (run, color, reference) => createFlightTrail(run, color, reference, { facility, release }),
+    playSplash: sample => sound.splash(sample),
+    makeTrail: (run, color) => createFlightTrail(run, color, { facility, release }),
     onWaterContact: (right, forward, sample) => {
       if (reduceMotion.matches) return;
       const direction = new THREE.Vector3(Math.sin(sample.track), 0, -Math.cos(sample.track)).transformDirection(facility.matrixWorld);

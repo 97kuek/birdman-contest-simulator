@@ -10,8 +10,8 @@ const plotLeft = 31,
   plotBottom = 96;
 const x = (time) => plotLeft + ((plotRight - plotLeft) * time) / windowSeconds;
 const signals = [
-  { key: 'height', label: '高度', unit: 'm' },
-  { key: 'speed', label: '対気速度', unit: 'm/s' },
+  { key: 'height', label: '計器高度', unit: 'm' },
+  { key: 'speed', label: 'ピトー対気速度', unit: 'm/s' },
   { key: 'pitchDeg', label: 'ピッチ', unit: '°' },
 ];
 
@@ -97,7 +97,7 @@ function inputText(interval) {
   );
 }
 
-export function setupReplay({ showPose, onClose }) {
+export function setupReplay({ showPose, onClose, playSplash }) {
   const panel = byId('replay-panel'),
     play = byId('replay-play'),
     seek = byId('replay-seek'),
@@ -173,7 +173,9 @@ export function setupReplay({ showPose, onClose }) {
   }
   function tick(now) {
     if (!playing || now <= last) return;
+    const previousTime = time;
     if (!document.hidden) time = Math.min(endTime, time + ((now - last) * rates[rateIndex]) / 1000);
+    if (previousTime < run.duration && time >= run.duration) playSplash(run.samples.at(-1));
     last = now;
     if (time >= endTime) playing = false;
     display();
@@ -209,6 +211,7 @@ export function setupReplay({ showPose, onClose }) {
   };
   return {
     tick,
+    get playing() { return playing; },
     get time() {
       return run ? time : null;
     },

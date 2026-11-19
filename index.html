@@ -2,17 +2,22 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#173e46">
   <link rel="icon" href="data:,">
   <title>竜海 | 鳥人間コンテストシミュレーター</title>
   <link rel="stylesheet" href="./src/presentation/styles.css">
+  <link rel="stylesheet" href="./src/presentation/sound.css">
 </head>
 <body class="flight-lab" data-stage="setup">
   <header class="topbar">
     <div class="brand"><div><h1>鳥人間コンテストシミュレーター</h1><span class="broadcast-class">滑空機部門 <b>／</b> 東京理科大学・鳥科</span></div></div>
-    <div class="lab-actions"><button id="flight-action" hidden></button><button id="sources" class="text-button" title="資料・出典"><i data-icon="book"></i>資料・出典</button></div>
+    <div class="lab-actions"><button id="flight-action" hidden></button><button id="sound-settings" popovertarget="sound-options" title="音の設定" aria-label="音の設定"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h4l5-4v14l-5-4H3z"/><path class="waves" d="M16 8q4 4 0 8m3-11q7 7 0 14"/><path class="mute" d="m16 9 5 6m0-6-5 6"/></svg></button><button id="sources" class="text-button" title="資料・出典"><i data-icon="book"></i>資料・出典</button></div>
   </header>
+  <div id="sound-options" popover aria-label="音の設定">
+    <label><input id="instrument-audio" type="checkbox" checked><span>計器の電子音<small>音の高さは対気速度、低空での間隔は高度</small></span></label>
+    <label><input id="environment-audio" type="checkbox" checked><span>環境音・効果音<small>湖岸の波、風切り音、助走、着水</small></span></label>
+  </div>
   <main class="workspace">
     <div class="scene-column">
     <section id="viewer" tabindex="-1" aria-label="松原湖岸と滑空機の3Dビュー">
@@ -50,9 +55,8 @@
           </div>
         </div>
       </div>
-      <div id="launch-call" role="status" hidden><small>プラットフォーム <b>／</b> 竜海</small><strong id="call-text"></strong></div>
+      <div id="launch-call" role="status" hidden><small id="call-speaker" hidden></small><strong id="call-text"></strong></div>
       <div id="commentary" role="status" hidden><b>実況</b><span id="commentary-text"></span></div>
-      <div id="landing-call" role="status" hidden>着水</div>
       <div id="loading" role="status">3Dシーンを読み込み中…</div>
       <div class="scene-foot"><div class="place"><i data-icon="pin"></i><span>彦根・松原湖岸</span></div><div class="map-credit">地形・写真・水域：国土地理院／国土数値情報</div></div>
       <div class="camera-tools" aria-label="視点の操作"><button id="zoom-in" aria-label="拡大"><i data-icon="plus"></i></button><button id="zoom-out" aria-label="縮小"><i data-icon="minus"></i></button><button id="camera-reset" aria-label="現在の視点に戻す"><i data-icon="undo"></i></button><button id="fullscreen" aria-label="全画面表示" title="全画面表示"><i data-icon="frame"></i></button></div>
@@ -62,7 +66,7 @@
         <h2 id="result-heading" tabindex="-1">ただ今の記録</h2>
         <p class="flight-score" aria-label="飛行距離"><b id="result-distance"></b><span>m</span></p>
       </div>
-      <div class="result-actions"><button class="primary" id="retry">再挑戦</button><button id="result-replay">リプレイ</button></div>
+      <div class="result-actions"><button class="primary" id="retry">再挑戦</button><button id="result-replay">リプレイ</button><a id="share-result" target="_blank" rel="noopener noreferrer" aria-label="飛行記録をXで共有（新しいタブ）">Xで共有 ↗</a></div>
     </section>
     <section id="replay-panel" hidden aria-label="操縦リプレイ">
       <div class="replay-transport">
@@ -81,7 +85,7 @@
         <div class="replay-legend"><strong>離台後10秒</strong><span class="pilot-line">選択した飛行</span><span class="base-line">基準機</span><span class="log-dot">2025年実機</span></div>
         <div id="replay-charts"></div>
         <details id="replay-log"><summary>操縦入力・計測条件</summary>
-          <p id="replay-condition"></p><p class="replay-note">帯は体重移動。高度は試算の機体底面高と実機の気圧高度。</p>
+          <p id="replay-condition"></p><p class="replay-note">帯は体重移動。高度は模擬計器の推定値と、鳥科が補正した実機の気圧高度。</p>
           <p id="replay-inputs"></p>
         </details>
       </div>
@@ -91,20 +95,26 @@
         <h2 class="setup-title" tabindex="-1">飛行準備</h2>
         <div class="identity"><div class="model-title"><h3>竜海</h3><span>2025年 滑空機</span></div>
           <div class="model-year">東京理科大学 鳥人間サークル鳥科</div></div>
-        <fieldset class="weather-choices"><legend>風を選ぶ</legend>
-          <label><input type="radio" name="weather" value="calm"><span><svg viewBox="0 0 64 44" aria-hidden="true"><g fill="none" stroke="#3b8f98" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 23h9m34 0h9" stroke-dasharray="2 3"/></g><path d="M32 7q2 0 2 10l12 5v3l-12-3-.7 9 4 2v2l-5.3-1-5.3 1v-2l4-2-.7-9-12 3v-3l12-5q0-10 2-10Z" fill="currentColor"/></svg>無風</span></label>
-          <label><input type="radio" name="weather" value="head" checked><span><svg viewBox="0 0 64 44" aria-hidden="true"><g fill="none" stroke="#3b8f98" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><g transform="rotate(0 32 22)"><path d="M14 6v18m-3-4 3 4 3-4M50 9v23m-3-4 3 4 3-4"/></g></g><path d="M32 7q2 0 2 10l12 5v3l-12-3-.7 9 4 2v2l-5.3-1-5.3 1v-2l4-2-.7-9-12 3v-3l12-5q0-10 2-10Z" fill="currentColor"/></svg>向かい風</span></label>
-          <label><input type="radio" name="weather" value="tail"><span><svg viewBox="0 0 64 44" aria-hidden="true"><g fill="none" stroke="#3b8f98" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><g transform="rotate(180 32 22)"><path d="M14 6v18m-3-4 3 4 3-4M50 9v23m-3-4 3 4 3-4"/></g></g><path d="M32 7q2 0 2 10l12 5v3l-12-3-.7 9 4 2v2l-5.3-1-5.3 1v-2l4-2-.7-9-12 3v-3l12-5q0-10 2-10Z" fill="currentColor"/></svg>追い風</span></label>
-          <label><input type="radio" name="weather" value="cross"><span><svg viewBox="0 0 64 44" aria-hidden="true"><g fill="none" stroke="#3b8f98" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><g transform="rotate(-90 32 22)"><path d="M14 6v18m-3-4 3 4 3-4M50 9v23m-3-4 3 4 3-4"/></g></g><path d="M32 7q2 0 2 10l12 5v3l-12-3-.7 9 4 2v2l-5.3-1-5.3 1v-2l4-2-.7-9-12 3v-3l12-5q0-10 2-10Z" fill="currentColor"/></svg>横風</span></label>
+        <fieldset class="weather-choices period-choices"><legend>時間帯</legend>
+          <label><input type="radio" name="period" value="day" checked><span>昼</span></label>
+          <label><input type="radio" name="period" value="night"><span>夜</span></label>
+        </fieldset>
+        <fieldset class="weather-choices"><legend>難易度</legend>
+          <label title="弱い風で飛ぶ"><input type="radio" name="difficulty" value="easy" checked><span>初級</span></label>
+          <label title="強さや向きが変わる風で飛ぶ"><input type="radio" name="difficulty" value="normal"><span>中級</span></label>
+          <label title="強い風や突風の中で飛ぶ"><input type="radio" name="difficulty" value="hard"><span>上級</span></label>
         </fieldset>
       </div>
       <div class="setup-launch"><button class="primary" id="launch" disabled>開始する</button><button id="previous-result" hidden>この条件の飛行記録</button></div>
     </aside>
   </main>
   <dialog id="source-dialog" aria-labelledby="source-title"><div class="dialog-top"><h2 id="source-title">資料・出典</h2><button id="close-sources" aria-label="閉じる"><i data-icon="close"></i></button></div>
-    <h3>機体</h3><p>鳥科の2025年機「竜海」の三面図をもとに再構成。主翼の桁とリブ、透明機首のフレーム、伏臥姿勢のパイロットと操縦グリップ、胴体の塗り分け、風向ベーンも造形しています。操縦席の液晶は対気速度、機体の最下点から水面までの高さ、姿勢、昇降速度、風を飛行計算から表示します。計器のレイアウトと追走艇の形状・航路はシミュレーター用に設定しました。断面・外装・内部構造はいずれも写真と図面をもとにした近似を含みます。</p><a href="https://torica-tus.com/2025/11/14/2025/" target="_blank" rel="noreferrer">鳥科の実機資料と三面図 ↗</a>
+    <h3>機体</h3><p>鳥科の2025年機「竜海」の三面図をもとに再構成。主翼の桁とリブ、透明機首のフレーム、伏臥姿勢のパイロットと操縦グリップ、胴体の塗り分け、風向ベーンも造形しています。操縦席の液晶はピトー管の向きを考慮した対気速度と、気圧・低空の超音波測距を組み合わせた推定高度を表示します。電子音の音程と間隔は鳥科の25代引継ぎ資料に基づき、速度の切替値は飛行ログから近似しました。計器のレイアウトと追走艇の形状・航路はシミュレーター用に設定しました。断面・外装・内部構造はいずれも写真と図面をもとにした近似を含みます。</p><a href="https://torica-tus.com/2025/11/14/2025/" target="_blank" rel="noreferrer">鳥科の実機資料と三面図 ↗</a>
+    <p><a href="https://github.com/torica-org/26th_Electronics/tree/1c47e73979fb83a245cf1c0f7e0d85b7a62a73d7/25th電装の解説" target="_blank" rel="noreferrer">鳥科の25代電装資料 ↗</a></p>
+    <h3>音</h3><p>波音は琵琶湖で収録された環境音です。助走と着水には別収録の効果音を用い、風切り音は対気速度に応じて合成しています。</p>
+    <p>録音素材（CC0）　<a href="https://freesound.org/people/pflanigan/sounds/390287/" target="_blank" rel="noreferrer">湖岸 · pflanigan ↗</a>　<a href="https://freesound.org/people/SoundsAreGr8/sounds/340983/" target="_blank" rel="noreferrer">足音 · SoundsAreGr8 ↗</a>　<a href="https://freesound.org/people/timgormly/sounds/148317/" target="_blank" rel="noreferrer">着水音 · timgormly ↗</a></p>
     <h3>松原湖岸・湖面</h3><p>国土地理院の標高データと航空写真を加工しています。プラットフォーム近くの湖岸と河口には水域の輪郭を使った地形メッシュと高解像度の航空写真を重ねています。樹木の位置・形は推定です。湖面は風向に沿う波、空と湖岸の反射、浅瀬の色と着水の波紋を描きます。波高は仮定し、飛距離は平均湖面で計測します。</p><a href="https://maps.gsi.go.jp/#16/35.294222/136.254333/" target="_blank" rel="noreferrer">松原湖岸の地理院地図 ↗</a>　<a href="./terrain/source.md" target="_blank">使用データの詳細 ↗</a>
-    <h3>飛行モデル</h3><p>全試行で質量100 kg。台の正面へ標準の力で台端まで押すと、離台時の対地速度は8 m/sです。鳥科の訓練用モデルの空力係数を使い、主翼・尾翼の空気力とピッチ運動を計算します。風向は台の正面を基準とし、横風は左から吹きます。有風時の風速は1.2 m/sです。対地速度から風速を引いた対気速度で揚力・抗力を計算します。主翼が水面に近づくと誘導抗力が減り、尾翼への吹き下ろしも変わります。手動飛行では左右キーがラダーを左右10°動かし、離すと中立になります。鳥科の訓練モデルの係数で、ラダー・横滑り・機体の回転による横力とモーメントを計算します。三面図の設計舵角は左右20°です。サーボの遅れは未計測のため、舵角は指令に即応させています。比較用の基準機はGPS由来のコースと推定体重移動を使います。記録は離台点から最初の接水時の機体最後尾までの水平距離です。</p>
+    <h3>飛行モデル</h3><p>全試行で質量100 kg。台の正面へ標準の力で台端まで押すと、離台時の対地速度は8 m/sです。鳥科の訓練用モデルの空力係数を使い、主翼・尾翼の空気力とピッチ運動を計算します。昼は湖から岸へ吹く湖風、夜は岸から湖へ吹く陸風を想定しています。難易度を上げると背景風も突風も強まります。風の分布は試技ごとに変わり、基準機とリプレイはその試技と同じ風を使います。対地速度から風速を引いた対気速度で揚力・抗力を計算します。主翼が水面に近づくと誘導抗力が減り、尾翼への吹き下ろしも変わります。手動飛行では左右キーがラダーを左右10°動かし、離すと中立になります。鳥科の訓練モデルの係数で、ラダー・横滑り・機体の回転による横力とモーメントを計算します。三面図の設計舵角は左右20°です。サーボの遅れは未計測のため、舵角は指令に即応させています。比較用の基準機はGPS由来のコースと推定体重移動を使います。記録は離台点から最初の接水時の機体最後尾までの水平距離です。</p>
     <p>映像では2:03〜2:04に離台し、2:58〜2:59に着水。ログでは離台後約33秒に、実機は約290 m先を高度約2.6 mで飛んでいました。</p>
     <a href="https://www.youtube.com/watch?v=brdhsnknoKs&amp;t=123s" target="_blank" rel="noreferrer">大会公式映像 ↗</a>　<a href="https://github.com/torica-org/25th_Analysis/blob/115723c24ce9e64c07c79215770acc7559518d42/flightDataPlot/src/2025_Tatsumi.csv" target="_blank" rel="noreferrer">鳥科の飛行ログ ↗</a>　<a href="https://github.com/Kimama-2005/torica-sim2025-unity/blob/3bddd0106db223ed864c4938ef3194a9af173682/TORICA%20sim%20Develop/Assets/Tatsumi.csv" target="_blank" rel="noreferrer">訓練用モデルの係数 ↗</a>
     <h3>プラットフォーム</h3><p>大会規定の水面上10 m、助走路10 m、勾配3.5°を使用。大会公式映像の青緑のシャツと3人の配置を参考に翼持ちと胴体担当を造形しました。支持位置・歩幅・手を離した後の姿勢は近似です。固定した扇形の台の上で機体の向きと離台点を変えます。左右30°は比較用の設定範囲です。2025年の許容角と竜海の台上の機首角は未確認です。開き角・足場・配置方位は近似です。大会概要の寸法は2026年版を参照しています。鳥科のGPSで離台をまたぐ約1.1秒の対地進行方位は北から時計回りに約304°です。</p><a href="https://www.ytv.co.jp/birdman/about/" target="_blank" rel="noreferrer">読売テレビの大会概要 ↗</a>　<a href="https://jhf.hangpara.or.jp/jhfreport/pdf/jhfreport_247.pdf#page=7" target="_blank" rel="noreferrer">風上に向けた発進例（JHF・2024年）↗</a>

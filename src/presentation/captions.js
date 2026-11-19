@@ -7,12 +7,12 @@ export function setupCaptions() {
     clearTimeout(timer);
     panel.hidden = true;
   }
-  function show(line) {
+  function show(line, duration = 3000) {
     clear();
     if (document.hidden || dialog.open) return;
     text.textContent = line;
     panel.hidden = false;
-    timer = setTimeout(clear, 3000);
+    timer = setTimeout(clear, duration);
   }
   return { show, clear };
 }

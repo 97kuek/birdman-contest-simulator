@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { FLIGHT_LIMIT_SECONDS, SAMPLES_PER_SECOND } from '../domain/flight.js';
 
-export function createFlightTrail(run, color, reference, { facility, release }) {
+export function createFlightTrail(run, color, { facility, release }) {
   const geometry = new THREE.BufferGeometry();
   if (run) {
     geometry.setFromPoints(run.samples.map((s) => new THREE.Vector3(s.right, s.height, -s.forward)));
@@ -13,13 +13,10 @@ export function createFlightTrail(run, color, reference, { facility, release }) 
     );
     geometry.setDrawRange(0, 0);
   }
-  const material = reference
-    ? new THREE.LineDashedMaterial({ color, dashSize: 2.4, gapSize: 1, depthTest: false })
-    : new THREE.LineBasicMaterial({ color, depthTest: false });
+  const material = new THREE.LineBasicMaterial({ color, depthTest: false });
   const line = new THREE.Line(geometry, material);
   line.renderOrder = 3;
   if (!run) line.frustumCulled = false;
-  if (reference) line.computeLineDistances();
   const marker = new THREE.Mesh(
     new THREE.RingGeometry(0.55, 0.9, 32),
     new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, depthTest: false }),

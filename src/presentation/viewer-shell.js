@@ -82,8 +82,7 @@ export function bindViewerControls(host, renderer, cameraRig, atWater) {
   function resize() {
     const width = host.clientWidth, height = host.clientHeight;
     if (!width || !height) return;
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
+    cameraRig.setAspect(width / height);
     renderer.setSize(width, height, false);
     framePanel();
     if (cameraRig.view() === 'tracks') setView('tracks');

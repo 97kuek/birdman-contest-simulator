@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const attachedModes = new Set(['pilot', 'boat']);
 const blendSeconds = 1.6;
+const overviewScale = aspect => Math.max(1, 1.38 / aspect);
 
 export function createFlightCamera({
   canvas, facility, modelBase, aircraft, boat, trackBounds, visibleTrackFraction, reduceMotion, onViewChange,
@@ -17,13 +18,14 @@ export function createFlightCamera({
   controls.zoomSpeed = 0.9;
   controls.panSpeed = 0.7;
 
-  const pilotBody = aircraft.getObjectByName('pilot-weight-shift');
-  const eye = new THREE.Vector3(), focus = new THREE.Vector3();
+  const pilotEye = aircraft.getObjectByName('pilot-eye');
+  const displayMount = aircraft.getObjectByName('cockpit-display-mount');
+  const eye = new THREE.Vector3(), focus = new THREE.Vector3(), panelBottom = new THREE.Vector3();
   const orientation = new THREE.Quaternion();
   const world = (x, y, z) => facility.localToWorld(new THREE.Vector3(x, y, z));
   let mode = 'aircraft', hasView = false, transition = null;
   let attachedZoom = 1, baseLens = 76;
-  const cockpitTilt = Math.tan(THREE.MathUtils.degToRad(7.5));
+  let viewportAspect = camera.aspect;
 
   function setAttachedLens(degrees) {
     baseLens = degrees;
@@ -37,11 +39,22 @@ export function createFlightCamera({
 
   function followPilot() {
     // Keep the lens just ahead of the face and move it with the prone pilot.
-    eye.set(0, 0.304, -0.86 + pilotBody.position.z);
-    focus.set(0, 0.304, -12 + pilotBody.position.z);
+    modelBase.worldToLocal(pilotEye.getWorldPosition(eye));
+    focus.copy(eye);
+    focus.z -= 11.14;
     const shortLandscape = canvas.clientHeight > 0 && canvas.clientHeight <= 500 && camera.aspect > 1;
-    if (shortLandscape) focus.y -= (eye.z - focus.z) * cockpitTilt;
+    const narrowPortrait = camera.aspect <= 1 && canvas.clientWidth <= 600;
     setAttachedLens(shortLandscape ? 48 : 76);
+    if (shortLandscape || narrowPortrait) {
+      // Keep the lower edge of the physical LCD above touch controls and credits.
+      // Only the gaze follows the panel. Its size still changes with eye distance.
+      modelBase.worldToLocal(displayMount.localToWorld(panelBottom.set(0, -.042, 0)));
+      const angleToPanel = Math.atan2(eye.y - panelBottom.y, eye.z - panelBottom.z);
+      const screenLimit = shortLandscape ? .72 : .42;
+      const halfFov = THREE.MathUtils.degToRad(camera.fov / 2);
+      const tilt = Math.max(0, angleToPanel - Math.atan(screenLimit * Math.tan(halfFov)));
+      focus.y -= (eye.z - focus.z) * Math.tan(tilt);
+    }
     camera.position.copy(modelBase.localToWorld(eye));
     controls.target.copy(modelBase.localToWorld(focus));
     camera.up.set(0, 1, 0).applyQuaternion(modelBase.getWorldQuaternion(orientation));
@@ -122,7 +135,7 @@ export function createFlightCamera({
         controls.target.copy(world(right, 4, -forward));
         camera.position.copy(world(bounds.right + distance, 4 + distance * 0.3, -forward + distance * 0.08));
       } else {
-        const ratio = Math.max(1, 1.38 / camera.aspect);
+        const ratio = overviewScale(viewportAspect);
         const { x, y, z } = modelBase.position;
         controls.target.copy(world(x - 0.65, y + 0.7, z - 0.2));
         camera.position.copy(world(x + 13 * ratio, y + 0.7 + 6.3 * ratio, z - 32 * ratio));
@@ -154,6 +167,19 @@ export function createFlightCamera({
     controls.update();
   }
 
+  function setAspect(aspect) {
+    const factor = overviewScale(aspect) / overviewScale(viewportAspect);
+    viewportAspect = aspect;
+    camera.aspect = aspect;
+    camera.updateProjectionMatrix();
+    if (!hasView || mode !== 'aircraft' || factor === 1) return;
+    // Fit the wing span after rotation while retaining the user's orbit and zoom.
+    if (transition?.orbit) {
+      const { eye, focus } = transition.orbit;
+      eye.sub(focus).multiplyScalar(factor).add(focus);
+    } else zoom(factor);
+  }
+
   function moveCamera(delta) {
     camera.position.add(delta);
     controls.target.add(delta);
@@ -172,5 +198,5 @@ export function createFlightCamera({
     return Math.atan2((north.x - center.x) * camera.aspect, north.y - center.y);
   }
 
-  return { camera, view: () => mode, setView, update, zoom, startLandingCamera, moveCamera, compassBearing };
+  return { camera, view: () => mode, setView, setAspect, update, zoom, startLandingCamera, moveCamera, compassBearing };
 }

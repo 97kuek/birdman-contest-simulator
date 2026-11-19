@@ -1,14 +1,46 @@
 import { byId as $ } from './dom.js';
 
-const HOLD_DELAY_MS = 350;
-const HEADING_REPEAT_MS = 100;
+const TAP_HEADING_DEGREES = 0.1;
+const FINE_TURN_DEG_PER_SECOND = 3;
+const FAST_TURN_DEG_PER_SECOND = 15;
+const ACCELERATE_SECONDS = 0.75;
 const DRAG_DEAD_ZONE_PX = 18;
+
+// Integrate the angular speed from the start of a press so frame timing and
+// the operating system's key-repeat rate cannot change the selected angle.
+export function createHeadingInput(readHeading, setHeading) {
+  let press;
+  function advance(now, minimumTravel = 0) {
+    if (!press) return;
+    const seconds = Math.max(0, (now - press.started) / 1000);
+    const ramp = Math.min(seconds, ACCELERATE_SECONDS);
+    const acceleration = (FAST_TURN_DEG_PER_SECOND - FINE_TURN_DEG_PER_SECOND) / ACCELERATE_SECONDS;
+    const travel = FINE_TURN_DEG_PER_SECOND * ramp + 0.5 * acceleration * ramp ** 2
+      + FAST_TURN_DEG_PER_SECOND * (seconds - ramp);
+    setHeading(press.startAngle + press.direction * Math.max(minimumTravel, travel));
+  }
+  return {
+    advance,
+    begin(source, direction, now) {
+      if (press?.source === source) return;
+      advance(now);
+      press = { source, direction, started: now, startAngle: readHeading() };
+    },
+    end(source, now, tapped) {
+      if (press?.source !== source) return;
+      advance(now, tapped ? TAP_HEADING_DEGREES : 0);
+      press = null;
+    },
+    cancel() { press = null; },
+  };
+}
 
 export function bindPilotControls({
   isFlying,
   isAiming,
   view,
-  changeDirection,
+  readHeading,
+  setHeading,
   confirmHeading,
   advanceToInputTime,
 }) {
@@ -42,38 +74,25 @@ export function bindPilotControls({
     else held.delete(source);
     showInput();
   }
-  let headingTimer;
-  function stopHeading() {
-    clearTimeout(headingTimer);
-  }
-  for (const [id, step] of [
-    ['direction-left', -1],
-    ['direction-right', 1],
-  ]) {
+  const heading = createHeadingInput(readHeading, setHeading);
+  for (const [id, direction] of [['direction-left', -1], ['direction-right', 1]]) {
     const button = $(id);
-    let touchPress = false;
     button.onpointerdown = (e) => {
-      touchPress = e.pointerType === 'touch' || e.pointerType === 'pen';
-      if (!touchPress || !e.isPrimary) return;
-      stopHeading();
+      if (!isAiming() || !e.isPrimary || e.button !== 0) return;
       button.setPointerCapture(e.pointerId);
-      function repeat() {
-        if (!isAiming() || document.hidden || $('source-dialog').open || button.disabled) return;
-        changeDirection(step);
-        headingTimer = setTimeout(repeat, HEADING_REPEAT_MS);
-      }
-      changeDirection(step);
-      headingTimer = setTimeout(repeat, HOLD_DELAY_MS);
-    };
-    button.onclick = (e) => {
-      if (!touchPress || e.detail === 0) changeDirection(step);
+      heading.begin(e.pointerId, direction, performance.now());
     };
     button.onpointermove = (e) => {
-      if (button.hasPointerCapture(e.pointerId) && document.elementFromPoint(e.clientX, e.clientY) !== button)
-        stopHeading();
+      if (button.hasPointerCapture(e.pointerId) && !button.contains(document.elementFromPoint(e.clientX, e.clientY)))
+        heading.end(e.pointerId, performance.now(), false);
     };
-    for (const event of ['pointerup', 'pointercancel', 'lostpointercapture'])
-      button.addEventListener(event, stopHeading);
+    button.onpointerup = (e) => heading.end(e.pointerId, performance.now(), true);
+    for (const event of ['pointercancel', 'lostpointercapture'])
+      button.addEventListener(event, (e) => heading.end(e.pointerId, performance.now(), false));
+    // Enter and assistive-technology activation have no press duration.
+    button.onclick = (e) => {
+      if (isAiming() && e.detail === 0) setHeading(readHeading() + direction * TAP_HEADING_DEGREES);
+    };
   }
   // Each finger owns one axis. Sliding off its buttons returns that axis to neutral.
   const pads = $('touch-controls');
@@ -107,7 +126,6 @@ export function bindPilotControls({
     setTimeout(() => setInput(source, 0), 200);
   };
   const arrows = { ArrowDown: 1, ArrowUp: -1, ArrowLeft: -2, ArrowRight: 2 };
-  let lastDirectionStep = 0;
   window.addEventListener('keydown', (e) => {
     if (
       e.altKey ||
@@ -120,11 +138,7 @@ export function bindPilotControls({
       aiming = isAiming();
     if (aiming && Math.abs(command) === 2) {
       e.preventDefault();
-      const now = performance.now();
-      if (!e.repeat || now - lastDirectionStep >= 90) {
-        changeDirection(Math.sign(command));
-        lastDirectionStep = now;
-      }
+      if (!e.repeat) heading.begin(e.key, Math.sign(command), performance.now());
     } else if (
       aiming &&
       e.code === 'Space' &&
@@ -138,6 +152,7 @@ export function bindPilotControls({
     }
   });
   window.addEventListener('keyup', (e) => {
+    heading.end(e.key, performance.now(), true);
     if (held.has(e.key)) {
       e.preventDefault();
       setInput(e.key, 0);
@@ -165,10 +180,13 @@ export function bindPilotControls({
       setInput('touch-pitch', 0);
     });
   function releaseInput() {
-    stopHeading();
+    heading.cancel();
     if (isFlying()) advanceToInputTime();
     clearInput();
   }
   window.addEventListener('blur', releaseInput);
-  return { pilotInput, clearInput, releaseInput, stopHeading };
+  // During rotation the buttons move away from the fingers. Some browsers
+  // keep pointer capture across this change without sending pointercancel.
+  matchMedia('(orientation: portrait)').addEventListener('change', releaseInput);
+  return { pilotInput, clearInput, releaseInput, advanceHeading: heading.advance, stopHeading: heading.cancel };
 }
