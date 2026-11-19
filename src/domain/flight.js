@@ -1,6 +1,6 @@
 import { aircraftDynamics, referenceTiming, releaseState, RUDDER_LIMIT_DEG } from './aircraft-dynamics.js';
+import { cgShiftFromBody } from './pilot-shift.js';
 import { launchProfile } from './launch.js';
-import { courseAt } from './race2025.js';
 import { geometryAt, hullAtRudder, landingMeasurement } from './water-contact.js';
 
 export { BASE_DESIGN, CG_HEIGHT, referenceTiming, RUDDER_LIMIT_DEG } from './aircraft-dynamics.js';
@@ -22,7 +22,7 @@ function advanceState(state, rates, seconds) {
   return {
     pathLength: state.pathLength + seconds * rates.pathLength, height: state.height + seconds * rates.height,
     u: state.u + seconds * rates.u, w: state.w + seconds * rates.w,
-    pitch: state.pitch + seconds * rates.pitch, q: state.q + seconds * rates.q, shift: state.shift + seconds * rates.shift,
+    pitch: state.pitch + seconds * rates.pitch, q: state.q + seconds * rates.q, bodyShift: state.bodyShift + seconds * rates.bodyShift,
     bank: state.bank + seconds * rates.bank, heading: state.heading + seconds * rates.heading,
     right: state.right + seconds * rates.right, forward: state.forward + seconds * rates.forward,
     v: state.v + seconds * rates.v, p: state.p + seconds * rates.p, r: state.r + seconds * rates.r,
@@ -37,7 +37,7 @@ function recordCommand(log, command, start, end) {
 }
 
 export function createFlight({ span, incidence }, hull, {
-  release = true, pilot = true, wind = true, weather = 'reference', push = 1, coast = 0, direction = 0,
+  release = true, pilot = true, wind = true, weather = 'reference', gustOffset = 0, push = 1, coast = 0, direction = 0,
   referenceControl = false, returnSeconds = referenceTiming.returnSeconds, onsetMetres = referenceTiming.onsetMetres,
 } = {}) {
   if (!(returnSeconds > 0) || !Number.isFinite(returnSeconds) || !Number.isFinite(onsetMetres)) {
@@ -45,8 +45,7 @@ export function createFlight({ span, incidence }, hull, {
   }
   const design = { span, incidence };
   const launch = launchProfile(push, coast, direction);
-  const { airflow, rates } = aircraftDynamics(design, launch, { pilot, wind, weather, referenceControl, returnSeconds, onsetMetres });
-  const launchCos = Math.cos(launch.heading), launchSin = Math.sin(launch.heading);
+  const { airflow, rates, location } = aircraftDynamics(design, launch, { pilot, wind, weather, gustOffset, referenceControl, returnSeconds, onsetMetres });
   let state = releaseState(launch, release, pilot);
   let rudderDeg = 0, collisionHull = hull;
   let step = 0, result = null;
@@ -57,20 +56,15 @@ export function createFlight({ span, incidence }, hull, {
   }
 
   function sample(t, state) {
-    const { pathLength, height, u, v, w, pitch, bank, shift, p, r } = state;
-    let { heading, right, forward } = state;
-    if (referenceControl) {
-      const course = courseAt(pathLength);
-      right = course.right * launchCos + course.forward * launchSin;
-      forward = course.forward * launchCos - course.right * launchSin;
-      heading = course.heading + launch.heading;
-    }
-    const { speed, headwind, updraft, beta } = airflow(state, t);
+    const { pathLength, height, u, v, w, pitch, bank, bodyShift, p, q, r } = state;
+    const position = location(state);
+    const { heading, right, forward } = position;
+    const { speed, headwind, updraft, beta } = airflow(state, t, position);
     const track = referenceControl ? heading : heading + Math.atan2(v, u);
     return {
-      t, pathLength, right: right + launch.edgeRight, forward: forward + launch.edgeForward, heading, track, bank,
-      distance: Math.hypot(right, forward), height, bottomHeight: bottomHeight(state),
-      pitch, speed, groundSpeed: Math.hypot(u, v), verticalSpeed: w, shift, headwind, updraft,
+      t, pathLength, right, forward, gustOffset, heading, track, bank,
+      distance: Math.hypot(right - launch.edgeRight, forward - launch.edgeForward), height, bottomHeight: bottomHeight(state),
+      pitch, speed, groundSpeed: Math.hypot(u, v), verticalSpeed: w, pitchRate: q, shift: cgShiftFromBody(bodyShift), headwind, updraft,
       rudderDeg, sideslipDeg: beta, rollRate: p, yawRate: r,
     };
   }
@@ -94,7 +88,7 @@ export function createFlight({ span, incidence }, hull, {
       const last = sample((step - 1 + fraction) * DT, hit);
       samples.push(last);
       const { distance, ...positions } = landingMeasurement(last, shape, launch);
-      result = { ...positions, weather, launch, design, samples, inputs, turnInputs, duration: last.t, distance };
+      result = { ...positions, weather, gustOffset, launch, design, samples, inputs, turnInputs, duration: last.t, distance };
       return;
     }
     state = next;
@@ -144,8 +138,8 @@ export function poseAt(run, t) {
   const a = run.samples[i], b = run.samples[i + 1], fraction = (t - a.t) / (b.t - a.t);
   const lerp = key => a[key] + fraction * (b[key] - a[key]);
   return {
-    t, right: lerp('right'), forward: lerp('forward'), heading: lerp('heading'), bank: lerp('bank'), track: lerp('track'),
-    rudderDeg, sideslipDeg: lerp('sideslipDeg'), rollRate: lerp('rollRate'), yawRate: lerp('yawRate'),
+    t, gustOffset: run.gustOffset ?? 0, right: lerp('right'), forward: lerp('forward'), heading: lerp('heading'), bank: lerp('bank'), track: lerp('track'),
+    rudderDeg, sideslipDeg: lerp('sideslipDeg'), rollRate: lerp('rollRate'), pitchRate: lerp('pitchRate'), yawRate: lerp('yawRate'),
     distance: lerp('distance'), pathLength: lerp('pathLength'), height: lerp('height'), bottomHeight: lerp('bottomHeight'),
     pitch: lerp('pitch'), speed: lerp('speed'), groundSpeed: lerp('groundSpeed'), verticalSpeed: lerp('verticalSpeed'),
     shift: lerp('shift'), headwind: lerp('headwind'), updraft: lerp('updraft'),

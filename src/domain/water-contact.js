@@ -1,3 +1,4 @@
+import { windAt } from './weather.js';
 import { RADIANS_PER_DEGREE } from './units.js';
 
 // A convex hull of (aft, up) vertices is sufficient for straight, wings-level flight.
@@ -78,15 +79,26 @@ export function waterRunoutPose(contact, seconds, hull, wind) {
   const groundSpeed = contact.groundSpeed * remaining ** 3;
   const along = Math.cos(contact.track), across = Math.sin(contact.track);
   const pitch = contact.pitch * remaining ** 2 - RUNOUT.pitchAmplitude * Math.sin(t * RUNOUT.pitchFrequency) * remaining ** 3;
+  const pitchDerivative = -2 * contact.pitch * remaining / WATER_RUNOUT_SECONDS
+    - RUNOUT.pitchAmplitude * RUNOUT.pitchFrequency * Math.cos(t * RUNOUT.pitchFrequency) * remaining ** 3
+    + 3 * RUNOUT.pitchAmplitude * Math.sin(t * RUNOUT.pitchFrequency) * remaining ** 2 / WATER_RUNOUT_SECONDS;
   const bank = contact.bank * remaining ** 2;
+  const forward = contact.forward + along * travel, right = contact.right + across * travel;
+  const windTime = contact.t + t;
   const bottom = geometryAt(pitch, hull, bank).bottom;
   const immersion = RUNOUT.immersion * (1 - remaining ** 2);
   const heave = Math.max(-RUNOUT.maxHeave, Math.min(0, contact.verticalSpeed * RUNOUT.heaveResponse))
     * Math.sin(RUNOUT.heaveFrequency * t) * remaining ** 3;
+  const height = -bottom - immersion + heave;
+  if (typeof wind === 'string') wind = windAt(wind, { right, forward, height, pathLength: contact.pathLength, gustOffset: contact.gustOffset }, windTime);
+  const crosswind = wind.crosswind ?? 0, updraft = wind.updraft ?? 0;
+  const headwind = wind.headwind * Math.cos(contact.heading) + crosswind * Math.sin(contact.heading);
   return {
-    ...contact, forward: contact.forward + along * travel, right: contact.right + across * travel,
-    groundSpeed, speed: Math.hypot(along * groundSpeed + wind.headwind, across * groundSpeed + (wind.crosswind ?? 0)),
-    height: -bottom - immersion + heave, bottomHeight: 0, verticalSpeed: 0, pitch, bank,
+    ...contact, forward, right, windTime,
+    groundSpeed, speed: Math.hypot(along * groundSpeed + wind.headwind, across * groundSpeed + crosswind, updraft),
+    headwind, updraft, pitchRate: pitchDerivative * Math.cos(bank),
+    rollRate: -2 * contact.bank * remaining / WATER_RUNOUT_SECONDS, yawRate: -pitchDerivative * Math.sin(bank),
+    height, bottomHeight: 0, verticalSpeed: 0, pitch, bank,
     rudderDeg: contact.rudderDeg * remaining, shift: contact.shift * remaining,
   };
 }

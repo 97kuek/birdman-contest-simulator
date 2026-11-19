@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { limitBodyShift } from '../../domain/pilot-shift.js';
 import { addRigidAssembly, bentTube, box, ellipsoid, rod, shaded, surfacePatch } from './mesh-parts.js';
 
 function addPilot(group,m){
@@ -44,7 +45,8 @@ function addPilot(group,m){
   ellipsoid(body,[0,.285,-.820],[.013,.023,.017],m.skin,'nose-bridge');
   ellipsoid(body,[0,.274,-.835],[.017,.010,.010],m.skin,'nose');
   bentTube(body,[[-.021,.249,-.811],[0,.247,-.819],[.021,.249,-.811]],.0027,detail.lips,'mouth');
-  const sleeves=[];
+  const arms=[];
+  const upperLength = .238, forearmLength = .200;
   // Follow the prone pilot silhouette along the pod, including the bent knees and shoes.
   ellipsoid(body,[0,.235,-.410],[.150,.091,.25],m.suit,'chest');
   ellipsoid(body,[0,.222,-.135],[.133,.081,.217],m.suit,'waist');
@@ -61,11 +63,11 @@ function addPilot(group,m){
     muscle(body,at(.065,.204,.08),at(.075,.173,.45),.072,.074,detail.pants,'thigh');
     muscle(body,at(.075,.175,.45),at(.066,.286,.85),.050,.051,detail.pants,'calf');
     muscle(body,at(.066,.286,.84),at(.064,.279,.99),.042,.044,detail.rubber,'shoe');
-    const shoulder=new THREE.Vector3(...at(.139,.246,-.46)),elbow=new THREE.Vector3(...at(.144,.169,-.648));
-    const sleeve=muscle(pilot,shoulder.toArray(),elbow.toArray(),.044,.049,m.suit,'upper-arm');
-    sleeves.push({sleeve,shoulder,elbow});
-    // Forearms and hands stay at the grips as the shoulders shift on the chest rest.
-    muscle(grips,at(.144,.168,-.634),at(.167,.210,-.792),.031,.033,m.skin,'forearm');
+    const shoulder = new THREE.Vector3(...at(.115,.246,-.46));
+    const wrist = new THREE.Vector3(...at(.167,.210,-.788));
+    const upper = ellipsoid(pilot, [0,0,0], [.044,.049,upperLength / 2 + .014], m.suit, 'upper-arm');
+    const forearm = ellipsoid(pilot, [0,0,0], [.031,.033,forearmLength / 2 + .014], m.skin, 'forearm');
+    arms.push({ shoulder, wrist, upper, forearm });
     muscle(grips,at(.167,.208,-.777),at(.171,.218,-.818),.024,.023,m.skin,'palm');
     for(let i=0;i<4;i++){
       const y=.207+i*.0085,z=-.79-i*.008;
@@ -75,17 +77,37 @@ function addPilot(group,m){
   }
   const moving=new THREE.Group();moving.name='pilot-weight-shift';
   addRigidAssembly(moving,body);pilot.add(moving);
-  const upper=new THREE.Vector3(),axis=new THREE.Vector3(), along=new THREE.Vector3(0,0,1);
-  pilot.userData.setBodyOffset=z=>{
-    moving.position.z=z;
-    for(const {sleeve,shoulder,elbow} of sleeves){
-      upper.copy(shoulder);upper.z+=z;
-      axis.subVectors(elbow,upper);
-      sleeve.position.copy(upper).lerp(elbow,.5);
-      sleeve.scale.z=axis.length()*.5+.014;
-      sleeve.quaternion.setFromUnitVectors(along,axis.normalize());
+  const eye = new THREE.Object3D();
+  eye.name = 'pilot-eye';
+  eye.position.set(0, .304, -.86);
+  moving.add(eye);
+
+  // A two-link arm changes elbow angle while both palms stay on their grips.
+  const shoulderNow = new THREE.Vector3(), elbow = new THREE.Vector3();
+  const reach = new THREE.Vector3(), bend = new THREE.Vector3(), axis = new THREE.Vector3();
+  const along = new THREE.Vector3(0, 0, 1);
+  function alignLimb(part, start, end) {
+    part.position.copy(start).lerp(end, .5);
+    part.quaternion.setFromUnitVectors(along, axis.subVectors(end, start).normalize());
+  }
+  pilot.userData.setBodyOffset = metres => {
+    moving.position.z = limitBodyShift(metres);
+    for (const { shoulder, wrist, upper, forearm } of arms) {
+      shoulderNow.copy(shoulder);
+      shoulderNow.z += moving.position.z;
+      reach.subVectors(wrist, shoulderNow);
+      const distance = reach.length();
+      reach.divideScalar(distance);
+      const projection = (distance ** 2 + upperLength ** 2 - forearmLength ** 2) / (2 * distance);
+      const flexion = Math.sqrt(Math.max(0, upperLength ** 2 - projection ** 2));
+      bend.set(-Math.sign(shoulder.x) * .17, 1, 0);
+      bend.addScaledVector(reach, -bend.dot(reach)).normalize();
+      elbow.copy(shoulderNow).addScaledVector(reach, projection).addScaledVector(bend, flexion);
+      alignLimb(upper, shoulderNow, elbow);
+      alignLimb(forearm, elbow, wrist);
     }
   };
+  pilot.userData.setBodyOffset(0);
   addRigidAssembly(pilot,grips);group.add(pilot);
 }
 

@@ -6,6 +6,7 @@ import {observations, officialDistance, courseAt} from '../src/domain/race2025.j
 import {pullupLog} from '../src/domain/pullup-data.js';
 import {pullupErrors, pullupSeries, recoveryErrors, recoveryEvents} from '../analysis/pullup-analysis.js';
 import {launchCue} from '../src/application/launch-sequence.js';
+import {readFlightInstruments} from '../src/domain/flight-instruments.js';
 import {openingTrace} from '../src/application/opening-trace.js';
 import {modelHull} from '../src/rendering/collision-hull.js';
 import {WEATHER, windAt} from '../src/domain/weather.js';
@@ -76,10 +77,10 @@ test('Common course starts along the ramp and extends smoothly beyond recorded p
   }
 });
 
-test('Launch diagnostics reproduce the preceding flight and compare all three signals on the same clock',()=>{
+test('Launch diagnostics isolate the previous release, pilot and wind settings on the same clock',()=>{
   const {run,hull}=calculate(BASE_DESIGN);
   const previous=simulateFlight(BASE_DESIGN,hull,previousFactors);
-  assert.ok(Math.abs(previous.distance-432.35)<.02);
+  assert.ok(Math.abs(previous.distance-423.9142)<.02);
   const expected=simulateFlight(BASE_DESIGN,hull,{release:true,pilot:true,wind:true});
   assert.deepEqual(expected,run);
   const old=pullupErrors(pullupSeries(previous)), current=pullupErrors(pullupSeries(run));
@@ -132,7 +133,7 @@ test('Wind scenarios share launch conditions and apply a repeatable position/tim
 
 test('Wind changes lift and touchdown while sampled airspeed uses the local relative velocity',()=>{
   const {hull,run}=calculate(BASE_DESIGN);
-  assert.ok(Math.abs(run.distance-430.68969472545405)<1e-6);
+  assert.ok(Math.abs(run.distance-422.17520384551915)<1e-6);
   assert.deepEqual(simulateFlight(BASE_DESIGN,hull,{weather:'reference'}),run);
   const calm=simulateFlight(BASE_DESIGN,hull,{weather:'calm'});
   const gust=simulateFlight(BASE_DESIGN,hull,{weather:'gust'});
@@ -211,7 +212,7 @@ test('Replay records applied commands including holds, release gaps, reversals a
   ]);
   const trace=openingTrace(run);
   assert.equal(trace.at(-1).t,Math.min(10,run.duration));
-  assert.equal(trace[0].height,run.samples[0].bottomHeight);
+  assert.equal(trace[0].height,readFlightInstruments(run.samples[0]).altitude);
   assert.equal(trace[40].pitchDeg,poseAt(run,2).pitch*180/Math.PI);
   const end=2.18, last=poseAt(run,end);
   const short={duration:end,samples:[...run.samples.filter(s=>s.t<end),last]};
@@ -249,6 +250,7 @@ test('Ramp push, hand-off and chosen heading share the same fixed deck and refer
 
 test('Countdown captions release the push on GO',()=>{
   assert.deepEqual([0,2.1,4.2,5.3,6.3,7.3,8.3].map(t=>launchCue(t).label),['左翼、いいですか？','右翼、いいですか？','行きます','3','2','1','GO']);
+  assert.deepEqual([1.3, 3.4].map(t => [launchCue(t).wing, launchCue(t).label]), [['left','はい！'], ['right','はい！']]);
   assert.equal(launchCue(8.299).go,false);
   assert.equal(launchCue(8.3).go,true);
   assert.ok(Math.abs(launchCue(8.34).elapsed-.04)<1e-8);

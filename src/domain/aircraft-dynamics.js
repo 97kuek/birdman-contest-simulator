@@ -1,4 +1,5 @@
 import { LAUNCH } from './launch.js';
+import { bodyShiftFromCg, cgShiftFromBody, limitBodyShift, PILOT_SHIFT } from './pilot-shift.js';
 import { courseAt } from './race2025.js';
 import { GRAVITY, RADIANS_PER_DEGREE } from './units.js';
 import { WIND_RISE_METRES, windAt } from './weather.js';
@@ -30,7 +31,6 @@ const YAW = Object.freeze({ beta: -0.000285, roll: -0.100557, yaw: -0.007178, ru
 export const referenceTiming = Object.freeze({ returnSeconds: 0.45, onsetMetres: 0 });
 const PILOT = Object.freeze({
   engagementMetres: 40, previousEngagementMetres: 65, earlyReturnMetres: 40,
-  maxShift: 0.11, maxShiftRate: 0.15, initialShift: -0.04,
   landingSpeed: 7.9, cruiseSpeedIncrement: 1.95, approachHeight: 2, flareHeight: 1.6,
   speedGain: 0.03, climbGain: 0.06, pitchDamping: 0.2, flareOffset: 0.07, flareClimbGain: 0.12,
 });
@@ -43,7 +43,7 @@ export function releaseState(launch, release, pilot) {
   return {
     pathLength: 0, height: launch.edgeHeight + CG_HEIGHT + LAUNCH.deckClearance,
     u: launch.speed * Math.cos(flightPath), w: launch.speed * Math.sin(flightPath),
-    pitch, q: release ? LAUNCH.pitchRateDeg * RADIANS_PER_DEGREE : 0, shift: pilot ? PILOT.initialShift : 0,
+    pitch, q: release ? LAUNCH.pitchRateDeg * RADIANS_PER_DEGREE : 0, bodyShift: pilot ? bodyShiftFromCg(PILOT_SHIFT.releaseCgShift) : 0,
     bank: 0, heading: launch.heading, right: 0, forward: 0, v: 0, p: 0, r: 0,
   };
 }
@@ -70,8 +70,8 @@ function lateralLoads(beta, rudderRightDeg, rollRate, yawRate, speed, span, pres
 }
 
 function weightShiftRate(state, speed, pilotInput, { pilot, referenceControl, onsetMetres, returnSeconds }) {
-  const { shift, pathLength, height, w, q } = state;
-  let desired = PILOT.maxShift * pilotInput;
+  const { bodyShift, pathLength, height, w, q } = state;
+  let desired = limitBodyShift(PILOT_SHIFT.maxBodyTravel * pilotInput);
   if (referenceControl) {
     // The calibrated controller damps the launch phugoid and flares near water.
     const clearance = Math.max(0, height - CG_HEIGHT);
@@ -81,15 +81,16 @@ function weightShiftRate(state, speed, pilotInput, { pilot, referenceControl, on
     const flareShift = flare * (PILOT.flareOffset - PILOT.flareClimbGain * w);
     const engagementLength = pilot ? PILOT.engagementMetres : PILOT.previousEngagementMetres;
     const engagement = clamp((pathLength - (pilot ? onsetMetres : 0)) / engagementLength, 0, 1);
-    desired = clamp(engagement * (trimShift + flareShift), -PILOT.maxShift, PILOT.maxShift);
+    // The historical reference controller requests an effective CG offset.
+    desired = limitBodyShift(bodyShiftFromCg(engagement * (trimShift + flareShift)));
   }
-  const returning = pilot && pathLength < PILOT.earlyReturnMetres && shift < 0 && desired > shift;
+  const returning = pilot && pathLength < PILOT.earlyReturnMetres && bodyShift < 0 && desired > bodyShift;
   const responseTime = returning ? returnSeconds : referenceTiming.returnSeconds;
-  return clamp((desired - shift) / responseTime, -PILOT.maxShiftRate, PILOT.maxShiftRate);
+  return clamp((desired - bodyShift) / responseTime, -PILOT_SHIFT.maxBodyRate, PILOT_SHIFT.maxBodyRate);
 }
 
 export function aircraftDynamics({ span, incidence }, launch, options) {
-  const { referenceControl, weather, wind } = options;
+  const { referenceControl, weather, wind, gustOffset = 0 } = options;
   const { efficiency, chord, tailArm, tailArea, pitchInertia, rollInertia, yawInertia, airDensity } = TATSUMI;
   const area = TATSUMI.area * span / BASE_DESIGN.span;
   const effectiveSpan = span * (TATSUMI.span / BASE_DESIGN.span);
@@ -106,12 +107,20 @@ export function aircraftDynamics({ span, incidence }, launch, options) {
   const windRiseLength = wind ? WIND_RISE_METRES.current : WIND_RISE_METRES.previous;
   const launchCos = Math.cos(launch.heading), launchSin = Math.sin(launch.heading);
 
-  function airflow({ pathLength, u, w, v, pitch, bank, heading }, time) {
-    const wind = windAt(weather, pathLength, time, windRiseLength);
+  function location(state) {
+    if (!referenceControl) return { right: state.right + launch.edgeRight, forward: state.forward + launch.edgeForward, heading: state.heading };
+    const course = courseAt(state.pathLength);
+    return { right: launch.edgeRight + course.right * launchCos + course.forward * launchSin,
+      forward: launch.edgeForward + course.forward * launchCos - course.right * launchSin,
+      heading: launch.heading + course.heading };
+  }
+  function airflow(state, time, position = location(state)) {
+    const { pathLength, u, w, v, pitch, bank, heading } = state;
+    const wind = windAt(weather, { ...position, pathLength, height: state.height, gustOffset }, time, windRiseLength);
     // Fixed wind cards are in platform axes, including on the prescribed reference track.
     // The historical scalar wind scenario is the calibrated longitudinal component.
     const windHeading = referenceControl && wind.crosswind !== undefined
-      ? launch.heading + courseAt(pathLength).heading : heading;
+      ? position.heading : heading;
     const headingCos = Math.cos(windHeading), headingSin = Math.sin(windHeading);
     const crosswind = wind.crosswind ?? 0;
     const headwind = wind.headwind * headingCos + crosswind * headingSin;
@@ -128,7 +137,7 @@ export function aircraftDynamics({ span, incidence }, launch, options) {
   function rates(state, time, pilotInput, turnInput) {
     // u, v are horizontal ground velocities along/across heading, w is vertical up.
     // p, q, r are body roll, pitch and yaw rates in radians per second.
-    const { height, u, w, q, shift, heading, v, p, r } = state;
+    const { height, u, w, q, bodyShift, heading, v, p, r } = state;
     const { speed, alpha, beta, airU, airW, cp, sp, cb, sb } = airflow(state, time);
     const pressure = 0.5 * airDensity * speed ** 2;
     const wingHeight = Math.max(0, height + TATSUMI.wingHeight - CG_HEIGHT);
@@ -143,8 +152,10 @@ export function aircraftDynamics({ span, incidence }, launch, options) {
     const wingStall = Math.max(0, Math.abs(wingAngle) - TATSUMI.maxLiftCoefficient / wingSlope);
     const inducedDrag = groundFactor * (lift / (pressure * area)) ** 2 / (Math.PI * aspectRatio * efficiency);
     const drag = pressure * (parasite + area * (inducedDrag + DRAG.postStallFactor * Math.sin(wingStall) ** 2));
+    // Project the aerodynamic force onto the normal to the body-axis CG lever.
+    const upwardNormal = lift * Math.cos(alpha) + drag * Math.sin(alpha);
     const moment = TATSUMI.wingMomentCoefficient * pressure * area * chord
-      + wingLift * TATSUMI.wingMomentArmChords * chord - tailArm * tailLift + lift * shift;
+      + wingLift * TATSUMI.wingMomentArmChords * chord - tailArm * tailLift + upwardNormal * cgShiftFromBody(bodyShift);
     const shiftRate = weightShiftRate(state, speed, pilotInput, options);
     if (referenceControl) {
       // Pressure uses the complete airspeed. Lift and drag rotate in the pitch plane.
@@ -152,7 +163,7 @@ export function aircraftDynamics({ span, incidence }, launch, options) {
       return {
         pathLength: u, height: w, u: (-drag * airU - lift * airW) / (pitchPlaneSpeed * LAUNCH.mass),
         w: (lift * airU - drag * airW) / (pitchPlaneSpeed * LAUNCH.mass) - GRAVITY, pitch: q, q: moment / pitchInertia,
-        shift: shiftRate, bank: 0, heading: 0, right: u * launchSin, forward: u * launchCos, v: 0, p: 0, r: 0,
+        bodyShift: shiftRate, bank: 0, heading: 0, right: u * launchSin, forward: u * launchCos, v: 0, p: 0, r: 0,
       };
     }
 
@@ -168,11 +179,11 @@ export function aircraftDynamics({ span, incidence }, launch, options) {
       pathLength: Math.hypot(u, v), height: w,
       u: forwardForce / LAUNCH.mass + headingRate * v, w: upForce / LAUNCH.mass - GRAVITY,
       pitch: q * cb - r * sb, q: (moment + (yawInertia - rollInertia) * r * p) / pitchInertia,
-      shift: shiftRate, bank: p + headingRate * sp, heading: headingRate,
+      bodyShift: shiftRate, bank: p + headingRate * sp, heading: headingRate,
       right: u * sh + v * ch, forward: u * ch - v * sh, v: rightForce / LAUNCH.mass - headingRate * u,
       p: (loads.roll + (pitchInertia - yawInertia) * q * r) / rollInertia,
       r: (loads.yaw + (rollInertia - pitchInertia) * p * q) / yawInertia,
     };
   }
-  return { airflow, rates };
+  return { airflow, rates, location };
 }

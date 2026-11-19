@@ -2,22 +2,24 @@ import * as THREE from 'three';
 import { CG_HEIGHT } from '../domain/flight.js';
 
 import { RADIANS_PER_DEGREE as radians } from '../domain/units.js';
-const pilotTravelMetres = 0.47;
+import { bodyShiftFromCg } from '../domain/pilot-shift.js';
 
 export function createAircraftPose({ modelBase, aircraft, crew, view, moveCamera, display }) {
   const rudder = aircraft.getObjectByName('rudder-hinge');
   const { setBodyOffset } = aircraft.getObjectByName('pilot').userData;
   const pilotBody = aircraft.getObjectByName('pilot-weight-shift');
+  const old = new THREE.Vector3(), offset = new THREE.Vector3();
   function pose(s) {
     display.update(s);
-    const old = modelBase.getWorldPosition(new THREE.Vector3());
+    const tracking = view() === 'aircraft';
+    if (tracking) modelBase.getWorldPosition(old);
     const { right, forward, heading } = s;
-    setBodyOffset(pilotTravelMetres * (s.shift ?? 0));
+    setBodyOffset(bodyShiftFromCg(s.shift ?? 0));
     rudder.rotation.y = (s.rudderDeg ?? 0) * radians;
     modelBase.rotation.set(s.pitch, -heading, -(s.bank ?? 0), 'YXZ');
-    const offset = new THREE.Vector3(0, -CG_HEIGHT, 0).applyEuler(modelBase.rotation);
+    offset.set(0, -CG_HEIGHT, 0).applyEuler(modelBase.rotation);
     modelBase.position.set(right, s.height, -forward).add(offset);
-    if (view() === 'aircraft') moveCamera(modelBase.getWorldPosition(new THREE.Vector3()).sub(old));
+    if (tracking) moveCamera(modelBase.getWorldPosition(offset).sub(old));
   }
   function placeOnDeck(launch, sample) {
     crew.update(launch, 0);

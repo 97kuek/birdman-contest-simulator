@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import { RADIANS_PER_DEGREE } from '../../domain/units.js';
+import { readFlightInstruments } from '../../domain/flight-instruments.js';
 import { windReading } from '../../domain/weather.js';
 
+const sources = { pressure: '気圧', blended: '気圧＋超音波', ultrasonic: '超音波' };
 const WIDTH = 600, HEIGHT = 300;
 const INK = '#172f33', PAPER = '#d7e3d7', SECONDARY = '#aec2b4';
 const degrees = radians => Math.round((radians ?? 0) / RADIANS_PER_DEGREE);
@@ -71,25 +73,27 @@ export function createCockpitDisplay(aircraft, { weather, platformBearing, descr
     text(value, x, 119, 87, INK, 183);
     text(unit, x, 150, 27);
   }
-  let sample, previous;
+  let sample, instruments, previous;
   function update(next) {
     sample = next;
-    const wind = windReading(weather(), next.heading, next.pathLength ?? 0, next.t ?? 0);
-    const speed = next.speed.toFixed(1), height = Math.max(0, next.bottomHeight).toFixed(1);
+    const wind = windReading(weather(), next.heading, next, next.windTime ?? next.t ?? 0);
+    instruments = readFlightInstruments(next);
+    const speed = instruments.airspeed.toFixed(1), height = instruments.altitude.toFixed(1);
+    const source = sources[instruments.source];
     const pitch = degrees(next.pitch), bank = degrees(next.bank);
     const climb = Number((next.verticalSpeed ?? 0).toFixed(1));
     const rudder = Math.round(next.rudderDeg ?? 0);
     const course = (degrees(platformBearing + (next.track ?? next.heading)) % 360 + 360) % 360;
-    const time = Math.floor(next.t ?? 0);
+    const time = next.t === undefined ? '台上' : Math.floor(next.t) + ' s';
     const windSpeed = wind.speed.toFixed(1), flow = degrees(wind.angle);
-    const key = [speed, height, pitch, bank, climb, rudder, course, time, windSpeed, flow].join('/');
+    const key = [speed, height, source, pitch, bank, climb, rudder, course, time, windSpeed, flow].join('/');
     if (key === previous) return;
     previous = key;
 
     ctx.fillStyle = PAPER;
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
-    primary('対気速度', speed, 'm/s', 115);
-    primary('水面まで', height, 'm', 485);
+    primary('対気速度', speed, 'm/s · ピトー管', 115);
+    primary('推定高度', height, 'm · ' + source, 485);
     horizon(ctx, pitch, bank);
     text('姿勢', 300, 37, 25);
     ctx.fillStyle = SECONDARY;
@@ -103,15 +107,15 @@ export function createCockpitDisplay(aircraft, { weather, platformBearing, descr
     text(rudderText, 505, 234, 33);
     ctx.fillStyle = INK;
     ctx.fillRect(0, 248, WIDTH, 52);
-    text(time + ' s', 62, 283, 29, PAPER);
+    text(time, 62, 283, 29, PAPER);
     text('進路 ' + course + '°', 218, 283, 27, PAPER);
     if (wind.speed >= 0.05) windArrow(ctx, flow);
     text(wind.speed < 0.05 ? '無風' : '風 ' + windSpeed + ' m/s', 483, 283, 27, PAPER);
 
     texture.needsUpdate = true;
-    describe('対気速度 ' + speed + ' m/s、水面まで ' + height + ' m、昇降 ' + signed(climb) +
+    describe('対気速度 ' + speed + ' m/s（ピトー管）、推定高度 ' + height + ' m（' + source + '）、昇降 ' + signed(climb) +
       ' m/s、ピッチ ' + signed(pitch) + '°、バンク ' + signed(bank) + '°、ラダー ' + rudderText +
-      '、進路 ' + course + '°、風速 ' + windSpeed + ' m/s、離台後 ' + time + ' 秒。');
+      '、進路 ' + course + '°、風速 ' + windSpeed + ' m/s、' + (next.t === undefined ? '台上' : '離台後 ' + Math.floor(next.t) + ' 秒') + '。');
   }
-  return { update, get sample() { return sample; } };
+  return { update, get sample() { return sample; }, get instruments() { return instruments; } };
 }
