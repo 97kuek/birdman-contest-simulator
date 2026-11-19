@@ -77,7 +77,7 @@ const integrals = {
 // The bending equilibrium is K*y = ∫(lift - mass*normalAcceleration)*shape.
 // span is the full design span in metres. Forces are N and lift slopes N/rad.
 export function solveWingStructure(profile, span, {
-  leftLift, rightLift, supportForce = 0, supportStation = 0, leftLiftSlope = 0, rightLiftSlope = 0, normalAcceleration, supportAcceleration = 0,
+  leftLift, rightLift, leftSupport = 0, rightSupport = 0, supportStation = 0, leftLiftSlope = 0, rightLiftSlope = 0, normalAcceleration, supportAcceleration = 0,
   leftTip, rightTip, leftTipRate = 0, rightTipRate = 0,
   referenceHalfLift = profile.mass * GRAVITY / 2,
 }) {
@@ -109,10 +109,10 @@ export function solveWingStructure(profile, span, {
   const right = aerodynamicLoad(rightLift, rightLiftSlope);
   const acceleration = normalAcceleration ?? (left.lift + right.lift) / profile.mass + supportAcceleration;
   const inertia = halfMass * acceleration;
-  // Symmetric vertical point load per wing, projected onto its bending mode.
-  const supportModal = supportForce ? supportForce * wingBendShape(aircraftId, supportStation / halfSpan) : 0;
-  const leftEquilibrium = (left.bendingForce + supportModal - inertia * w.massBend) / bendingStiffness;
-  const rightEquilibrium = (right.bendingForce + supportModal - inertia * w.massBend) / bendingStiffness;
+  // Individual normal point loads, projected onto its bending mode.
+  const handShape = leftSupport || rightSupport ? wingBendShape(aircraftId, supportStation / halfSpan) : 0;
+  const leftEquilibrium = (left.bendingForce + leftSupport * handShape - inertia * w.massBend) / bendingStiffness;
+  const rightEquilibrium = (right.bendingForce + rightSupport * handShape - inertia * w.massBend) / bendingStiffness;
   const omega = Math.sqrt(bendingStiffness / (halfMass * w.modalMass));
   const dampingRatio = .20; // Assumed modal damping supplements aerodynamic damping.
   function tipAcceleration(tip, rate, equilibrium) {
@@ -123,8 +123,8 @@ export function solveWingStructure(profile, span, {
   // d'Alembert root reaction: subtract both the fuselage acceleration and
   // the local elastic acceleration φ(x)*tipAcceleration from the applied load.
   const elasticInertiaArm = halfSpan * halfMass * w.massBendArm;
-  const leftMoment = left.moment + supportForce * supportStation - halfSpan * inertia * w.massArm - elasticInertiaArm * leftTipAcceleration;
-  const rightMoment = right.moment + supportForce * supportStation - halfSpan * inertia * w.massArm - elasticInertiaArm * rightTipAcceleration;
+  const leftMoment = left.moment + leftSupport * supportStation - halfSpan * inertia * w.massArm - elasticInertiaArm * leftTipAcceleration;
+  const rightMoment = right.moment + rightSupport * supportStation - halfSpan * inertia * w.massArm - elasticInertiaArm * rightTipAcceleration;
   const limitMoment = structure.overloadFactor * profile.design.span / 2
     * (referenceHalfLift * w.liftArm - halfMass * GRAVITY * w.massArm);
   const leftUtilization = Math.abs(leftMoment) / limitMoment;

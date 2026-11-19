@@ -56,6 +56,8 @@ function lateralLoads(beta, rudderRightDeg, rollRate, yawRate, speed, span, pres
 
 export function aircraftDynamics(design, launch, options) {
   const { referenceControl, weather, wind, gustOffset = 0 } = options;
+  const experiment = options.releaseExperiment;
+  const prescribedCourse = referenceControl && !experiment?.freeLateral;
   const { span, incidence } = design;
   const profile = aircraftProfile(options.aircraftId ?? design.aircraftId);
   const { efficiency, chord, tailArm, tailArea, pitchInertia, rollInertia, yawInertia, airDensity } = profile;
@@ -87,7 +89,7 @@ export function aircraftDynamics(design, launch, options) {
   const launchCos = Math.cos(launch.heading), launchSin = Math.sin(launch.heading);
 
   function location(state) {
-    if (!referenceControl) return { right: state.right + launch.edgeRight, forward: state.forward + launch.edgeForward, heading: state.heading };
+    if (!prescribedCourse) return { right: state.right + launch.edgeRight, forward: state.forward + launch.edgeForward, heading: state.heading };
     const course = courseAt(state.pathLength);
     return { right: launch.edgeRight + course.right * launchCos + course.forward * launchSin,
       forward: launch.edgeForward + course.forward * launchCos - course.right * launchSin,
@@ -98,13 +100,13 @@ export function aircraftDynamics(design, launch, options) {
     const wind = windAt(weather, { ...position, pathLength, height: position.height ?? state.height, gustOffset }, time, windRiseLength);
     // Fixed wind cards are in platform axes, including on the prescribed reference track.
     // The historical scalar wind scenario is the calibrated longitudinal component.
-    const windHeading = referenceControl && wind.crosswind !== undefined
+    const windHeading = prescribedCourse && wind.crosswind !== undefined
       ? position.heading : heading;
     const headingCos = Math.cos(windHeading), headingSin = Math.sin(windHeading);
     const crosswind = wind.crosswind ?? 0;
     const headwind = wind.headwind * headingCos + crosswind * headingSin;
     const airU = u + headwind, airW = w - wind.updraft;
-    const airV = referenceControl && wind.crosswind === undefined ? 0 : v - wind.headwind * headingSin + crosswind * headingCos;
+    const airV = prescribedCourse && wind.crosswind === undefined ? 0 : v - wind.headwind * headingSin + crosswind * headingCos;
     const speed = Math.hypot(airU, airW, airV);
     const cp = Math.cos(pitch), sp = Math.sin(pitch), cb = Math.cos(bank), sb = Math.sin(bank);
     const down = sp * airU - cp * airW;
@@ -120,8 +122,7 @@ export function aircraftDynamics(design, launch, options) {
   const referenceHalfLift = .25 * airDensity * profile.cruiseSpeed ** 2 * profile.area * wingCL0;
   const rigidWing = options.rigidWing ?? false;
 
-  const experiment = options.releaseExperiment;
-  function wingLoads(state, time, air, supportForce) {
+  function wingLoads(state, time, air, leftSupport, rightSupport) {
     const { height, heading } = state;
     const { speed, alpha, cp, sp, cb, sb } = air;
     const wingHeight = height + wingMountHeight - CG_HEIGHT;
@@ -156,8 +157,8 @@ export function aircraftDynamics(design, launch, options) {
     const left = halfLoad(-halfWingArm, state.leftTip, state.leftTipRate);
     const right = halfLoad(halfWingArm, state.rightTip, state.rightTipRate);
     const structure = rigidWing ? null : solveWingStructure(profile, span, {
-      supportForce, supportStation: experiment?.supportStation,
-      supportAcceleration: time >= 0 ? 2 * supportForce / profile.mass : 0,
+      leftSupport, rightSupport, supportStation: experiment?.supportStation,
+      supportAcceleration: time >= 0 ? (leftSupport + rightSupport) / profile.mass : 0,
       leftLift: left.lift, rightLift: right.lift, leftLiftSlope: left.slope, rightLiftSlope: right.slope, referenceHalfLift,
       leftTip: state.leftTip, rightTip: state.rightTip, leftTipRate: state.leftTipRate, rightTipRate: state.rightTipRate,
     });
@@ -173,8 +174,11 @@ export function aircraftDynamics(design, launch, options) {
 
   function loadsAt(state, time) {
     const air = airflow(state, time);
-    const supportForce = experiment?.handForceAt?.(time) ?? 0;
-    return { air, supportForce, ...wingLoads(state, time, air, supportForce) };
+    const left = experiment?.handForceAt?.(time, 'left') ?? 0;
+    const right = experiment?.handForceAt?.(time, 'right') ?? 0;
+    const normal = air.cp * air.cb;
+    return { air, handForce: left + right, handDifference: left - right,
+      ...wingLoads(state, time, air, left * normal, right * normal) };
   }
 
   function rates(state, time, pilotInput, turnInput, loads = loadsAt(state, time)) {
@@ -205,12 +209,14 @@ export function aircraftDynamics(design, launch, options) {
     const drag = tail.drag + pressure * (parasite + area * (inducedDrag + DRAG.postStallFactor * Math.sin(wingStall) ** 2));
     // Project the aerodynamic force onto the normal to the body-axis CG lever.
     const upwardNormal = lift * Math.cos(alpha) + drag * Math.sin(alpha);
-    const handForce = 2 * loads.supportForce;
-    const handMoment = handForce ? handForce * (experiment.handArm + cgShiftFromBody(bodyShift, profile)) * cp : 0;
+    const { handForce, handDifference } = loads;
+    const handLever = handForce ? experiment.handArm + cgShiftFromBody(bodyShift, profile) : 0;
+    const differentialMoment = handDifference * (experiment?.supportStation ?? 0);
+    const handMoment = handForce * handLever * cp * cb;
     const moment = handMoment + profile.wingMomentCoefficient * pressure * area * chord
       + wingLift * profile.wingMomentArmChords * chord - tailArm * tail.upwardNormal + upwardNormal * cgShiftFromBody(bodyShift, profile);
     const shiftRate = weightShiftRate(state, time, speed, pilotInput, Math.max(0, state.height - CG_HEIGHT), options);
-    if (referenceControl) {
+    if (prescribedCourse) {
       // Pressure uses the complete airspeed. Lift and drag rotate in the pitch plane.
       const pitchPlaneSpeed = Math.hypot(airU, airW);
       return {
@@ -230,13 +236,13 @@ export function aircraftDynamics(design, launch, options) {
     const sh = Math.sin(heading), ch = Math.cos(heading);
     return {
       ...bendRates, pathLength: Math.hypot(u, v), height: w,
-      u: forwardForce / profile.mass + headingRate * v, w: upForce / profile.mass - GRAVITY,
+      u: forwardForce / profile.mass + headingRate * v, w: (upForce + handForce) / profile.mass - GRAVITY,
       pitch: q * cb - r * sb, q: (moment + (yawInertia - rollInertia) * r * p) / pitchInertia,
       bodyShift: shiftRate, bank: p + headingRate * sp, heading: headingRate,
       right: u * sh + v * ch, forward: u * ch - v * sh, v: rightForce / profile.mass - headingRate * u,
-      p: (lateral.roll + gustRoll + (pitchInertia - yawInertia) * q * r) / rollInertia,
-      r: (lateral.yaw + (rollInertia - pitchInertia) * p * q) / yawInertia,
+      p: (lateral.roll + gustRoll + differentialMoment * cb * cp + (pitchInertia - yawInertia) * q * r) / rollInertia,
+      r: (lateral.yaw + differentialMoment * sp - handForce * handLever * cp * sb + (rollInertia - pitchInertia) * p * q) / yawInertia,
     };
   }
-  return { airflow, rates, location, loadsAt };
+  return { airflow, rates, location, loadsAt, prescribedCourse };
 }

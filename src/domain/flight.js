@@ -13,7 +13,7 @@ export { CG_HEIGHT } from './aircraft-dynamics.js';
 export { LAUNCH, launchProfile, MAX_LAUNCH_HEADING_DEGREES, rampAt, RAMP_LENGTH } from './launch.js';
 export { hull2D, WATER_RUNOUT_SECONDS, waterRunoutPose } from './water-contact.js';
 
-const STEPS_PER_SECOND = 120;
+export const STEPS_PER_SECOND = 120;
 const DT = 1 / STEPS_PER_SECOND;
 export const SAMPLES_PER_SECOND = 20;
 export const FLIGHT_LIMIT_SECONDS = 120;
@@ -54,17 +54,23 @@ export function createFlight(design, hull, {
   const profile = aircraftProfile(aircraftId);
   // The prescribed course and controller were reconstructed from Tatsumi telemetry.
   const referenceControl = requestedReference && aircraftId === 'ryukai';
-  // The release probes use the straight Tatsumi reference track and its platform edge.
+  // Keep the reference pilot schedule and launch normal for release probes.
   if (releaseExperiment && (!referenceControl || direction !== 0)) {
     throw new RangeError('Release load experiments require the straight Tatsumi reference flight.');
   }
   design = { ...design };
   const launch = launchProfile(push, coast, direction, profile.deckClearance);
-  const { loadsAt, rates, location } = aircraftDynamics(design, launch, { aircraftId, opening: resolveOpening(opening), releaseExperiment, rigidWing, pilot, wind, weather, gustOffset, referenceControl, returnSeconds, onsetMetres,
+  const { loadsAt, rates, location, prescribedCourse } = aircraftDynamics(design, launch, { aircraftId, opening: resolveOpening(opening), releaseExperiment, rigidWing, pilot, wind, weather, gustOffset, referenceControl, returnSeconds, onsetMetres,
     contestOpening: contestOpening && pilot && aircraftId === 'ryukai' });
   let state = releaseState(launch, release, pilot, profile, releaseAttitude);
   const rampWing = rigidWing ? null : rampWingMotion(launch, state, loadsAt, DT);
   if (rampWing) Object.assign(state, rampWing.release);
+  if (releaseExperiment?.freeLateral) {
+    const { bank = 0, rollRate = 0 } = releaseExperiment;
+    if (![bank, rollRate].every(Number.isFinite)) throw new RangeError('Release bank and roll rate must be finite.');
+    state.bank = bank;
+    state.p = rollRate;
+  }
   let loads = loadsAt(state, 0);
   let rudderDeg = 0;
   let failure = null;
@@ -89,7 +95,7 @@ export function createFlight(design, hull, {
     const position = location(state);
     const { heading, right, forward } = position;
     const { speed, headwind, updraft, beta } = loads.air;
-    const track = referenceControl ? heading : heading + Math.atan2(v, u);
+    const track = prescribedCourse ? heading : heading + Math.atan2(v, u);
     return {
       t, pathLength, right, forward, gustOffset, heading, track, bank,
       distance: Math.hypot(right - launch.edgeRight, forward - launch.edgeForward), height, bottomHeight: state.height + shape.bottom,

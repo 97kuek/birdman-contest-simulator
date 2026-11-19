@@ -42,3 +42,33 @@ test('追加荷重をゼロにした基準飛行は10秒間の全収録点で通
   };
   assert.deepEqual(run({ handForceAt:() => 0, tailUpdraftAt:() => 0 }), run());
 });
+
+test('片翼の支持力はその翼の桁を曲げ、反対側を下げるロールモーメントを生む', () => {
+  const rates = side => solve({ freeLateral:true, supportStation:3.12, handArm:-.25,
+    handForceAt:(_, wing) => wing === side ? 25 : 0 }).rates(state,0,0,0);
+  const none = rates(null), left = rates('left'), right = rates('right');
+  close(left.w-none.w,25/profile.mass);
+  close(right.w,left.w);
+  close(left.p-none.p,25*3.12/profile.rollInertia);
+  close(right.p-none.p,-25*3.12/profile.rollInertia);
+  assert.ok(left.leftTipRate > left.rightTipRate);
+  close(left.leftTipRate,right.rightTipRate);
+});
+
+test('正面・水平で翼持ちの左右を入れ替えると自由飛行のバンクも鏡像になる', () => {
+  function run(late) {
+    const f = createFlight(BASE_DESIGN,hull,{ referenceControl:true, releaseExperiment:{
+      freeLateral:true, handArm:-.25, supportStation:3.12,
+      handForceAt:(t,side) => t < (side === late ? 1/30 : 0) ? 25 : 0,
+    } });
+    f.advanceTo(10);
+    return f.samples;
+  }
+  const left = run('left'), right = run('right');
+  assert.ok(left.some(p => Math.abs(p.bank) > 1e-5));
+  for (const [i,p] of left.entries()) {
+    close(p.bank,-right[i].bank);
+    close(p.pitch,right[i].pitch);
+    close(p.wing.leftTip,right[i].wing.rightTip);
+  }
+});
