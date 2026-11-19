@@ -1,13 +1,9 @@
 import * as THREE from 'three';
-import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
-import {LAUNCH, RAMP_LENGTH, rampAt} from './flight.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const vec=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z);
-const down=vec(0,-1,0), cloth='#4eacb6', navy='#252d36', trim='#dbefeb';
+const cloth = '#4eacb6', navy = '#252d36', trim = '#dbefeb';
 const finish=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.88});
 const sphere=new THREE.SphereGeometry(1,16,12);
-const deckAngle=-LAUNCH.deckDeg*Math.PI/180, deckRun=RAMP_LENGTH*Math.cos(deckAngle);
-const deckY=z=>LAUNCH.edgeHeight+Math.min(z,deckRun)*Math.tan(deckAngle);
 
 // Elliptical cross sections define the jaw, shoulders, waist and tapered limbs.
 function loft(rows) {
@@ -111,79 +107,6 @@ function person(profile){
   return {root,torso,head,arms,legs,...profile};
 }
 
-const axis=vec(), bend=vec(), joint=vec(), segment=vec();
-function reach(limb,from,to,pole){
-  axis.subVectors(to,from);const d=Math.max(.001,axis.length());axis.divideScalar(d);
-  const a=limb.length,b=limb.lowerLength;
-  const span=THREE.MathUtils.clamp(d,Math.abs(a-b)+.001,a+b-.0001);
-  const along=(a*a-b*b+span*span)/(2*span);
-  bend.copy(pole).addScaledVector(axis,-pole.dot(axis)).normalize();
-  joint.copy(from).addScaledVector(axis,along).addScaledVector(bend,Math.sqrt(Math.max(0,a*a-along*along)));
-  function bone(mesh,start,end,length){
-    segment.subVectors(end,start);mesh.position.copy(start);
-    mesh.scale.y=segment.length()/length;
-    mesh.quaternion.setFromUnitVectors(down,segment.normalize());
-  }
-  bone(limb.upper,from,joint,a);bone(limb.lower,joint,to,b);limb.end.position.copy(to);
-}
-
-export function createLaunchCrew(){
-  const group=new THREE.Group(), members=profiles.map(person);
-  group.name='プラットフォームのプッシャー';group.add(...members.map(p=>p.root));
-  let previousTime=-1,previousLaunch=null;
-  const start=vec(),target=vec(),pole=vec();
-  function update(launch,elapsed){
-    const time=Math.min(elapsed,launch.duration+1.1);
-    if(previousLaunch===launch && previousTime===time)return;
-    previousTime=time;previousLaunch=launch;
-    const cos=Math.cos(launch.heading),sin=Math.sin(launch.heading);
-    for(const p of members){
-      // At oblique headings the outside wing runner moves inboard onto the fan.
-      const lateral=p.side ? p.side*(3.12-1.65*Math.abs(sin)) : .29;
-      const aft=p.side?1.15:1.79;
-      const x0=cos*lateral-sin*aft, z0=deckRun+sin*lateral+cos*aft;
-      // The runners finish inside the curved lip (including shoe and stride clearance).
-      const safe=t=>{
-        const x=x0+t*launch.rightStep,z=z0-t*launch.forwardStep;
-        return Math.abs(x)<6.43 && Math.hypot(x,Math.max(0,deckRun-z)+.52)<9.87;
-      };
-      let stop=launch.pushed;
-      if(!safe(stop)){
-        let lo=0,hi=stop;
-        for(let i=0;i<12;i++){const m=(lo+hi)/2;if(safe(m))lo=m;else hi=m;}
-        stop=lo;
-      }
-      const releasedAt=Math.sqrt(2*stop/launch.acceleration);
-      const after=Math.max(0,time-releasedAt), relax=THREE.MathUtils.smoothstep(after,0,.59);
-      const travel=rampAt(launch,Math.min(time,releasedAt)).travel;
-      const x=x0+travel*launch.rightStep,z=z0-travel*launch.forwardStep;
-      p.root.position.set(x,deckY(z),z);p.root.rotation.y=-launch.heading;
-      const gait=p.phase+travel*Math.PI/1.10, run=Math.min(1,travel*2)*(1-relax);
-      const crouch=.12*relax, bounce=.034*Math.cos(2*gait)*run;
-      p.torso.position.set(0,.785+bounce-crouch,0);
-      p.torso.rotation.x=-.34-.18*run+.16*relax;
-      p.torso.rotation.z=.025*Math.sin(gait)*run;
-      p.torso.updateMatrix();
-      p.head.rotation.x=-p.torso.rotation.x*.65;
-      for(const leg of p.legs){
-        const s=leg.sign,cycle=Math.sin(gait)*s, swing=Math.cos(gait)*s;
-        start.set(s*.094,p.torso.position.y,0);
-        target.set(s*.105,.078+Math.max(0,swing)*.21*run,s*.125*(1-run)+cycle*.39*run);
-        target.y+=(target.z*cos+target.x*sin)*Math.tan(deckAngle);
-        reach(leg,start,target,pole.set(s*.035,0,-1));
-        leg.end.rotation.x=-.24*run*Math.max(0,swing);
-      }
-      for(const arm of p.arms){
-        const s=arm.sign;
-        start.set(s*.186,.45,0).applyMatrix4(p.torso.matrix);
-        const aircraftY=launch.edgeHeight+(RAMP_LENGTH-travel)*launch.dropStep+LAUNCH.deckClearance;
-        const gripX=p.side?s*.174:s*.08-lateral;
-        const gripY=aircraftY+(p.side?.535:.34)-p.root.position.y;
-        target.set(gripX,gripY,(p.side?.565:1.32)-aft+.056).divideScalar(p.scale);
-        target.lerp(segment.set(s*.22,.61,-.16),relax);
-        reach(arm,start,target,pole.set(s*.58,-.24,.82));
-      }
-    }
-  }
-  return {group,update};
+export function createCrewMembers() {
+  return profiles.map(person);
 }

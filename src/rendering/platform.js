@@ -1,15 +1,14 @@
 import * as THREE from 'three';
+import { RAMP_LENGTH } from '../domain/launch.js';
+import { deckHeight, deckRun } from './launch-deck.js';
 
 // Metres. The published launch run is 10 m down a 3.5° incline.
 // The layout behind it, fan width, deck framing and shore connection are estimates
 // from the JHF 2025 report (p. 11) and Nagoya AirCraft 2018 report (p. 5).
-const slope = Math.tan(THREE.MathUtils.degToRad(3.5));
-const run = 10 * Math.cos(THREE.MathUtils.degToRad(3.5));
 const halfAngle = THREE.MathUtils.degToRad(43);
-const radius = 10;
+const radius = RAMP_LENGTH;
 const halfWidth = radius * Math.sin(halfAngle);
 const rear = 16;
-const top = z => 10 + Math.min(z, run) * slope;
 
 // A tiling painted-panel finish. Dimensions and wear are visual approximations.
 function deckFinish() {
@@ -59,12 +58,12 @@ export function createPlatform({ shoreDistance = 100 } = {}) {
   function tube(a, b, diameter, color) {
     tubes.push({ a, b, diameter, color });
   }
-  function at(x, z, lift = 0) { return [x, top(z) + lift, z]; }
+  function at(x, z, lift = 0) { return [x, deckHeight(z) + lift, z]; }
   function panel(x0, x1, z0, z1, color, lift = 0) {
     quad(at(x0, z0, lift), at(x0, z1, lift), at(x1, z1, lift), at(x1, z0, lift), color);
   }
   function fanPoint(angle, r, lift = 0) {
-    const z = run * (1 - (r / radius) * Math.cos(angle));
+    const z = deckRun * (1 - (r / radius) * Math.cos(angle));
     return at(r * Math.sin(angle), z, lift);
   }
 
@@ -82,12 +81,12 @@ export function createPlatform({ shoreDistance = 100 } = {}) {
   }
   for (const sign of [-1, 1]) {
     const edge = sign * halfWidth;
-    triangle(at(0, run), at(edge, edgeZ), at(edge, run), blue);
+    triangle(at(0, deckRun), at(edge, edgeZ), at(edge, deckRun), blue);
     quad(at(edge, edgeZ), at(edge, rear), at(edge, rear, -0.18), at(edge, edgeZ, -0.18), '#3599a9');
   }
-  panel(-halfWidth, halfWidth, run, rear, blue);
+  panel(-halfWidth, halfWidth, deckRun, rear, blue);
   // The painted centre lane carries through from the staging deck into the fan.
-  panel(-0.7, 0.7, run, rear, yellow, 0.006);
+  panel(-0.7, 0.7, deckRun, rear, yellow, 0.006);
   for (const sign of [-1, 1]) {
     // Rear service galleries are lower than the launch surface. No rail
     // crosses the launch edge or the area swept by an aircraft at departure.
@@ -98,7 +97,7 @@ export function createPlatform({ shoreDistance = 100 } = {}) {
   }
 
   const rows = [0.95, 3.3, 6.25, 9.3, 12.35, 15.65];
-  const frameWidth = z => Math.min(halfWidth - 0.18, radius * Math.sqrt(1 - Math.max(0, 1 - z / run) ** 2) - 0.25);
+  const frameWidth = z => Math.min(halfWidth - 0.18, radius * Math.sqrt(1 - Math.max(0, 1 - z / deckRun) ** 2) - 0.25);
   for (let j = 0; j < rows.length; j++) {
     const z = rows[j], w = frameWidth(z);
     for (let i = 0; i <= 4; i++) {
@@ -132,7 +131,7 @@ export function createPlatform({ shoreDistance = 100 } = {}) {
   // and the 1.15 m shoreline elevation are reconstruction parameters.
   const bays = Math.ceil((shoreEnd - rear) / 4);
   const boardColors = ['#a49680', '#b5a68b', '#a89d89', '#c1ad90', '#b5a38d'];
-  const pierHeight = z => THREE.MathUtils.lerp(top(rear), 1.15, (z - rear) / (shoreEnd - rear));
+  const pierHeight = z => THREE.MathUtils.lerp(deckHeight(rear), 1.15, (z - rear) / (shoreEnd - rear));
   const pier = (x, z, dy = 0) => [x, pierHeight(z) + dy, z];
   const pierWidth = 4.2, boards = 18;
   for (let j = 0; j < bays; j++) {
