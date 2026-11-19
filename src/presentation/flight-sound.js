@@ -79,7 +79,10 @@ function mixer(context) {
     },
     surroundings(height, distance, speed, cockpit, boatRange, boatSpeed) {
       const throttle = clamp(boatSpeed / 8, 0, 1);
-      level(motor, (0.72 + 0.28 * throttle) / (1 + boatRange / 12));
+      // Follow the moving listener so boarding the chase boat swells into its close engine sound.
+      const proximity = 1 / (1 + boatRange / 12);
+      const engineGain = (0.72 + 0.28 * throttle) * proximity;
+      level(motor, engineGain * (1.35 + 1.05 * proximity));
       const rate = Math.round(88 + 14 * throttle) / 100;
       if (outboard && rate !== lastRate) {
         outboard.playbackRate.setTargetAtTime(rate, context.currentTime, .16);
