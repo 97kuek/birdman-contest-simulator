@@ -49,8 +49,21 @@ function sonarRange(s, onDeck, cp, sp, cb, upVertical) {
   return range <= SONAR_LIMIT ? Math.floor(range * 100 + 1e-9) / 100 : null;
 }
 
-export function readFlightInstruments(sample) {
+function instrumentAudio(silent, airspeed, range) {
+  const toneHz = silent ? 0 : airspeed < 9.5 ? 440 : airspeed < 10.8 ? 880 : 1320;
+  const intervalSeconds = range === null || range > 1.5 ? 0.9
+    : 0.125 + (0.9875 - 0.125) * Math.min(1, range);
+  return { toneHz, intervalSeconds };
+}
+
+export function readFlightInstruments(sample, aircraftId = 'ryukai') {
   const onDeck = sample.t === undefined;
+  const silent = onDeck || sample.bottomHeight <= 1e-8;
+  if (aircraftId === 'qx25') {
+    // No published QX-25 sensor calibration. Show simulated airspeed and lake clearance.
+    const altitude = Math.max(0, sample.bottomHeight);
+    return { airspeed: sample.speed, altitude, source: 'simulation', ...instrumentAudio(silent, sample.speed, altitude) };
+  }
   const cp = Math.cos(sample.pitch), sp = Math.sin(sample.pitch), cb = Math.cos(sample.bank ?? 0);
   const upVertical = cp * cb;
   const airspeed = pitotSpeed(sample, cp, sp);
@@ -62,11 +75,7 @@ export function readFlightInstruments(sample) {
     : Math.min(1, Math.max(0, (1.5 - ultrasonicRange) / 1.2));
   const altitude = Math.max(0, (1 - weight) * barometricAltitude + weight * (ultrasonicRange ?? 0));
   const source = weight === 0 ? 'pressure' : weight === 1 ? 'ultrasonic' : 'blended';
-  const silent = onDeck || sample.bottomHeight <= 1e-8;
   // Approximate decision boundaries from the 2025 log. The handoff supplies
   // pitch and interval, but does not give as-flown speed thresholds.
-  const toneHz = silent ? 0 : airspeed < 9.5 ? 440 : airspeed < 10.8 ? 880 : 1320;
-  const intervalSeconds = ultrasonicRange === null || ultrasonicRange > 1.5 ? 0.9
-    : 0.125 + (0.9875 - 0.125) * Math.min(1, ultrasonicRange);
-  return { airspeed, altitude, barometricAltitude, ultrasonicRange, source, toneHz, intervalSeconds };
+  return { airspeed, altitude, barometricAltitude, ultrasonicRange, source, ...instrumentAudio(silent, airspeed, ultrasonicRange) };
 }

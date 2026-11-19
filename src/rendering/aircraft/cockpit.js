@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { LAUNCH } from '../../domain/launch.js';
+import { pilotJumpLift, poseLaunchLegs } from './pilot-launch.js';
 import { limitBodyShift } from '../../domain/pilot-shift.js';
 import { addRigidAssembly, bentTube, box, ellipsoid, rod, shaded, surfacePatch } from './mesh-parts.js';
 
@@ -45,7 +47,12 @@ function addPilot(group,m){
   ellipsoid(body,[0,.285,-.820],[.013,.023,.017],m.skin,'nose-bridge');
   ellipsoid(body,[0,.274,-.835],[.017,.010,.010],m.skin,'nose');
   bentTube(body,[[-.021,.249,-.811],[0,.247,-.819],[.021,.249,-.811]],.0027,detail.lips,'mouth');
-  const arms=[];
+  const arms=[], legs=[];
+  const moving=new THREE.Group(), torso=new THREE.Group();
+  moving.name='pilot-weight-shift';
+  torso.name='pilot-torso';
+  moving.add(torso);
+  pilot.add(moving);
   const upperLength = .238, forearmLength = .200;
   // Follow the prone pilot silhouette along the pod, including the bent knees and shoes.
   ellipsoid(body,[0,.235,-.410],[.150,.091,.25],m.suit,'chest');
@@ -60,9 +67,18 @@ function addPilot(group,m){
   for(const s of [-1,1]){
     const at=(x,y,z)=>[s*x,y,z];
     bentTube(body,[at(.103,.30,-.57),at(.130,.304,-.40),at(.113,.279,-.22),at(.108,.260,-.11)],.007,detail.trim,'jersey-seam');
-    muscle(body,at(.065,.204,.08),at(.075,.173,.45),.072,.074,detail.pants,'thigh');
-    muscle(body,at(.075,.175,.45),at(.066,.286,.85),.050,.051,detail.pants,'calf');
-    muscle(body,at(.066,.286,.84),at(.064,.279,.99),.042,.044,detail.rubber,'shoe');
+    const hip=new THREE.Group(), knee=new THREE.Group(), shoe=new THREE.Group();
+    hip.name='pilot-hip'; knee.name='pilot-knee'; shoe.name='ankle';
+    hip.position.set(s*.065,.204,.08);
+    knee.position.set(s*.010,-.031,.37);
+    shoe.position.set(-s*.009,.113,.40);
+    moving.add(hip); hip.add(knee); knee.add(shoe);
+    muscle(hip,[0,0,0],knee.position.toArray(),.072,.074,detail.pants,'thigh');
+    muscle(knee,[0,.002,0],shoe.position.toArray(),.050,.051,detail.pants,'calf');
+    muscle(shoe,[0,0,-.010],[-s*.002,-.007,.14],.042,.044,detail.rubber,'shoe');
+    legs.push({hip,knee,shoe,side:s,thighLength:Math.hypot(.031,.37),calfLength:Math.hypot(.113,.40),
+      thighAxis:Math.atan2(.031,.37),calfAxis:Math.atan2(-.113,.40),standingHip:.150,
+      soleHeight:.04045,footAngle:-Math.PI,rest:{height:.204,hip:0,knee:0,shoe:0}});
     const shoulder = new THREE.Vector3(...at(.115,.246,-.46));
     const wrist = new THREE.Vector3(...at(.167,.210,-.788));
     const upper = ellipsoid(pilot, [0,0,0], [.044,.049,upperLength / 2 + .014], m.suit, 'upper-arm');
@@ -75,12 +91,11 @@ function addPilot(group,m){
     }
     muscle(grips,at(.159,.224,-.808),at(.164,.232,-.832),.009,.010,m.skin,'thumb');
   }
-  const moving=new THREE.Group();moving.name='pilot-weight-shift';
-  addRigidAssembly(moving,body);pilot.add(moving);
+  addRigidAssembly(torso,body);
   const eye = new THREE.Object3D();
   eye.name = 'pilot-eye';
   eye.position.set(0, .304, -.86);
-  moving.add(eye);
+  torso.add(eye);
 
   // A two-link arm changes elbow angle while both palms stay on their grips.
   const shoulderNow = new THREE.Vector3(), elbow = new THREE.Vector3();
@@ -90,10 +105,10 @@ function addPilot(group,m){
     part.position.copy(start).lerp(end, .5);
     part.quaternion.setFromUnitVectors(along, axis.subVectors(end, start).normalize());
   }
-  pilot.userData.setBodyOffset = metres => {
-    moving.position.z = limitBodyShift(metres);
+  function poseArms() {
+    torso.updateMatrix();
     for (const { shoulder, wrist, upper, forearm } of arms) {
-      shoulderNow.copy(shoulder);
+      shoulderNow.copy(shoulder).applyMatrix4(torso.matrix);
       shoulderNow.z += moving.position.z;
       reach.subVectors(wrist, shoulderNow);
       const distance = reach.length();
@@ -106,6 +121,18 @@ function addPilot(group,m){
       alignLimb(upper, shoulderNow, elbow);
       alignLimb(forearm, elbow, wrist);
     }
+  }
+  pilot.userData.setBodyOffset = metres => {
+    moving.position.z = limitBodyShift(metres);
+    poseArms();
+  };
+  // The Torica three-view shows the head and shoulders in the canopy during
+  // the run. The pilot lowers onto the chest support as the knees come aboard.
+  pilot.userData.poseLaunch = (sample, weight) => {
+    torso.rotation.x = .13 * weight;
+    torso.position.y = -.042 * weight + pilotJumpLift(weight);
+    poseLaunchLegs(legs, sample, weight, LAUNCH.deckClearance);
+    poseArms();
   };
   pilot.userData.setBodyOffset(0);
   addRigidAssembly(pilot,grips);group.add(pilot);

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { BASE_DESIGN } from '../domain/flight.js';
+import { pilotLaunchWeight } from './aircraft/pilot-launch.js';
 import { addWing } from './aircraft/wing.js';
 import { addPod } from './aircraft/pod.js';
 import { addStabilizer } from './aircraft/tail.js';
@@ -50,7 +51,13 @@ export function createAircraft(span = BASE_DESIGN.span, incidence = BASE_DESIGN.
   root.add(wing);
   const spanScale = span / BASE_DESIGN.span;
   for (const side of [-1, 1]) addWing(wing, side, spanScale, incidence, materials);
-  addPod(root, materials);
+  const poseDoors = addPod(root, materials);
+  const posePilot = root.getObjectByName('pilot').userData.poseLaunch;
+  root.userData.poseMechanisms = sample => {
+    const weight = pilotLaunchWeight(sample);
+    posePilot(sample, weight);
+    poseDoors(weight);
+  };
   rod(root, [0, 0.49, 1.04], [0, 0.54, 3.67], 0.043, materials.white, 'tail-boom');
   for (const z of [1.44, 2.68, 3.43]) {
     const y = THREE.MathUtils.lerp(0.49, 0.54, (z - 1.04) / 2.63);

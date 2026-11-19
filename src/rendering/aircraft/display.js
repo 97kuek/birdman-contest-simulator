@@ -5,7 +5,7 @@ const WIDTH = 600, HEIGHT = 300;
 const INK = '#172f33', PAPER = '#d7e3d7', SECONDARY = '#aec2b4';
 // A single LCD mounted inside the glider. The telemetry also describes the WebGL
 // canvas for readers that cannot see the texture.
-export function createCockpitDisplay(aircraft, { describe }) {
+export function createCockpitDisplay(aircraft, { describe, aircraftId }) {
   const canvas = document.createElement('canvas');
   canvas.width = WIDTH;
   canvas.height = HEIGHT;
@@ -32,7 +32,7 @@ export function createCockpitDisplay(aircraft, { describe }) {
   let sample, instruments, previous;
   function update(next) {
     sample = next;
-    instruments = readFlightInstruments(next);
+    instruments = readFlightInstruments(next, aircraftId);
     const onDeck = next.t === undefined;
     const speed = instruments.airspeed.toFixed(1), height = instruments.altitude.toFixed(1);
     const rudder = Math.round(next.rudderDeg ?? 0);

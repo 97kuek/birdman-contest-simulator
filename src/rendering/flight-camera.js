@@ -19,8 +19,12 @@ export function createFlightCamera({
   controls.zoomSpeed = 0.9;
   controls.panSpeed = 0.7;
 
-  const pilotEye = aircraft.getObjectByName('pilot-eye');
-  const displayMount = aircraft.getObjectByName('cockpit-display-mount');
+  let pilotEye, displayMount;
+  function setAircraft(model) {
+    pilotEye = model.getObjectByName('pilot-eye');
+    displayMount = model.getObjectByName('cockpit-display-mount');
+  }
+  setAircraft(aircraft);
   const eye = new THREE.Vector3(), focus = new THREE.Vector3(), panelBottom = new THREE.Vector3();
   const orientation = new THREE.Quaternion();
   const world = (x, y, z) => facility.localToWorld(new THREE.Vector3(x, y, z));
@@ -203,5 +207,5 @@ export function createFlightCamera({
     return Math.atan2((north.x - center.x) * camera.aspect, north.y - center.y);
   }
 
-  return { camera, view: () => mode, setView, setAspect, update, zoom, startLandingCamera, moveCamera, compassBearing };
+  return { camera, setAircraft, view: () => mode, setView, setAspect, update, zoom, startLandingCamera, moveCamera, compassBearing };
 }

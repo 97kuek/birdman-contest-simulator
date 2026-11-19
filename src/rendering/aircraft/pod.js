@@ -71,17 +71,23 @@ function addPodLivery(group, m) {
 }
 
 export function addPod(group, materials) {
+  let doors;
   for (const [start, end, material, name] of [
     [-1.45, -0.40, materials.glass, 'clear-nose'],
     [-0.40, 1.45, materials.white, 'pilot-pod'],
   ]) {
     const stations = [start, ...POD_SECTIONS.map(row => row[0]).filter(z => z > start && z < end), end];
-    const vertices = [], indices = [];
+    const vertices = [], indices = [], doorFaces = [];
     for (const [i, z] of stations.entries()) {
       for (let j = 0; j < 40; j++) {
         vertices.push(...podPoint(z, 2 * Math.PI * j / 40));
         const a = 40 * i + j, b = 40 * i + (j + 1) % 40;
-        if (i) indices.push(a - 40, b - 40, a, a, b - 40, b);
+        if (i) {
+          const legOpening = name === 'pilot-pod' && z > -.32 && z <= .72 && j >= 25 && j < 35;
+          const faces = [a - 40, b - 40, a, a, b - 40, b];
+          if (legOpening) doorFaces.push({side: j < 30 ? -1 : 1, faces});
+          else indices.push(...faces);
+        }
       }
     }
     const endRing = name === 'clear-nose' ? 0 : (stations.length - 1) * 40;
@@ -89,7 +95,33 @@ export function addPod(group, materials) {
       if (name === 'clear-nose') indices.push(endRing, endRing + j + 1, endRing + j);
       else indices.push(endRing, endRing + j, endRing + j + 1);
     }
-    const part = mesh(group, finishGeometry(vertices, indices), material, name);
+    // The three-view depicts an opening below the running pilot and a smooth
+    // closed belly in the glide. The split and rotation axes are inferred.
+    // Duplicate boundary vertices so the rest of the shell stays rigid.
+    const cosine = new Array(vertices.length).fill(0), sine = new Array(vertices.length).fill(0);
+    const copies = new Map();
+    for (const {side,faces} of doorFaces) {
+      for (const source of faces) {
+        const key = side * (source+1);
+        if (!copies.has(key)) {
+          copies.set(key,vertices.length/3);
+          const x=vertices[source*3], y=vertices[source*3+1], z=vertices[source*3+2];
+          const hinge = podPoint(z, (side < 0 ? 25 : 35)*Math.PI/20);
+          const dx=x-hinge[0], dy=y-hinge[1];
+          vertices.push(x,y,z);
+          cosine.push(-dx,-dy,0);
+          sine.push(-side*dy,side*dx,0);
+        }
+        indices.push(copies.get(key));
+      }
+    }
+    const geometry=finishGeometry(vertices, indices);
+    if (doorFaces.length) {
+      geometry.morphTargetsRelative=true;
+      geometry.morphAttributes.position=[cosine,sine].map(data=>new THREE.Float32BufferAttribute(data,3));
+    }
+    const part=mesh(group,geometry,material,name);
+    if (doorFaces.length) doors=part;
     if (name === 'clear-nose') {
       part.castShadow = false;
       part.renderOrder = 3;
@@ -107,4 +139,9 @@ export function addPod(group, materials) {
   lineSegments(group, trim, '#777f73', 0.55, 'canopy-seams');
   addCockpit(group, materials);
   addPodLivery(group, materials);
+  return weight=>{
+    const angle=1.42*THREE.MathUtils.smoothstep(weight,.02,.36);
+    doors.morphTargetInfluences[0]=1-Math.cos(angle);
+    doors.morphTargetInfluences[1]=Math.sin(angle);
+  };
 }

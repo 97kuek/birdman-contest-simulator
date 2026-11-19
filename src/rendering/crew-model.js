@@ -1,7 +1,11 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const cloth = '#4eacb6', navy = '#252d36', trim = '#dbefeb';
+const navy = '#252d36';
+const uniforms = {
+  ryukai: { cloth: '#4eacb6', hem: '#42949f', cuff: '#4598a4', trim: '#dbefeb' },
+  qx25: { cloth: '#efa522', hem: '#d58b23', cuff: '#de941c', trim: '#b6761c' },
+};
 const finish=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.88});
 const sphere=new THREE.SphereGeometry(1,16,12);
 
@@ -59,19 +63,24 @@ export function createCrewHead(skin, hair, ponytail = false) {
   });
 }
 
-function person(profile){
+function person(profile, team){
+  const { cloth, hem, cuff: sleeveEdge, trim } = uniforms[team];
   const {skin,hair,shoe,side}=profile;
   const root=new THREE.Group();root.name='プッシャー・'+profile.name;
   const torso=assembly((part,oval)=>{
     part(bodyLoft([[-.09,.145,.108],[0,.168,.117],[.13,.143,.104],[.30,.173,.119],[.43,.205,.117],[.49,.178,.095],[.52,.085,.073]]),cloth);
-    oval('#42949f',0,-.065,.004,.153,.022,.112);
+    oval(hem,0,-.065,.004,.153,.022,.112);
     oval(trim,0,.501,-.012,.083,.018,.076);
     oval(skin,0,.542,-.009,.062,.083,.057);
-    // A back print with a pale disc and a split wing motif, as seen from the gantry.
-    oval(trim,0,.305,.114,.097,.098,.008);
-    for(const s of [-1,1])oval('#267d8c',s*.037,.317,.123,.048,.012,.004,s*.34);
-    oval('#237886',0,.282,.124,.009,.038,.005,-.24);
-    oval(trim,-.085,.385,-.108,.029,.024,.007);
+    if (team === 'ryukai') {
+      oval(trim,0,.305,.114,.097,.098,.008);
+      for(const s of [-1,1])oval('#267d8c',s*.037,.317,.123,.048,.012,.004,s*.34);
+      oval('#237886',0,.282,.124,.009,.038,.005,-.24);
+      oval(trim,-.085,.385,-.108,.029,.024,.007);
+    } else {
+      // Small chest print on the gold team shirts in the university's 2025 group photo.
+      oval('#4b3a2e',-.085,.385,-.108,.022,.014,.006);
+    }
   });
   const head=createCrewHead(skin, hair, side===1);
   head.position.set(0,.665,-.02);torso.add(head);root.add(torso);
@@ -83,7 +92,7 @@ function person(profile){
       oval(arm?cloth:navy,0,0,0,r,r,r);
       const cuff=arm?.15:.27, width=arm?.077:.105;
       part(bodyLoft([[-cuff,width,width*.95],[-cuff+.018,width*1.03,width],[-.035,width*1.06,width],[0,width*.85,width*.9]]),arm?cloth:'#303c48');
-      oval(arm?'#4598a4':'#25313b',0,-cuff+.005,0,width*1.02,.010,width*.98);
+      oval(arm?sleeveEdge:'#25313b',0,-cuff+.005,0,width*1.02,.010,width*.98);
     });
     const lower=assembly((part,oval)=>{
       const r=arm?.045:.059;
@@ -111,6 +120,6 @@ function person(profile){
   return {root,torso,head,arms,legs,...profile};
 }
 
-export function createCrewMembers() {
-  return profiles.map(person);
+export function createCrewMembers(team = 'ryukai') {
+  return profiles.map(profile => person(profile, team));
 }

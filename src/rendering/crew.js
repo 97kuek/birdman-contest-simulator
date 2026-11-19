@@ -49,13 +49,22 @@ function runnerReleaseTime(launch, startX, startZ) {
   return Math.sqrt(2 * stop / launch.acceleration);
 }
 
-export function createLaunchCrew() {
+export function createLaunchCrew(team = 'ryukai') {
   const group = new THREE.Group();
-  const members = createCrewMembers();
+  const members = createCrewMembers(team);
   group.name = 'プラットフォームのプッシャー';
   group.add(...members.map(member => member.root));
   let previousTime = -1, previousLaunch = null;
   const start = new THREE.Vector3(), target = new THREE.Vector3(), pole = new THREE.Vector3();
+
+  // QX-25's pilot describes helpers at the fuselage. Torica has two wing runners.
+  const fuselageCrew = team === 'qx25';
+  const sideStation = fuselageCrew
+    ? { lateral: .58, aft: 1.31, y: .38, z: .93 }
+    : { lateral: 3.12, aft: 1.15, y: .535, z: .565 };
+  const rearStation = fuselageCrew
+    ? { lateral: .18, aft: 1.96, y: .43, z: 1.43 }
+    : { lateral: .29, aft: 1.79, y: .34, z: 1.32 };
 
   function update(launch, elapsed, onFootfall) {
     const time = Math.min(elapsed, launch.duration + 1.1);
@@ -65,8 +74,10 @@ export function createLaunchCrew() {
     const cos = Math.cos(launch.heading), sin = Math.sin(launch.heading);
     for (const member of members) {
       // At oblique headings the outside wing runner moves inboard onto the fan.
-      const lateral = member.side ? member.side * (3.12 - 1.65 * Math.abs(sin)) : 0.29;
-      const aft = member.side ? 1.15 : 1.79;
+      const station = member.side ? sideStation : rearStation;
+      const inboard = member.side && !fuselageCrew ? 1.65 * Math.abs(sin) : 0;
+      const lateral = (member.side || 1) * (station.lateral - inboard);
+      const aft = station.aft;
       const startX = cos * lateral - sin * aft;
       const startZ = deckRun + sin * lateral + cos * aft;
       const releasedAt = runnerReleaseTime(launch, startX, startZ);
@@ -103,13 +114,15 @@ export function createLaunchCrew() {
         leg.end.rotation.x = -0.24 * run * Math.max(0, swing);
       }
 
-      const aircraftY = launch.edgeHeight + (RAMP_LENGTH - travel) * launch.dropStep + LAUNCH.deckClearance;
-      const gripY = aircraftY + (member.side ? 0.535 : 0.34) - member.root.position.y;
+      const aircraftY = launch.edgeHeight + (RAMP_LENGTH - travel) * launch.dropStep + (launch.deckClearance ?? LAUNCH.deckClearance);
+      const gripY = aircraftY + station.y - member.root.position.y;
       for (const arm of member.arms) {
         const { sign } = arm;
         start.set(sign * 0.186, 0.45, 0).applyMatrix4(member.torso.matrix);
-        const gripX = member.side ? sign * 0.174 : sign * 0.08 - lateral;
-        target.set(gripX, gripY, (member.side ? 0.565 : 1.32) - aft + 0.056).divideScalar(member.scale);
+        const gripX = member.side
+          ? (fuselageCrew ? member.side * .23 - lateral + sign * .065 : sign * .174)
+          : sign * .08 - lateral;
+        target.set(gripX, gripY, station.z - aft + 0.056).divideScalar(member.scale);
         target.lerp(segment.set(sign * 0.22, 0.61, -0.16), relax);
         reach(arm, start, target, pole.set(sign * 0.58, -0.24, 0.82));
       }

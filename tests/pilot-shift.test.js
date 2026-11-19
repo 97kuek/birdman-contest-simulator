@@ -66,7 +66,7 @@ test('9姿勢で身体と目がポッド内に収まり、機首の計器まで�
   const initialGrip = grip.matrixWorld.clone();
   for (let i = -4; i <= 4; i++) {
     const displacement = i * PILOT_SHIFT.maxBodyTravel / 4;
-    position.pose({ heading: 0, pitch: 0, right: 0, forward: 0, height: .45, shift: cgShiftFromBody(displacement) });
+    position.pose({ t: 2, heading: 0, pitch: 0, right: 0, forward: 0, height: .45, shift: cgShiftFromBody(displacement) });
     base.updateMatrixWorld(true);
     close(body.position.z, displacement);
     close(eye.getWorldPosition(point).z, -.86 + displacement);
