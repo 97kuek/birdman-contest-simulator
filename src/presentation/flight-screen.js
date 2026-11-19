@@ -55,7 +55,6 @@ export function setupTrials({
     document.body.dataset.stage = screen;
     $('flight-settings').hidden = name !== 'setup';
     $('comparison').hidden = name !== 'result';
-    $('disqualification').hidden = name !== 'disqualified';
     $('replay-panel').hidden = name !== 'replay';
     $('align-panel').hidden = name !== 'align';
     $('launch-call').hidden = name !== 'countdown';
@@ -127,11 +126,10 @@ export function setupTrials({
 
   function showResult(record) {
     resultRecord = record;
-    showRecordBoard(record.run, records.forRun(record.run));
-    const share = new URL('https://twitter.com/intent/tweet');
-    share.searchParams.set('text', '竜海で ' + record.run.distance.toFixed(2) + ' m 飛びました！ #鳥人間コンテストシミュレーター');
-    share.searchParams.set('url', 'https://97kuek.github.io/birdman-contest-simulator/');
-    $('share-result').href = share.href;
+    announceResult({ kind: 'scored', run: record.run, score: records.forRun(record.run) });
+  }
+  function announceResult(outcome) {
+    showRecordBoard(outcome);
     stage('result');
     $('result-heading').focus({ preventScroll: true });
   }
@@ -171,11 +169,8 @@ export function setupTrials({
     showResult(previous);
     setView('boat');
   };
-  $('retry-disqualified').onclick = aim;
-  $('return-disqualified').onclick = prepare;
-  $('retry').onclick = () => {
-    aim();
-  };
+  $('return-to-setup').onclick = prepare;
+  $('retry').onclick = aim;
   function aim() {
     clearRuling();
     resultRecord = null;
@@ -263,8 +258,7 @@ export function setupTrials({
     }
     if (elapsed < RULING_REVEAL_MS) return;
     captions.clear();
-    stage('disqualified');
-    $('disqualification-heading').focus({ preventScroll: true });
+    announceResult({ kind: 'disqualified' });
   }
   function tick(now) {
     if (screen === 'ruling') {

@@ -1,7 +1,7 @@
 import { byId } from './dom.js';
 
 const PREFS_KEY = 'ryukai.sound.v1';
-const AUDIBLE_PHASES = new Set(['align', 'countdown', 'run', 'glide', 'landing', 'result', 'ruling', 'disqualified']);
+const AUDIBLE_PHASES = new Set(['align', 'countdown', 'run', 'glide', 'landing', 'result', 'ruling']);
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 function mixer(context) {

@@ -63,17 +63,12 @@
     </section>
     <section id="comparison" role="dialog" aria-labelledby="result-heading" hidden>
       <div class="record-board" id="record-board">
-        <h2 id="result-heading" tabindex="-1" aria-describedby="result-score record-official record-personal">ただ今の記録</h2>
-        <p class="flight-score" id="result-score"><b id="result-distance"></b><span>m</span></p>
+        <h2 id="result-heading" tabindex="-1" aria-describedby="result-score record-official record-detail">ただ今の記録</h2>
+        <p class="flight-score" id="result-score"><b id="result-value"></b><span id="result-unit">m</span></p>
         <p id="record-official" hidden></p>
-        <p id="record-personal"></p>
+        <p id="record-detail"></p>
       </div>
-      <div class="result-actions"><button class="primary" id="retry">再挑戦</button><button id="result-replay">リプレイ</button><a id="share-result" target="_blank" rel="noopener noreferrer" aria-label="飛行記録をXで共有（新しいタブ）">Xで共有 ↗</a></div>
-    </section>
-    <section id="disqualification" role="dialog" aria-labelledby="disqualification-heading" aria-describedby="disqualification-reason" hidden>
-      <h2 id="disqualification-heading" tabindex="-1"><span>飛行禁止区域侵入</span>失格</h2>
-      <p id="disqualification-reason">陸地上空に入ったため、記録なし</p>
-      <div><button class="primary" id="retry-disqualified">再挑戦</button><button id="return-disqualified">準備に戻る</button></div>
+      <div class="result-actions"><button class="primary" id="retry">再挑戦</button><button id="return-to-setup" hidden>準備に戻る</button><button id="result-replay">リプレイ</button><a id="share-result" target="_blank" rel="noopener noreferrer" aria-label="飛行記録をXで共有（新しいタブ）">Xで共有 ↗</a></div>
     </section>
     <section id="replay-panel" hidden aria-label="操縦リプレイ">
       <div class="replay-transport">

@@ -62,8 +62,8 @@ test('ストレージ取得・読込・書込の失敗や不正な保存値が�
 
 test('再挑戦と履歴表示で、記録板の強調と公式記録の説明を切り替える', t => {
   const elements = Object.fromEntries(
-    ['result-heading', 'result-distance', 'record-personal', 'record-official', 'record-board']
-      .map(key => [key, { dataset: {} }]),
+    ['result-heading', 'result-value', 'result-unit', 'result-replay', 'share-result', 'return-to-setup', 'record-detail', 'record-official', 'record-board']
+      .map(key => [key, { dataset: {}, removeAttribute(key) { delete this[key]; } }]),
   );
   const prev = Object.getOwnPropertyDescriptor(globalThis, 'document');
   Object.defineProperty(globalThis, 'document', { configurable: true, value: { getElementById: id => elements[id] } });
@@ -73,16 +73,25 @@ test('再挑戦と履歴表示で、記録板の強調と公式記録の説明�
   });
   const records = new FlightRecords(savedRecords);
   const high = run(651.2), below = run(300);
-  showRecordBoard(high, records.record(high));
+  showRecordBoard({ kind: 'scored', run: high, score: records.record(high) });
   assert.equal(elements['record-board'].dataset.highlight, 'allTime');
   assert.match(elements['record-official'].textContent, /645.15 m/);
-  assert.match(elements['record-personal'].textContent, /初記録/);
-  showRecordBoard(below, records.record(below));
+  assert.match(elements['record-detail'].textContent, /初記録/);
+  showRecordBoard({ kind: 'scored', run: below, score: records.record(below) });
   assert.equal(elements['record-board'].dataset.highlight, '');
   assert.equal(elements['record-official'].hidden, true);
   assert.equal(elements['record-official'].textContent, '');
-  assert.match(elements['record-personal'].textContent, /651.20 m/);
-  showRecordBoard(high, records.forRun(high));
+  assert.match(elements['record-detail'].textContent, /651.20 m/);
+  showRecordBoard({ kind: 'disqualified' });
+  assert.equal(elements['result-value'].textContent, '失格');
+  assert.equal(elements['result-heading'].textContent, 'ただ今の記録');
+  assert.equal(elements['record-board'].dataset.highlight, '');
+  assert.equal(elements['record-detail'].textContent, '飛行禁止区域侵入');
+  assert.equal(elements['share-result'].href, undefined);
+  assert.equal(elements['result-unit'].hidden, true);
+  showRecordBoard({ kind: 'scored', run: high, score: records.forRun(high) });
+  assert.equal(elements['result-unit'].hidden, false);
+  assert.equal(elements['result-replay'].hidden, false);
   assert.equal(elements['record-official'].hidden, false);
-  assert.equal(elements['result-distance'].textContent, '651.20');
+  assert.equal(elements['result-value'].textContent, '651.20');
 });
