@@ -3,6 +3,7 @@ import { LAUNCH } from './launch.js';
 import { bodyShiftFromCg, cgShiftFromBody, limitBodyShift, PILOT_SHIFT } from './pilot-shift.js';
 import { courseAt } from './race2025.js';
 import { GRAVITY, RADIANS_PER_DEGREE } from './units.js';
+import { solveWingStructure, wingBendShape } from './wing-structure.js';
 import { WEATHER, WIND_RISE_METRES, windAt } from './weather.js';
 
 export { BASE_DESIGN, RUDDER_LIMIT_DEG } from './aircraft-profiles.js';
@@ -42,6 +43,7 @@ export function releaseState(launch, release, pilot, profile = aircraftProfile()
     pathLength: 0, height: launch.edgeHeight + CG_HEIGHT + profile.deckClearance,
     u: launch.speed * Math.cos(flightPath), w: launch.speed * Math.sin(flightPath),
     pitch, elevatorDeg: 0, q: release ? profile.releasePitchRateDeg * RADIANS_PER_DEGREE : 0, bodyShift: pilot ? bodyShiftFromCg(profile.releaseCgShift, profile) : 0,
+    leftTip: 0, rightTip: 0, leftTipRate: 0, rightTipRate: 0,
     bank: 0, heading: launch.heading, right: 0, forward: 0, v: 0, p: 0, r: 0,
   };
 }
@@ -140,46 +142,87 @@ export function aircraftDynamics(design, launch, options) {
     const speed = Math.hypot(airU, airW, airV);
     const cp = Math.cos(pitch), sp = Math.sin(pitch), cb = Math.cos(bank), sb = Math.sin(bank);
     const down = sp * airU - cp * airW;
-    const beta = Math.atan((cb * airV + sb * down) / speed) / RADIANS_PER_DEGREE;
+    const beta = Math.atan2(cb * airV + sb * down, speed) / RADIANS_PER_DEGREE;
     const alpha = referenceControl ? pitch - Math.atan2(airW, airU) : Math.atan2(cb * down - sb * airV, cp * airU + sp * airW);
     return { speed, alpha, beta, airU, airW, cp, sp, cb, sb, headwind, updraft: wind.updraft };
   }
 
-  function rates(state, time, pilotInput, turnInput) {
+  // One bending mode per half-wing, sampled at its lift centroid.
+  const bendAtLoadCentre = wingBendShape(profile.design.aircraftId ?? 'ryukai', 4 / (3 * Math.PI));
+  const referenceHalfLift = .25 * airDensity * profile.cruiseSpeed ** 2 * profile.area * wingCL0;
+  const rigidWing = options.rigidWing ?? false;
+
+  function wingLoads(state, time, air) {
+    const { height, heading } = state;
+    const { speed, alpha, cp, sp, cb, sb } = air;
+    const wingHeight = height + wingMountHeight - CG_HEIGHT;
+    const wingAngle = wingCL0 / wingSlope + alpha + (incidence - profile.design.incidence) * RADIANS_PER_DEGREE;
+    const centre = resolveWingGust ? location(state) : null;
+    const ch = Math.cos(heading), sh = Math.sin(heading);
+    const wingRight = ch * cb + sh * sp * sb, wingForward = -sh * cb + ch * sp * sb;
+
+    function halfLoad(arm, tip, tipRate) {
+      const bend = rigidWing ? 0 : bendAtLoadCentre * tip;
+      const localHeight = wingHeight - arm * cp * sb + bend * cp * cb;
+      const local = centre ? airflow(state, time, {
+        right: centre.right + arm * wingRight + bend * (ch * sb - sh * sp * cb),
+        forward: centre.forward + arm * wingForward - bend * (sh * sb + ch * sp * cb),
+        height: localHeight,
+      }) : air;
+      // The right wing moves down during positive roll. Upward elastic motion
+      // opposes that incidence change. Both act on the load carried by the spar.
+      const baseAngle = wingAngle + local.alpha - alpha;
+      const rollAngle = rigidWing ? 0 : Math.atan2(state.p * arm, local.speed);
+      const angle = baseAngle + rollAngle
+        - (rigidWing ? 0 : Math.atan2(bendAtLoadCentre * tipRate, local.speed));
+      const pressureArea = .25 * airDensity * local.speed ** 2 * area;
+      const cl = liftCoefficient(angle, wingSlope, profile.maxLiftCoefficient);
+      const rigidRollLift = rollAngle === 0 ? 0 : pressureArea
+        * (liftCoefficient(baseAngle + rollAngle, wingSlope, profile.maxLiftCoefficient)
+          - liftCoefficient(baseAngle, wingSlope, profile.maxLiftCoefficient));
+      return { lift: pressureArea * cl, rigidRollLift,
+        slope: Math.abs(angle * wingSlope) < profile.maxLiftCoefficient ? pressureArea * wingSlope : 0,
+        ground: groundEffectFactor(localHeight, effectiveSpan) };
+    }
+    const left = halfLoad(-halfWingArm, state.leftTip, state.leftTipRate);
+    const right = halfLoad(halfWingArm, state.rightTip, state.rightTipRate);
+    const structure = rigidWing ? null : solveWingStructure(profile, span, {
+      leftLift: left.lift, rightLift: right.lift, leftLiftSlope: left.slope, rightLiftSlope: right.slope, referenceHalfLift,
+      leftTip: state.leftTip, rightTip: state.rightTip, leftTipRate: state.leftTipRate, rightTipRate: state.rightTipRate,
+    });
+    const leftForce = structure?.leftLift ?? left.lift;
+    const rightForce = structure?.rightLift ?? right.lift;
+    const groundFactor = rigidWing ? groundEffectFactor(wingHeight, effectiveSpan) : (left.ground + right.ground) / 2;
+    // The trainer's Cl_p already supplies the rigid roll-rate moment. Remove
+    // its strip estimate with the same geometric arm as the structural solve.
+    const rigidRollMoment = (left.rigidRollLift - right.rigidRollLift) * span * 2 / (3 * Math.PI);
+    const roll = structure ? structure.rollMoment - rigidRollMoment : (leftForce - rightForce) * halfWingArm;
+    return { structure, wingLift: leftForce + rightForce, gustRoll: roll * Math.cos(alpha), groundFactor, wingAngle };
+  }
+
+  function loadsAt(state, time) {
+    const air = airflow(state, time);
+    return { air, ...wingLoads(state, time, air) };
+  }
+
+  function rates(state, time, pilotInput, turnInput, loads = loadsAt(state, time)) {
     // u, v are horizontal ground velocities along/across heading, w is vertical up.
     // p, q, r are body roll, pitch and yaw rates in radians per second.
-    const { height, u, w, q, bodyShift, heading, v, p, r } = state;
-    const { speed, alpha, beta, airU, airW, cp, sp, cb, sb } = airflow(state, time);
+    const { u, w, q, bodyShift, heading, v, p, r } = state;
+    const { speed, alpha, beta, airU, airW, cp, sp, cb, sb } = loads.air;
+    const { wingLift, gustRoll, groundFactor, wingAngle, structure } = loads;
     const pressure = 0.5 * airDensity * speed ** 2;
-    const wingHeight = Math.max(0, height + wingMountHeight - CG_HEIGHT);
-    const groundFactor = groundEffectFactor(wingHeight, effectiveSpan);
-    const wingAngle = wingCL0 / wingSlope + alpha + (incidence - profile.design.incidence) * RADIANS_PER_DEGREE;
-    const cl = liftCoefficient(wingAngle, wingSlope, profile.maxLiftCoefficient);
+    const cl = rigidWing ? liftCoefficient(wingAngle, wingSlope, profile.maxLiftCoefficient) : wingLift / (pressure * area);
     const downwash = (wingCL0 - groundFactor * cl) / (Math.PI * efficiency * aspectRatio);
-    // Positive input moves the pilot aft and raises the elevator trailing edge.
-    // Less upward tail force about the CG produces a nose-up moment.
     const elevatorAngle = state.elevatorDeg * RADIANS_PER_DEGREE;
     const tailAngle = tailCL0 / tailSlope + alpha + downwash + q * tailArm / speed
       - elevatorAngle * profile.elevatorEffectiveness;
     const tailCL = liftCoefficient(tailAngle, tailSlope, profile.maxLiftCoefficient);
-    let wingLift = pressure * area * cl, gustRoll = 0;
-    if (resolveWingGust) {
-      const center = location(state);
-      // Project the lateral wing axis using the same heading/pitch/bank as the rendered model.
-      const ch = Math.cos(heading), sh = Math.sin(heading);
-      const wingRight = ch * cb + sh * sp * sb, wingForward = -sh * cb + ch * sp * sb;
-      const halfLift = arm => {
-        const air = airflow(state, time, {
-          right: center.right + arm * wingRight, forward: center.forward + arm * wingForward,
-          height: wingHeight - arm * cp * sb, heading,
-        });
-        const localCL = liftCoefficient(wingAngle + air.alpha - alpha, wingSlope, profile.maxLiftCoefficient);
-        return .25 * airDensity * air.speed ** 2 * area * localCL;
-      };
-      const left = halfLift(-halfWingArm), right = halfLift(halfWingArm);
-      wingLift = left + right;
-      gustRoll = (left - right) * halfWingArm * Math.cos(alpha);
-    }
+    const bendRates = {
+      leftTip: state.leftTipRate, rightTip: state.rightTipRate,
+      leftTipRate: structure?.leftTipAcceleration ?? 0,
+      rightTipRate: structure?.rightTipAcceleration ?? 0,
+    };
     const tailLift = pressure * tailArea * tailCL;
     const lift = wingLift + tailLift;
     const wingStall = Math.max(0, Math.abs(wingAngle) - profile.maxLiftCoefficient / wingSlope);
@@ -194,29 +237,29 @@ export function aircraftDynamics(design, launch, options) {
       // Pressure uses the complete airspeed. Lift and drag rotate in the pitch plane.
       const pitchPlaneSpeed = Math.hypot(airU, airW);
       return {
-        pathLength: u, height: w, u: (-drag * airU - lift * airW) / (pitchPlaneSpeed * profile.mass),
+        ...bendRates, pathLength: u, height: w, u: (-drag * airU - lift * airW) / (pitchPlaneSpeed * profile.mass),
         w: (lift * airU - drag * airW) / (pitchPlaneSpeed * profile.mass) - GRAVITY, pitch: q, q: moment / pitchInertia,
         bodyShift: shiftRate, bank: 0, heading: 0, right: u * launchSin, forward: u * launchCos, v: 0, p: 0, r: 0,
       };
     }
 
-    const loads = lateralLoads(beta, turnInput * profile.rudderLimitDeg, p, r, speed, effectiveSpan, pressure * area, rudderScales);
+    const lateral = lateralLoads(beta, turnInput * profile.rudderLimitDeg, p, r, speed, effectiveSpan, pressure * area, rudderScales);
     const axial = lift * Math.sin(alpha) - drag * Math.cos(alpha);
     const normal = -lift * Math.cos(alpha) - drag * Math.sin(alpha);
-    const down = loads.side * sb + normal * cb;
+    const down = lateral.side * sb + normal * cb;
     const forwardForce = axial * cp + down * sp, upForce = axial * sp - down * cp;
-    const rightForce = loads.side * cb - normal * sb;
+    const rightForce = lateral.side * cb - normal * sb;
     const headingRate = (q * sb + r * cb) / cp;
     const sh = Math.sin(heading), ch = Math.cos(heading);
     return {
-      pathLength: Math.hypot(u, v), height: w,
+      ...bendRates, pathLength: Math.hypot(u, v), height: w,
       u: forwardForce / profile.mass + headingRate * v, w: upForce / profile.mass - GRAVITY,
       pitch: q * cb - r * sb, q: (moment + (yawInertia - rollInertia) * r * p) / pitchInertia,
       bodyShift: shiftRate, bank: p + headingRate * sp, heading: headingRate,
       right: u * sh + v * ch, forward: u * ch - v * sh, v: rightForce / profile.mass - headingRate * u,
-      p: (loads.roll + gustRoll + (pitchInertia - yawInertia) * q * r) / rollInertia,
-      r: (loads.yaw + (rollInertia - pitchInertia) * p * q) / yawInertia,
+      p: (lateral.roll + gustRoll + (pitchInertia - yawInertia) * q * r) / rollInertia,
+      r: (lateral.yaw + (rollInertia - pitchInertia) * p * q) / yawInertia,
     };
   }
-  return { airflow, rates, location };
+  return { airflow, rates, location, loadsAt };
 }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { rigHalfWing } from './wing-flex.js';
 import { BASE_DESIGN } from '../../domain/flight.js';
 import { RADIANS_PER_DEGREE } from '../../domain/units.js';
 import { addRigidAssembly, finishGeometry, lineSegments, mesh, surfacePatch } from './mesh-parts.js';
@@ -104,7 +105,9 @@ function buildWingStructure(group, stations, side, scale, incidence, label, mate
   mesh(group, finishGeometry(tip, faces, paint), materials.endPaint, label + '-spar-end');
 }
 
-export function addWing(group, side, scale, incidence, materials) {
+export function addWing(parent, side, scale, incidence, materials) {
+  const group = new THREE.Group();
+  parent.add(group);
   const vertices = [], colors = [], leading = [], trailing = [], seams = [];
   const sections = new Set([0, 4.5, 8.5, HALF_SPAN, ...CHORD_STATIONS.map(([x]) => x)]);
   for (let halfBay = 1; halfBay * RIB_PITCH / 2 < HALF_SPAN; halfBay++) {
@@ -177,4 +180,9 @@ export function addWing(group, side, scale, incidence, materials) {
   buildWingStructure(group, stations.filter(station => station === HALF_SPAN ||
     distanceFromRib(station) < 0.001 ||
     CHORD_STATIONS.some(([x]) => x === station) || station === 8.5), side, scale, incidence, label, materials);
+  return rigHalfWing(group, side, 'ryukai', scale * HALF_SPAN, scale * .60, station => {
+    const top = wingPoint(station / scale, .35, true, side, scale, incidence);
+    const bottom = wingPoint(station / scale, .35, false, side, scale, incidence);
+    return top.map((v, i) => (v + bottom[i]) / 2);
+  });
 }

@@ -245,17 +245,18 @@ export function setupTrials({
     captions.show(commentary.landing(run), 3200);
     landing = { record, start: performance.now(), boatAt: null };
   }
-  function disqualify(sample, now) {
+  function stopAttempt(sample, now, reason) {
     const { trail } = active.record;
     trail.extend([...active.attempt.samples, sample]);
-    ruling = { trail, samples: active.attempt.samples, stopTime: sample.t, start: now, cameraMoved: false };
+    ruling = { outcome: { kind: reason, side: sample.wing?.failedSide }, trail, samples: active.attempt.samples, stopTime: sample.t, start: now, cameraMoved: false };
     active = null;
     atWater = false;
     clearInput();
     captions.clear();
     aircraftPose.pose(sample);
     stage('ruling');
-    captions.show('ああ、飛行禁止区域に入った！', RULING_REVEAL_MS);
+    const side = { left: '左の主翼', right: '右の主翼', both: '両翼' }[sample.wing?.failedSide];
+    captions.show(reason === 'structural-failure' ? side + 'が折れた！' : 'ああ、飛行禁止区域に入った！', RULING_REVEAL_MS);
   }
   function showRuling(now) {
     const elapsed = now - ruling.start;
@@ -265,7 +266,7 @@ export function setupTrials({
     }
     if (elapsed < RULING_REVEAL_MS) return;
     captions.clear();
-    announceResult({ kind: 'disqualified' });
+    announceResult(ruling.outcome);
   }
   function tick(now) {
     if (screen === 'ruling') {
@@ -316,8 +317,8 @@ export function setupTrials({
     const { record, attempt } = active;
     $('launch-call').hidden = active.clock >= GO_CAPTION_SECONDS;
     const frame = attempt.advance(active.clock, pilotInput(), pilotInput(2));
-    if (frame.phase === 'disqualified') {
-      disqualify(frame.sample, now);
+    if (frame.phase === 'disqualified' || frame.phase === 'structural-failure') {
+      stopAttempt(frame.sample, now, frame.phase);
       return;
     }
     if (frame.phase === 'touchdown') {

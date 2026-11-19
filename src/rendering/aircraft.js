@@ -50,10 +50,11 @@ export function createAircraft(span = BASE_DESIGN.span, incidence = BASE_DESIGN.
   wing.name = 'main-wing';
   root.add(wing);
   const spanScale = span / BASE_DESIGN.span;
-  for (const side of [-1, 1]) addWing(wing, side, spanScale, incidence, materials);
+  const poseWings = [-1, 1].map(side => addWing(wing, side, spanScale, incidence, materials));
   const poseDoors = addPod(root, materials);
   const posePilot = root.getObjectByName('pilot').userData.poseLaunch;
   root.userData.poseMechanisms = sample => {
+    for (const poseWing of poseWings) poseWing(sample);
     const weight = pilotLaunchWeight(sample);
     posePilot(sample, weight);
     poseDoors(weight);

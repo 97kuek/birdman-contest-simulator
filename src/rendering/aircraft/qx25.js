@@ -171,7 +171,7 @@ export function createQx25Aircraft() {
     const onDeck=sample.t===undefined;
     elevator.rotation.x=-THREE.MathUtils.degToRad(sample.elevatorDeg??0);
     poseLegs(onDeck?1:1-THREE.MathUtils.smoothstep(sample.t,.04,.50));
-    flexWing(onDeck?1:1-THREE.MathUtils.smoothstep(sample.t,0,1.6));
+    flexWing(sample);
     posePilot(sample,pilotLaunchWeight(sample));
   };
   root.userData.poseMechanisms({t:2});

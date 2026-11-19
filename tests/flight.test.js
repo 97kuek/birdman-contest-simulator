@@ -11,16 +11,20 @@ import {openingTrace} from '../src/application/opening-trace.js';
 import {modelHull} from '../src/rendering/collision-hull.js';
 import {WEATHER, windAt} from '../src/domain/weather.js';
 
-function calculate(design) {
+function calculate(design, options) {
   const hull=modelHull(createAircraft(design.span,design.incidence));
-  return {hull,run:simulateFlight(design,hull)};
+  return {hull,run:simulateFlight(design,hull,options)};
 }
 test('Identical launches are deterministic, with independent effects from span and incidence',()=>{
   const {hull,run}=calculate(BASE_DESIGN);
   assert.deepEqual(run,simulateFlight(BASE_DESIGN,hull));
   for(const design of [{span:30,incidence:3.2},{span:25.1,incidence:6}]){
     const other=calculate(design).run;
-    assert.deepEqual(other.samples[0],run.samples[0]);
+    // Identical rigid-body release conditions; a different wing already carries
+    // a different load during the push and has different tip displacement.
+    for (const key of ['t', 'height', 'speed', 'pitch', 'groundSpeed', 'heading']) {
+      assert.equal(other.samples[0][key], run.samples[0][key]);
+    }
     assert.ok(Math.abs(other.distance-run.distance)>0.1);
   }
 });
@@ -80,7 +84,8 @@ test('Common course starts along the ramp and extends smoothly beyond recorded p
 test('Launch diagnostics isolate the previous release, pilot and wind settings on the same clock',()=>{
   const {run,hull}=calculate(BASE_DESIGN);
   const previous=simulateFlight(BASE_DESIGN,hull,previousFactors);
-  assert.ok(Math.abs(previous.distance-423.9142)<.02);
+  const historical=simulateFlight(BASE_DESIGN,hull,{...previousFactors,rigidWing:true});
+  assert.ok(Math.abs(historical.distance-423.9142)<.02);
   const expected=simulateFlight(BASE_DESIGN,hull,{release:true,pilot:true,wind:true});
   assert.deepEqual(expected,run);
   const old=pullupErrors(pullupSeries(previous)), current=pullupErrors(pullupSeries(run));
@@ -106,10 +111,10 @@ test('Trough-aligned measurements use the same clock and survive an unknown heig
   assert.deepEqual(recoveryErrors(pullupLog),{speed:0,pitch:0});
 });
 
-test('Later pilot engagement changes recovery and costs pitch and speed accuracy at fixed wind',()=>{
-  const {hull,run}=calculate(BASE_DESIGN);
+test('Historical rigid-wing calibration isolates the effect of delayed pilot engagement',()=>{
+  const {hull,run}=calculate(BASE_DESIGN,{rigidWing:true});
   const normal=pullupSeries(run);
-  const delayed=pullupSeries(simulateFlight(BASE_DESIGN,hull,{onsetMetres:5}));
+  const delayed=pullupSeries(simulateFlight(BASE_DESIGN,hull,{onsetMetres:5,rigidWing:true}));
   const actual=recoveryEvents(pullupLog);
   for (const key of ['duration','gain']) {
     assert.ok(Math.abs(recoveryEvents(delayed)[key]-actual[key])<Math.abs(recoveryEvents(normal)[key]-actual[key]));
@@ -133,7 +138,8 @@ test('Wind scenarios share launch conditions and apply a repeatable position/tim
 
 test('Wind changes lift and touchdown while sampled airspeed uses the local relative velocity',()=>{
   const {hull,run}=calculate(BASE_DESIGN);
-  assert.ok(Math.abs(run.distance-422.17520384551915)<1e-6);
+  const historical=simulateFlight(BASE_DESIGN,hull,{rigidWing:true});
+  assert.ok(Math.abs(historical.distance-422.17520384551915)<1e-6);
   assert.deepEqual(simulateFlight(BASE_DESIGN,hull,{weather:'reference'}),run);
   const calm=simulateFlight(BASE_DESIGN,hull,{weather:'calm'});
   const gust=simulateFlight(BASE_DESIGN,hull,{weather:'gust'});

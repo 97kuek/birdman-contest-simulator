@@ -26,6 +26,7 @@ function rampSample(launch, weather, elapsed, gustOffset, profile) {
   const height = bottomHeight + CG_HEIGHT;
   const wind = windAt(weather, { right, forward, height, gustOffset }, windTime);
   return {
+    wing: { leftTip: 0, rightTip: 0, leftTwist: 0, rightTwist: 0 },
     bottomHeight, height,
     right, forward, windTime, gustOffset,
     heading: launch.heading,
@@ -141,10 +142,11 @@ export class FlightSession {
         if (airTime < 0) {
           return {
             phase: elapsed < launch.handoffTime ? 'push' : 'handoff',
-            sample: rampSample(launch, weather, elapsed, options.gustOffset, profile),
+            sample: { ...rampSample(launch, weather, elapsed, options.gustOffset, profile), wing: flight.rampWingAt(elapsed) },
           };
         }
         flight.advanceTo(airTime, weightShift, rudder);
+        if (flight.failure) return { phase: 'structural-failure', sample: flight.failure };
         if (flight.disqualified) return { phase: 'disqualified', sample: flight.disqualified };
         if (flight.result) {
           remember(flight.result);

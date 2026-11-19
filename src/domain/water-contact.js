@@ -1,3 +1,4 @@
+import { projectHalfWing, wingFoldDirection } from './wing-contact.js';
 import { windAt } from './weather.js';
 import { RADIANS_PER_DEGREE } from './units.js';
 
@@ -19,9 +20,12 @@ export function hull2D(points) {
   return [...chain(sorted), ...chain(sorted.reverse())];
 }
 
-export function hullAtControls(hull, rudderDeg, elevatorDeg = 0) {
+export function hullAtControls(hull, rudderDeg, elevatorDeg = 0, wing) {
   const turn = rudderDeg && hull.fin, pitch = elevatorDeg && hull.elevator;
-  if (!turn && !pitch) return hull;
+  const flexible = !!wing && !!hull.wings;
+  if (!turn && !pitch) {
+    return flexible ? { planar: hull.bodyPlanar, spatial: hull.bodySpatial, wings: hull.wings, wing } : hull;
+  }
   let fin = hull.fin ?? [], elevator = hull.elevator ?? [];
   if (turn) {
     const angle = rudderDeg * RADIANS_PER_DEGREE, cos = Math.cos(angle), sin = Math.sin(angle);
@@ -38,6 +42,10 @@ export function hullAtControls(hull, rudderDeg, elevatorDeg = 0) {
         hull.elevatorHingeUp + sin * along + cos * above, side];
     });
   }
+  if (flexible) {
+    const spatial = hull.bodyFixed.concat(fin, elevator);
+    return { planar: spatial, spatial, wings: hull.wings, wing };
+  }
   return hull.fixed.concat(fin, elevator);
 }
 
@@ -49,7 +57,7 @@ export function hullAtRudder(hull, degrees) {
 export function geometryAt(pitch, hull, bank = 0) {
   const cp = Math.cos(pitch), sp = Math.sin(pitch), cb = Math.cos(bank), sb = Math.sin(bank);
   let bottom = Infinity, aft = -Infinity, contactAft = 0, contactSide = 0, tailSide = 0;
-  for (const [z, y, x = 0] of ((bank && hull.spatial) || hull)) {
+  for (const [z, y, x = 0] of ((bank && hull.spatial) || hull.planar || hull)) {
     const bankedUp = y * cb - x * sb;
     const vertical = bankedUp * cp - z * sp;
     const back = z * cp + bankedUp * sp;
@@ -63,7 +71,13 @@ export function geometryAt(pitch, hull, bank = 0) {
       tailSide = x * cb + y * sb;
     }
   }
-  return { bottom, aft, contactAft, contactSide, tailSide };
+  const shape = { bottom, aft, contactAft, contactSide, tailSide };
+  if (hull.wing) {
+    const { leftTip, leftTwist, rightTip, rightTwist } = hull.wing;
+    projectHalfWing(hull.wings.left, leftTip, leftTwist, wingFoldDirection(hull.wing, 'left'), pitch, bank, shape);
+    projectHalfWing(hull.wings.right, rightTip, rightTwist, wingFoldDirection(hull.wing, 'right'), pitch, bank, shape);
+  }
+  return shape;
 }
 
 // Score the tail position from the launch edge. First water contact can be at another vertex.
@@ -103,7 +117,11 @@ export function waterRunoutPose(contact, seconds, hull, wind) {
   const windTime = contact.t + t;
   const rudderDeg = (contact.rudderDeg ?? 0) * remaining;
   const elevatorDeg = (contact.elevatorDeg ?? 0) * remaining;
-  const bottom = geometryAt(pitch, hull.elevator ? hullAtControls(hull, rudderDeg, elevatorDeg) : hull, bank).bottom;
+  const wing = contact.wing && { ...contact.wing,
+    leftTip: contact.wing.leftTip * remaining, rightTip: contact.wing.rightTip * remaining,
+    leftTwist: contact.wing.leftTwist * remaining, rightTwist: contact.wing.rightTwist * remaining,
+  };
+  const bottom = geometryAt(pitch, hullAtControls(hull, rudderDeg, elevatorDeg, wing), bank).bottom;
   const immersion = RUNOUT.immersion * (1 - remaining ** 2);
   const heave = Math.max(-RUNOUT.maxHeave, Math.min(0, contact.verticalSpeed * RUNOUT.heaveResponse))
     * Math.sin(RUNOUT.heaveFrequency * t) * remaining ** 3;
@@ -112,7 +130,7 @@ export function waterRunoutPose(contact, seconds, hull, wind) {
   const crosswind = wind.crosswind ?? 0, updraft = wind.updraft ?? 0;
   const headwind = wind.headwind * Math.cos(contact.heading) + crosswind * Math.sin(contact.heading);
   return {
-    ...contact, forward, right, windTime,
+    ...contact, ...(wing && { wing }), forward, right, windTime,
     groundSpeed, speed: Math.hypot(along * groundSpeed + wind.headwind, across * groundSpeed + crosswind, updraft),
     headwind, updraft, pitchRate: pitchDerivative * Math.cos(bank),
     rollRate: -2 * contact.bank * remaining / WATER_RUNOUT_SECONDS, yawRate: -pitchDerivative * Math.sin(bank),

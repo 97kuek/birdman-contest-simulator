@@ -26,7 +26,8 @@ function scoredBoard(run, score) {
 export function showRecordBoard(outcome) {
   const scored = outcome.kind === 'scored';
   const board = scored ? scoredBoard(outcome.run, outcome.score) : {
-    title: 'ただ今の記録', value: '失格', detail: '飛行禁止区域侵入', award: '', highlight: '',
+    title: 'ただ今の記録', value: outcome.kind === 'structural-failure' ? '記録なし' : '失格',
+    detail: outcome.kind === 'structural-failure' ? ({ left: '左主翼', right: '右主翼', both: '両翼' }[outcome.side] + 'の桁が破断（推定）') : '飛行禁止区域侵入', award: '', highlight: '',
   };
   $('record-board').dataset.outcome = outcome.kind;
   $('record-board').dataset.highlight = board.highlight;

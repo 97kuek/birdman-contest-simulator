@@ -96,6 +96,10 @@ test('再挑戦と履歴表示で、記録板の強調と公式記録の説明�
   assert.equal(elements['record-detail'].textContent, '飛行禁止区域侵入');
   assert.equal(elements['share-result'].href, undefined);
   assert.equal(elements['result-unit'].hidden, true);
+  showRecordBoard({ kind: 'structural-failure', side: 'right' });
+  assert.equal(elements['result-value'].textContent, '記録なし');
+  assert.equal(elements['record-detail'].textContent, '右主翼の桁が破断（推定）');
+  assert.equal(elements['result-replay'].hidden, true);
   showRecordBoard({ kind: 'scored', run: high, score: records.forRun(high) });
   assert.equal(elements['result-unit'].hidden, false);
   assert.equal(elements['result-replay'].hidden, false);
