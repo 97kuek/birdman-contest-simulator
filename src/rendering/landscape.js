@@ -60,11 +60,11 @@ function containsOutline(bounds, outline) {
 /** Local metres relative to the launch, east +X, south +Z, lake surface Y=0. */
 export async function addLandscape(scene) {
   const loader = new THREE.TextureLoader();
-  const [assetsByLayer, objects, detail, detailBuffer, detailPhoto, shallowsMask, facades, landMask] = await Promise.all([
+  const [assetsByLayer, objects, detail, detailBuffer, detailPhoto, shallowsMask, facades, landMask, shoreRings] = await Promise.all([
     readMetadata('index.json').then(layers => Promise.all(layers.map(layer => readLayer(layer, loader)))),
     readMetadata('shoreline.json'), readMetadata('matsubara.json'), readGrid('matsubara.bin'),
     loadPhoto(loader, 'matsubara.webp'), loader.loadAsync(assetUrl('shallows.png').href),
-    loadPhoto(loader, 'facades.jpg'), loader.loadAsync(assetUrl('land-mask.png').href),
+    loadPhoto(loader, 'facades.jpg'), loader.loadAsync(assetUrl('land-mask.png').href), readMetadata('flight-shore.json'),
   ]);
   facades.wrapS = THREE.RepeatWrapping;
 
@@ -77,6 +77,7 @@ export async function addLandscape(scene) {
   group.add(...parts.map(p => p.mesh));
   const shore = parts.find(p => p.layer.name === 'shore');
   group.add(matsubaraGround(detail, detailBuffer, detailPhoto, shore), riverBridges(detail, detailPhoto));
+  group.userData.shoreRings = shoreRings;
   group.userData.shallows = {
     photo: detailPhoto, mask: shallowsMask, bounds: detail.bounds, landMask, landBounds: shore.layer.bounds,
   };

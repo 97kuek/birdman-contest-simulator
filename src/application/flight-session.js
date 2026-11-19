@@ -8,8 +8,10 @@ import {
   launchProfile,
   rampAt,
   simulateFlight,
+  WATER_RUNOUT_SECONDS,
   waterRunoutPose,
 } from '../domain/flight.js';
+import { aircraftShoreContact } from '../domain/shoreline.js';
 import { PILOT_SHIFT } from '../domain/pilot-shift.js';
 import { RADIANS_PER_DEGREE } from '../domain/units.js';
 import { WEATHER, windAt } from '../domain/weather.js';
@@ -50,10 +52,15 @@ export class FlightSession {
 
   #gustOffset = 0;
   #drawWindOffset;
+  #firstLand;
+  #shoreContact;
+  #runoutLimits = new WeakMap();
   #prepared = false;
   #runReferences = new WeakMap();
 
-  constructor(hull, weather, drawWindOffset = () => 0) {
+  constructor(hull, weather, drawWindOffset = () => 0, firstLand) {
+    this.#firstLand = firstLand;
+    this.#shoreContact = aircraftShoreContact(hull, firstLand);
     this.#drawWindOffset = drawWindOffset;
     this.hull = hull;
     this.select(weather, 0);
@@ -115,7 +122,7 @@ export class FlightSession {
     const weather = this.weather;
     const key = this.conditionKey;
     const options = this.options;
-    const flight = createFlight(BASE_DESIGN, this.hull, options);
+    const flight = createFlight(BASE_DESIGN, this.hull, { ...options, firstLand: this.#firstLand });
     const number = ++this.#attemptNumber;
     const remember = (run) => {
       if ((this.#history.get(key)?.number ?? 0) < number) this.#history.set(key, { run, number });
@@ -133,6 +140,7 @@ export class FlightSession {
           };
         }
         flight.advanceTo(airTime, weightShift, rudder);
+        if (flight.disqualified) return { phase: 'disqualified', sample: flight.disqualified };
         if (flight.result) {
           remember(flight.result);
           return { phase: 'touchdown', run: flight.result };
@@ -144,6 +152,32 @@ export class FlightSession {
 
   waterPose(run, seconds) {
     const contact = run.samples.at(-1);
-    return waterRunoutPose(contact, seconds, this.hull, run.weather);
+    const poseAt = time => waterRunoutPose(contact, time, this.hull, run.weather);
+    if (!this.#shoreContact || seconds <= 0) return poseAt(seconds);
+    if (!this.#runoutLimits.has(run)) {
+      // The contact is already scored. Stop the visual drift before its first
+      // shore crossing and use the same limit when seeking directly in replay.
+      let safeTime = WATER_RUNOUT_SECONDS, previous = contact;
+      const frames = WATER_RUNOUT_SECONDS * 20;
+      for (let frame = 1; frame <= frames; frame++) {
+        const time = frame / 20;
+        const next = poseAt(time);
+        if (this.#shoreContact(previous, next) !== null) {
+          let low = (frame - 1) / 20, high = time;
+          for (let i = 0; i < 12; i++) {
+            const mid = (low + high) / 2;
+            if (this.#shoreContact(previous, poseAt(mid)) === null) low = mid;
+            else high = mid;
+          }
+          safeTime = low;
+          break;
+        }
+        previous = next;
+      }
+      this.#runoutLimits.set(run, safeTime);
+    }
+    const limit = this.#runoutLimits.get(run);
+    if (seconds <= limit || limit === WATER_RUNOUT_SECONDS) return poseAt(seconds);
+    return { ...poseAt(limit), groundSpeed: 0, verticalSpeed: 0, rollRate: 0, pitchRate: 0, yawRate: 0 };
   }
 }

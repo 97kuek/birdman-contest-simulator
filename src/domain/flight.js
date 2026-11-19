@@ -1,4 +1,5 @@
 import { aircraftDynamics, referenceTiming, releaseState, RUDDER_LIMIT_DEG } from './aircraft-dynamics.js';
+import { aircraftShoreContact } from './shoreline.js';
 import { cgShiftFromBody } from './pilot-shift.js';
 import { launchProfile } from './launch.js';
 import { geometryAt, hullAtRudder, landingMeasurement } from './water-contact.js';
@@ -38,7 +39,7 @@ function recordCommand(log, command, start, end) {
 
 export function createFlight({ span, incidence }, hull, {
   release = true, pilot = true, wind = true, weather = 'reference', gustOffset = 0, push = 1, coast = 0, direction = 0,
-  referenceControl = false, returnSeconds = referenceTiming.returnSeconds, onsetMetres = referenceTiming.onsetMetres,
+  firstLand, referenceControl = false, returnSeconds = referenceTiming.returnSeconds, onsetMetres = referenceTiming.onsetMetres,
 } = {}) {
   if (!(returnSeconds > 0) || !Number.isFinite(returnSeconds) || !Number.isFinite(onsetMetres)) {
     throw new RangeError('Pilot return time must be positive and timing parameters must be finite.');
@@ -48,7 +49,8 @@ export function createFlight({ span, incidence }, hull, {
   const { airflow, rates, location } = aircraftDynamics(design, launch, { pilot, wind, weather, gustOffset, referenceControl, returnSeconds, onsetMetres });
   let state = releaseState(launch, release, pilot);
   let rudderDeg = 0, collisionHull = hull;
-  let step = 0, result = null;
+  const shoreContact = aircraftShoreContact(hull, firstLand);
+  let step = 0, result = null, disqualified = null;
   const inputs = [], turnInputs = [];
 
   function bottomHeight({ height, pitch, bank }) {
@@ -79,15 +81,34 @@ export function createFlight({ span, incidence }, hull, {
     const next = advanceState(state, rates(midpoint, t + DT / 2, pilotInput, turnInput), DT);
     step++;
     const nextClearance = bottomHeight(next);
-    if (nextClearance <= 0 || clearance <= 0) {
-      const fraction = clearance <= 0 ? 0 : clearance / (clearance - nextClearance);
+    const touching = nextClearance <= 0 || clearance <= 0;
+    const fraction = clearance <= 0 ? 0 : touching ? clearance / (clearance - nextClearance) : 1;
+    function stateAt(f) {
+      if (f === 1) return next;
       const hit = { ...state };
-      for (const key of Object.keys(hit)) hit[key] += fraction * (next[key] - state[key]);
+      for (const key of Object.keys(hit)) hit[key] += f * (next[key] - state[key]);
+      return hit;
+    }
+    const hit = stateAt(fraction);
+    if (shoreContact) {
+      const from = { ...location(state), pitch: state.pitch, bank: state.bank };
+      const to = { ...location(hit), pitch: hit.pitch, bank: hit.bank };
+      const shore = shoreContact(from, to);
+      if (shore !== null) {
+        disqualified = sample((step - 1 + fraction * shore) * DT, stateAt(fraction * shore));
+        return;
+      }
+    }
+    if (touching) {
       const shape = geometryAt(hit.pitch, collisionHull, hit.bank);
       hit.height = -shape.bottom;
       const last = sample((step - 1 + fraction) * DT, hit);
-      samples.push(last);
       const { distance, ...positions } = landingMeasurement(last, shape, launch);
+      if (firstLand?.(positions.contactRight, positions.contactForward, positions.contactRight, positions.contactForward) != null) {
+        disqualified = last;
+        return;
+      }
+      samples.push(last);
       result = { ...positions, weather, gustOffset, launch, design, samples, inputs, turnInputs, duration: last.t, distance };
       return;
     }
@@ -98,11 +119,12 @@ export function createFlight({ span, incidence }, hull, {
   return {
     samples,
     get result() { return result; },
-    get time() { return result?.duration ?? step * DT; },
-    current() { return result?.samples.at(-1) ?? sample(step * DT, state); },
+    get disqualified() { return disqualified; },
+    get time() { return disqualified?.t ?? result?.duration ?? step * DT; },
+    current() { return disqualified ?? result?.samples.at(-1) ?? sample(step * DT, state); },
     advanceTo(seconds, pilotInput = 0, turnInput = 0) {
       const target = Math.floor(Math.min(seconds, FLIGHT_LIMIT_SECONDS) * STEPS_PER_SECOND + STEP_ROUNDING_TOLERANCE);
-      if (target <= step || result) return;
+      if (target <= step || result || disqualified) return;
       const start = step * DT;
       turnInput = Math.max(-1, Math.min(1, turnInput));
       const degrees = turnInput * RUDDER_LIMIT_DEG;
@@ -111,11 +133,11 @@ export function createFlight({ span, incidence }, hull, {
         collisionHull = hullAtRudder(hull, degrees);
         clearance = bottomHeight(state);
       }
-      while (step < target && !result) integrate(pilotInput, turnInput);
-      const end = result?.duration ?? step * DT;
+      while (step < target && !result && !disqualified) integrate(pilotInput, turnInput);
+      const end = disqualified?.t ?? result?.duration ?? step * DT;
       recordCommand(inputs, pilotInput, start, end);
       recordCommand(turnInputs, turnInput, start, end);
-      if (!result && step >= FLIGHT_LIMIT_SECONDS * STEPS_PER_SECOND) {
+      if (!result && !disqualified && step >= FLIGHT_LIMIT_SECONDS * STEPS_PER_SECOND) {
         throw new Error('Flight did not reach the water within the simulation window.');
       }
     },

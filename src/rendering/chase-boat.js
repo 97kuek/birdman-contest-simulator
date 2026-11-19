@@ -165,7 +165,7 @@ export function createChaseBoat() {
   const waitingYaw = -1.85;
   const alongside = new THREE.Vector3();
   let clock = 0;
-  function update(aircraft, seconds, reducedMotion) {
+  function update(aircraft, seconds, reducedMotion, firstLand) {
     const { x, y, z } = aircraft.position;
     const yaw = aircraft.rotation.y;
     // Wait ahead of the ramp. The glider overtakes the launch, which then runs off its port quarter.
@@ -183,6 +183,16 @@ export function createChaseBoat() {
     const clearance = Math.max(0, crossTrack - lateral) * THREE.MathUtils.smoothstep(distance, 20, 65);
     group.position.x -= clearance * cos;
     group.position.z += clearance * sin;
+    if (firstLand) {
+      // Keep the hull and camera on the lake side, even on a direct replay seek.
+      // The half diagonal of the boat including its outboard is under 3.3 m.
+      let safe = 1;
+      for (const [dx, dz] of [[0, 0], [-3.3, -3.3], [3.3, -3.3], [-3.3, 3.3], [3.3, 3.3]]) {
+        const fraction = firstLand(waiting.x + dx, -waiting.z - dz, group.position.x + dx, -group.position.z - dz);
+        if (fraction !== null) safe = Math.min(safe, fraction);
+      }
+      if (safe < 1) group.position.lerp(waiting, 1 - Math.max(0, safe - 0.001));
+    }
     const turn = Math.atan2(Math.sin(yaw - waitingYaw), Math.cos(yaw - waitingYaw));
     group.rotation.y = waitingYaw + turn * underway;
     clock += seconds;
