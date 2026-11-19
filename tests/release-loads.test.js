@@ -1,0 +1,44 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { aircraftDynamics, releaseState } from '../src/domain/aircraft-dynamics.js';
+import { aircraftProfile } from '../src/domain/aircraft-profiles.js';
+import { BASE_DESIGN, createFlight, launchProfile } from '../src/domain/flight.js';
+import { cgShiftFromBody } from '../src/domain/pilot-shift.js';
+
+const hull = [[-1,-.45],[1,-.45]];
+const launch = launchProfile();
+const state = releaseState(launch,true,true);
+const profile = aircraftProfile();
+const solve = releaseExperiment => aircraftDynamics(BASE_DESIGN, launch, { referenceControl:true,
+  weather:'reference', wind:true, pilot:true, contestOpening:true, releaseExperiment });
+const close = (a,b) => assert.ok(Math.abs(a-b)<1e-10, a+' vs '+b);
+
+test('点荷重は左右の桁を曲げ、台端通過後に残る手の力とモーメントを各一度だけ加える', () => {
+  const experiment = { handForceAt:t => t < .15 ? 25 : 0, handArm:-.25, supportStation:3.12 };
+  const plain = solve(), support = solve(experiment);
+  const a = plain.rates(state,0,0,0), b = support.rates(state,0,0,0);
+  close(b.w-a.w,50/profile.mass);
+  close(b.q-a.q,50*(experiment.handArm+cgShiftFromBody(state.bodyShift))/profile.pitchInertia);
+  assert.ok(b.leftTipRate > a.leftTipRate);
+  close(b.leftTipRate,b.rightTipRate);
+  assert.deepEqual(plain.rates(state,.15,0,0),support.rates(state,.15,0,0));
+});
+
+test('尾翼に当たる上向きの局所風は機首下げを強める。主翼と機上の風は同じ', () => {
+  const air = solve(), gust = solve({ tailUpdraftAt: x => Math.abs(x) <= 1 ? .25 : 0 });
+  const edge = { ...state,pathLength:profile.tailArm };
+  assert.deepEqual(gust.loadsAt(edge,.35),air.loadsAt(edge,.35));
+  const a = air.rates(edge,.35,0,0), b = gust.rates(edge,.35,0,0);
+  assert.ok(b.q < a.q);
+  assert.ok(b.w > a.w);
+  assert.deepEqual(gust.rates(state,0,0,0),air.rates(state,0,0,0));
+});
+
+test('追加荷重をゼロにした基準飛行は10秒間の全収録点で通常の試技を再現する', () => {
+  const run = releaseExperiment => {
+    const f = createFlight(BASE_DESIGN,hull,{ referenceControl:true, releaseExperiment });
+    f.advanceTo(10);
+    return f.samples;
+  };
+  assert.deepEqual(run({ handForceAt:() => 0, tailUpdraftAt:() => 0 }), run());
+});

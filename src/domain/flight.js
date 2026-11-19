@@ -45,7 +45,7 @@ function recordCommand(log, command, start, end) {
 }
 
 export function createFlight(design, hull, {
-  contestOpening = true, opening, releaseAttitude, rigidWing = false, release = true, pilot = true, wind = true, weather = 'reference', gustOffset = 0, push = 1, coast = 0, direction = 0,
+  contestOpening = true, opening, releaseAttitude, releaseExperiment, rigidWing = false, release = true, pilot = true, wind = true, weather = 'reference', gustOffset = 0, push = 1, coast = 0, direction = 0,
   aircraftId = design.aircraftId ?? 'ryukai', firstLand, referenceControl: requestedReference = false, returnSeconds = referenceTiming.returnSeconds, onsetMetres = referenceTiming.onsetMetres,
 } = {}) {
   if (!(returnSeconds > 0) || !Number.isFinite(returnSeconds) || !Number.isFinite(onsetMetres)) {
@@ -54,9 +54,13 @@ export function createFlight(design, hull, {
   const profile = aircraftProfile(aircraftId);
   // The prescribed course and controller were reconstructed from Tatsumi telemetry.
   const referenceControl = requestedReference && aircraftId === 'ryukai';
+  // The release probes use the straight Tatsumi reference track and its platform edge.
+  if (releaseExperiment && (!referenceControl || direction !== 0)) {
+    throw new RangeError('Release load experiments require the straight Tatsumi reference flight.');
+  }
   design = { ...design };
   const launch = launchProfile(push, coast, direction, profile.deckClearance);
-  const { loadsAt, rates, location } = aircraftDynamics(design, launch, { aircraftId, opening: resolveOpening(opening), rigidWing, pilot, wind, weather, gustOffset, referenceControl, returnSeconds, onsetMetres,
+  const { loadsAt, rates, location } = aircraftDynamics(design, launch, { aircraftId, opening: resolveOpening(opening), releaseExperiment, rigidWing, pilot, wind, weather, gustOffset, referenceControl, returnSeconds, onsetMetres,
     contestOpening: contestOpening && pilot && aircraftId === 'ryukai' });
   let state = releaseState(launch, release, pilot, profile, releaseAttitude);
   const rampWing = rigidWing ? null : rampWingMotion(launch, state, loadsAt, DT);

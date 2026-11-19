@@ -120,7 +120,8 @@ export function aircraftDynamics(design, launch, options) {
   const referenceHalfLift = .25 * airDensity * profile.cruiseSpeed ** 2 * profile.area * wingCL0;
   const rigidWing = options.rigidWing ?? false;
 
-  function wingLoads(state, time, air) {
+  const experiment = options.releaseExperiment;
+  function wingLoads(state, time, air, supportForce) {
     const { height, heading } = state;
     const { speed, alpha, cp, sp, cb, sb } = air;
     const wingHeight = height + wingMountHeight - CG_HEIGHT;
@@ -155,6 +156,8 @@ export function aircraftDynamics(design, launch, options) {
     const left = halfLoad(-halfWingArm, state.leftTip, state.leftTipRate);
     const right = halfLoad(halfWingArm, state.rightTip, state.rightTipRate);
     const structure = rigidWing ? null : solveWingStructure(profile, span, {
+      supportForce, supportStation: experiment?.supportStation,
+      supportAcceleration: time >= 0 ? 2 * supportForce / profile.mass : 0,
       leftLift: left.lift, rightLift: right.lift, leftLiftSlope: left.slope, rightLiftSlope: right.slope, referenceHalfLift,
       leftTip: state.leftTip, rightTip: state.rightTip, leftTipRate: state.leftTipRate, rightTipRate: state.rightTipRate,
     });
@@ -170,7 +173,8 @@ export function aircraftDynamics(design, launch, options) {
 
   function loadsAt(state, time) {
     const air = airflow(state, time);
-    return { air, ...wingLoads(state, time, air) };
+    const supportForce = experiment?.handForceAt?.(time) ?? 0;
+    return { air, supportForce, ...wingLoads(state, time, air, supportForce) };
   }
 
   function rates(state, time, pilotInput, turnInput, loads = loadsAt(state, time)) {
@@ -183,7 +187,12 @@ export function aircraftDynamics(design, launch, options) {
     const cl = rigidWing ? liftCoefficient(wingAngle, wingSlope, profile.maxLiftCoefficient) : wingLift / (pressure * area);
     const downwash = (wingCL0 - groundFactor * cl) / (Math.PI * efficiency * aspectRatio);
     const elevatorAngle = state.elevatorDeg * RADIANS_PER_DEGREE;
-    const tail = horizontalTailLoad(loads.air, q, tailArm, airDensity, tailArea, tailSlope,
+    // A differential vertical gust changes only the tail section's velocity.
+    // Keep alpha in the CG wind axes when resolving its force for translation.
+    const tailUp = experiment?.tailUpdraftAt?.(state.pathLength - tailArm * cp) ?? 0;
+    const tailAir = tailUp ? { ...loads.air, axialSpeed: loads.air.axialSpeed - sp * tailUp,
+      downSpeed: loads.air.downSpeed + cb * cp * tailUp } : loads.air;
+    const tail = horizontalTailLoad(tailAir, q, tailArm, airDensity, tailArea, tailSlope,
       tailCL0 / tailSlope + downwash - elevatorAngle * profile.elevatorEffectiveness, profile.maxLiftCoefficient);
     const bendRates = {
       leftTip: state.leftTipRate, rightTip: state.rightTipRate,
@@ -196,7 +205,9 @@ export function aircraftDynamics(design, launch, options) {
     const drag = tail.drag + pressure * (parasite + area * (inducedDrag + DRAG.postStallFactor * Math.sin(wingStall) ** 2));
     // Project the aerodynamic force onto the normal to the body-axis CG lever.
     const upwardNormal = lift * Math.cos(alpha) + drag * Math.sin(alpha);
-    const moment = profile.wingMomentCoefficient * pressure * area * chord
+    const handForce = 2 * loads.supportForce;
+    const handMoment = handForce ? handForce * (experiment.handArm + cgShiftFromBody(bodyShift, profile)) * cp : 0;
+    const moment = handMoment + profile.wingMomentCoefficient * pressure * area * chord
       + wingLift * profile.wingMomentArmChords * chord - tailArm * tail.upwardNormal + upwardNormal * cgShiftFromBody(bodyShift, profile);
     const shiftRate = weightShiftRate(state, time, speed, pilotInput, Math.max(0, state.height - CG_HEIGHT), options);
     if (referenceControl) {
@@ -204,7 +215,7 @@ export function aircraftDynamics(design, launch, options) {
       const pitchPlaneSpeed = Math.hypot(airU, airW);
       return {
         ...bendRates, pathLength: u, height: w, u: (-drag * airU - lift * airW) / (pitchPlaneSpeed * profile.mass),
-        w: (lift * airU - drag * airW) / (pitchPlaneSpeed * profile.mass) - GRAVITY, pitch: q, q: moment / pitchInertia,
+        w: (lift * airU - drag * airW) / (pitchPlaneSpeed * profile.mass) + handForce / profile.mass - GRAVITY, pitch: q, q: moment / pitchInertia,
         bodyShift: shiftRate, bank: 0, heading: 0, right: u * launchSin, forward: u * launchCos, v: 0, p: 0, r: 0,
       };
     }
