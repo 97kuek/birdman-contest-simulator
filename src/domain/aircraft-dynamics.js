@@ -1,6 +1,6 @@
 import { aircraftProfile } from './aircraft-profiles.js';
 import { LAUNCH } from './launch.js';
-import { bodyShiftFromCg, cgShiftFromBody, limitBodyShift, PILOT_SHIFT } from './pilot-shift.js';
+import { bodyShiftFromCg, cgShiftFromBody, launchBodyTarget, limitBodyShift, PILOT_SHIFT, TATSUMI_PULLUP } from './pilot-shift.js';
 import { courseAt } from './race2025.js';
 import { GRAVITY, RADIANS_PER_DEGREE } from './units.js';
 import { solveWingStructure, wingBendShape } from './wing-structure.js';
@@ -68,10 +68,14 @@ function lateralLoads(beta, rudderRightDeg, rollRate, yawRate, speed, span, pres
   };
 }
 
-function weightShiftRate(state, speed, pilotInput, { pilot, referenceControl, onsetMetres, returnSeconds }) {
+function weightShiftRate(state, time, speed, pilotInput, { pilot, referenceControl, contestOpening, onsetMetres, returnSeconds }) {
   const { bodyShift, pathLength, height, w, q } = state;
-  let desired = limitBodyShift(PILOT_SHIFT.maxBodyTravel * pilotInput);
-  if (referenceControl) {
+  let desired;
+  if (contestOpening && (!referenceControl || time < TATSUMI_PULLUP.resumeTrimAt)) {
+    const pulling = time >= TATSUMI_PULLUP.holdUntil && time < TATSUMI_PULLUP.easeAt;
+    const referenceInput = pulling ? 1 : 0;
+    desired = launchBodyTarget(time, referenceControl ? referenceInput : pilotInput);
+  } else if (referenceControl) {
     // The calibrated controller damps the launch phugoid and flares near water.
     const clearance = Math.max(0, height - CG_HEIGHT);
     const targetSpeed = PILOT.landingSpeed + PILOT.cruiseSpeedIncrement * clamp(clearance / PILOT.approachHeight, 0, 1);
@@ -82,6 +86,8 @@ function weightShiftRate(state, speed, pilotInput, { pilot, referenceControl, on
     const engagement = clamp((pathLength - (pilot ? onsetMetres : 0)) / engagementLength, 0, 1);
     // The historical reference controller requests an effective CG offset.
     desired = limitBodyShift(bodyShiftFromCg(engagement * (trimShift + flareShift)));
+  } else {
+    desired = limitBodyShift(PILOT_SHIFT.maxBodyTravel * pilotInput);
   }
   const returning = pilot && pathLength < PILOT.earlyReturnMetres && bodyShift < 0 && desired > bodyShift;
   const responseTime = returning ? returnSeconds : referenceTiming.returnSeconds;
@@ -232,7 +238,7 @@ export function aircraftDynamics(design, launch, options) {
     const upwardNormal = lift * Math.cos(alpha) + drag * Math.sin(alpha);
     const moment = profile.wingMomentCoefficient * pressure * area * chord
       + wingLift * profile.wingMomentArmChords * chord - tailArm * tailLift + upwardNormal * cgShiftFromBody(bodyShift, profile);
-    const shiftRate = weightShiftRate(state, speed, pilotInput, options);
+    const shiftRate = weightShiftRate(state, time, speed, pilotInput, options);
     if (referenceControl) {
       // Pressure uses the complete airspeed. Lift and drag rotate in the pitch plane.
       const pitchPlaneSpeed = Math.hypot(airU, airW);

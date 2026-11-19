@@ -80,11 +80,11 @@ test('QXの舵角で水平尾翼後縁を上げ、方位舵はそのヒンジま
 });
 
 test('剛体比較時に機体を省略した竜海の操舵試技と基準飛行が従来の数値に一致する', () => {
-  const flight = createFlight(BASE_DESIGN, hull, { weather: 'head', rigidWing: true });
+  const flight = createFlight(BASE_DESIGN, hull, { weather: 'head', rigidWing: true, contestOpening: false });
   flight.advanceTo(.5, -1, 1);
   flight.advanceTo(1, 1, -1);
   flight.advanceTo(120);
-  const ref = simulateFlight(BASE_DESIGN, hull, { weather: 'head', rigidWing: true });
+  const ref = simulateFlight(BASE_DESIGN, hull, { weather: 'head', rigidWing: true, contestOpening: false });
   for (const [run, duration, distance] of [
     [flight.result, 32.55583131025747, 307.21661158943715],
     [ref, 50.83150111958256, 408.3915983676386],

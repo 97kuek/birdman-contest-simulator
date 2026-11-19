@@ -7,7 +7,7 @@ import {pullupSeries, recoveryEvents, recoveryErrors, onsetDistances, returnTime
 const hull=modelHull(createAircraft(BASE_DESIGN.span,BASE_DESIGN.incidence));
 const measured=recoveryEvents(pullupLog);
 function evaluate(options) {
-  const run=simulateFlight(BASE_DESIGN,hull,options);
+  const run=simulateFlight(BASE_DESIGN,hull,{...options,contestOpening:false});
   const series=pullupSeries(run);
   return {...recoveryEvents(series),...recoveryErrors(series),distance:run.distance};
 }

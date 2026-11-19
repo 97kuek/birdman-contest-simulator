@@ -14,7 +14,7 @@ for (const design of [BASE_DESIGN, QX25_DESIGN]) {
   const hull = modelHull(id === 'qx25' ? createQx25Aircraft() : createAircraft());
   for (const scenario of ['neutral', 'pullup', 'gust']) {
     const weather = scenario === 'gust' ? 'day-hard' : 'calm';
-    const flight = createFlight(design, hull, { weather, gustOffset: 7 });
+    const flight = createFlight(design, hull, { weather, gustOffset: 7, contestOpening: false });
     flight.advanceTo(2);
     flight.advanceTo(2.55, scenario === 'pullup' ? 1 : 0);
     flight.advanceTo(10);
@@ -34,7 +34,7 @@ for (const design of [BASE_DESIGN, QX25_DESIGN]) {
   if (csv) continue;
   if (id === 'ryukai') {
     for (const rigidWing of [true, false]) {
-      const run = simulateFlight(design, hull, { rigidWing });
+      const run = simulateFlight(design, hull, { rigidWing, contestOpening: false });
       const errors = pullupLog.map(obs => {
         const s = poseAt(run, obs.t), reading = readFlightInstruments(s);
         return [reading.altitude - obs.height, reading.airspeed - obs.speed, s.pitch * 180 / Math.PI - obs.pitchDeg];
@@ -45,7 +45,7 @@ for (const design of [BASE_DESIGN, QX25_DESIGN]) {
   }
   let completed = 0, broken = 0, peakUse = 0;
   for (const period of ['day','night']) for (const level of ['easy','normal','hard']) for (const gustOffset of [0,7,43,200]) {
-    const f = createFlight(design, hull, { weather: period + '-' + level, gustOffset });
+    const f = createFlight(design, hull, { weather: period + '-' + level, gustOffset, contestOpening: false });
     f.advanceTo(120);
     if (f.result) completed++;
     if (f.failure) broken++;

@@ -44,7 +44,7 @@ function recordCommand(log, command, start, end) {
 }
 
 export function createFlight(design, hull, {
-  rigidWing = false, release = true, pilot = true, wind = true, weather = 'reference', gustOffset = 0, push = 1, coast = 0, direction = 0,
+  contestOpening = true, rigidWing = false, release = true, pilot = true, wind = true, weather = 'reference', gustOffset = 0, push = 1, coast = 0, direction = 0,
   aircraftId = design.aircraftId ?? 'ryukai', firstLand, referenceControl: requestedReference = false, returnSeconds = referenceTiming.returnSeconds, onsetMetres = referenceTiming.onsetMetres,
 } = {}) {
   if (!(returnSeconds > 0) || !Number.isFinite(returnSeconds) || !Number.isFinite(onsetMetres)) {
@@ -55,7 +55,8 @@ export function createFlight(design, hull, {
   const referenceControl = requestedReference && aircraftId === 'ryukai';
   design = { ...design };
   const launch = launchProfile(push, coast, direction, profile.deckClearance);
-  const { loadsAt, rates, location } = aircraftDynamics(design, launch, { aircraftId, rigidWing, pilot, wind, weather, gustOffset, referenceControl, returnSeconds, onsetMetres });
+  const { loadsAt, rates, location } = aircraftDynamics(design, launch, { aircraftId, rigidWing, pilot, wind, weather, gustOffset, referenceControl, returnSeconds, onsetMetres,
+    contestOpening: contestOpening && pilot && aircraftId === 'ryukai' });
   let state = releaseState(launch, release, pilot, profile);
   const rampWing = rigidWing ? null : rampWingMotion(launch, state, loadsAt, DT);
   if (rampWing) Object.assign(state, rampWing.release);

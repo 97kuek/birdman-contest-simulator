@@ -25,7 +25,10 @@ test('Identical launches are deterministic, with independent effects from span a
     for (const key of ['t', 'height', 'speed', 'pitch', 'groundSpeed', 'heading']) {
       assert.equal(other.samples[0][key], run.samples[0][key]);
     }
-    assert.ok(Math.abs(other.distance-run.distance)>0.1);
+    // Different paths can finish at nearly the same radius on the recorded turn.
+    assert.notEqual(other.distance.toFixed(2), run.distance.toFixed(2));
+    assert.ok(Math.abs(other.duration - run.duration) > 1);
+    assert.ok(Math.abs(poseAt(other, 3).height - poseAt(run, 3).height) > .5);
   }
 });
 
@@ -112,9 +115,9 @@ test('Trough-aligned measurements use the same clock and survive an unknown heig
 });
 
 test('Historical rigid-wing calibration isolates the effect of delayed pilot engagement',()=>{
-  const {hull,run}=calculate(BASE_DESIGN,{rigidWing:true});
+  const {hull,run}=calculate(BASE_DESIGN,{rigidWing:true,contestOpening:false});
   const normal=pullupSeries(run);
-  const delayed=pullupSeries(simulateFlight(BASE_DESIGN,hull,{onsetMetres:5,rigidWing:true}));
+  const delayed=pullupSeries(simulateFlight(BASE_DESIGN,hull,{onsetMetres:5,rigidWing:true,contestOpening:false}));
   const actual=recoveryEvents(pullupLog);
   for (const key of ['duration','gain']) {
     assert.ok(Math.abs(recoveryEvents(delayed)[key]-actual[key])<Math.abs(recoveryEvents(normal)[key]-actual[key]));
@@ -138,7 +141,7 @@ test('Wind scenarios share launch conditions and apply a repeatable position/tim
 
 test('Wind changes lift and touchdown while sampled airspeed uses the local relative velocity',()=>{
   const {hull,run}=calculate(BASE_DESIGN);
-  const historical=simulateFlight(BASE_DESIGN,hull,{rigidWing:true});
+  const historical=simulateFlight(BASE_DESIGN,hull,{rigidWing:true,contestOpening:false});
   assert.ok(Math.abs(historical.distance-422.17520384551915)<1e-6);
   assert.deepEqual(simulateFlight(BASE_DESIGN,hull,{weather:'reference'}),run);
   const calm=simulateFlight(BASE_DESIGN,hull,{weather:'calm'});
