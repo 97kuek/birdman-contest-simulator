@@ -2,6 +2,8 @@
 
 2025年の滑空機、東京理科大学・鳥科の「竜海」と九州大学の「QX-25」、松原湖岸のプラットフォームをメートル単位で表示するThree.jsプロトタイプ。画面の「資料・出典」から原典を参照できる。
 
+[人力プロペラ機部門の追加に向けた設計メモ](docs/propeller-aircraft.md)
+
 [ブラウザでプレイする](https://97kuek.github.io/birdman-contest-simulator/)
 
 ## 起動
