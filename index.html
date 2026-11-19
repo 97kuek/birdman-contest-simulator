@@ -38,7 +38,7 @@
       </section>
       <div id="align-panel" hidden><div class="direction-field" role="group" aria-label="発進方向">
         <button id="direction-left" aria-label="機首を左へ">←</button><span aria-hidden="true">発進方向</span><button id="direction-right" aria-label="機首を右へ">→</button>
-        </div><button id="confirm-heading" class="primary" aria-keyshortcuts="Space"><kbd>Space</kbd> 発進</button></div>
+        </div><button id="look-flag" type="button" aria-pressed="false" title="風見旗を見る">風見旗</button><button id="confirm-heading" class="primary" aria-keyshortcuts="Space"><kbd>Space</kbd> 発進</button></div>
       <div id="touch-controls">
         <div class="touch-axis weight-axis" role="group" aria-label="体重移動">
           <span>体重移動</span>
@@ -116,7 +116,7 @@
     <p>映像では2:03〜2:04に離台し、2:58〜2:59に着水。ログでは離台後約33秒に、実機は約290 m先を高度約2.6 mで飛んでいました。</p>
     <a href="https://www.youtube.com/watch?v=brdhsnknoKs&amp;t=123s" target="_blank" rel="noreferrer">大会公式映像 ↗</a>　<a href="https://github.com/torica-org/25th_Analysis/blob/115723c24ce9e64c07c79215770acc7559518d42/flightDataPlot/src/2025_Tatsumi.csv" target="_blank" rel="noreferrer">鳥科の飛行ログ ↗</a>　<a href="https://github.com/Kimama-2005/torica-sim2025-unity/blob/3bddd0106db223ed864c4938ef3194a9af173682/TORICA%20sim%20Develop/Assets/Tatsumi.csv" target="_blank" rel="noreferrer">訓練用モデルの係数 ↗</a>
     <h3>ゲーム内の飛行区域</h3><p>松原湖岸の水域データをもとに、陸地上空を飛行禁止区域としています。機体が区域に入ると、その試技は失格です。</p>
-    <h3>プラットフォーム</h3><p>大会規定の水面上10 m、助走路10 m、勾配3.5°を使用。大会公式映像の青緑のシャツと3人の配置を参考に翼持ちと胴体担当を造形しました。支持位置・歩幅・手を離した後の姿勢は近似です。固定した扇形の台の上で機体の向きと離台点を変えます。左右30°は比較用の設定範囲です。2025年の許容角と竜海の台上の機首角は未確認です。開き角・足場・配置方位は近似です。大会概要の寸法は2026年版を参照しています。鳥科のGPSで離台をまたぐ約1.1秒の対地進行方位は北から時計回りに約304°です。</p><a href="https://www.ytv.co.jp/birdman/about/" target="_blank" rel="noreferrer">読売テレビの大会概要 ↗</a>　<a href="https://jhf.hangpara.or.jp/jhfreport/pdf/jhfreport_247.pdf#page=7" target="_blank" rel="noreferrer">風上に向けた発進例（JHF・2024年）↗</a>
+    <h3>プラットフォーム</h3><p>大会規定の水面上10 m、助走路10 m、勾配3.5°を使用。大会公式映像の青緑のシャツと3人の配置を参考に翼持ちと胴体担当を造形しました。支持位置・歩幅・手を離した後の姿勢は近似です。固定した扇形の台の上で機体の向きと離台点を変えます。左右30°は比較用の設定範囲です。2025年の許容角と竜海の台上の機首角は未確認です。開き角・足場・配置方位は近似です。公式の竜海の映像（1:59〜2:01）で、機体の後ろに赤・黄の旗状の布が見えます。作業床脇の配置は名古屋大学の大会写真を参考にしました。用途と寸法は未確認で、風への反応はゲームでの近似です。大会概要の寸法は2026年版を参照しています。鳥科のGPSで離台をまたぐ約1.1秒の対地進行方位は北から時計回りに約304°です。</p><a href="https://www.ytv.co.jp/birdman/about/" target="_blank" rel="noreferrer">読売テレビの大会概要 ↗</a>　<a href="https://jhf.hangpara.or.jp/jhfreport/pdf/jhfreport_247.pdf#page=7" target="_blank" rel="noreferrer">風上に向けた発進例（JHF・2024年）↗</a>　<a href="https://www.mae.nagoya-u.ac.jp/ja/graduate/nuae/boeing/projects/2018/AirCraft.pdf#page=5" target="_blank" rel="noreferrer">プラットフォームの俯瞰写真 ↗</a>
   </dialog>
   <script type="module" src="./src/main.js"></script>
 </body>

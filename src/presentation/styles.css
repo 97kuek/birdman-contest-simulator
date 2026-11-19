@@ -592,6 +592,17 @@ dialog a {
   white-space: nowrap;
 }
 
+#look-flag {
+  min-height: 42px;
+  padding: 0 8px;
+  border: 1px solid #a6bdcb;
+  border-radius: 5px;
+  background: #f6fafc;
+  color: #142a4f;
+  white-space: nowrap;
+}
+#look-flag[aria-pressed=true] { color: white; background: #142a4f; }
+
 #align-panel kbd {
   font: 600 11px ui-monospace, monospace;
   border: 1px solid #a7cbc9;

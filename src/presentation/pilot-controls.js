@@ -145,7 +145,7 @@ export function bindPilotControls({
     } else if (
       aiming &&
       e.code === 'Space' &&
-      (!e.target.closest?.('button') || e.target.closest('#align-panel'))
+      (!e.target.closest?.('button') || e.target.closest('#direction-left, #direction-right, #confirm-heading'))
     ) {
       e.preventDefault();
       if (!e.repeat) confirmHeading();

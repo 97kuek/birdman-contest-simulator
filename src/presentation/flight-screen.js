@@ -33,6 +33,7 @@ export function setupTrials({
   setView,
   view,
   startLandingCamera,
+  lookAtFlag,
   sceneSeconds,
   playSplash,
 }) {
@@ -53,6 +54,7 @@ export function setupTrials({
   function stage(name) {
     stopHeading();
     if (name !== 'flight' && name !== 'countdown') tilt.end();
+    if ($('look-flag').getAttribute('aria-pressed') === 'true' && name !== 'align') toggleFlag(false);
     screen = name;
     document.body.dataset.stage = screen;
     $('flight-settings').hidden = name !== 'setup';
@@ -197,6 +199,12 @@ export function setupTrials({
     captions.clear();
     $('viewer').focus({ preventScroll: true });
   }
+  function toggleFlag(pressed) {
+    if (pressed && view() !== 'pilot') setView('pilot');
+    $('look-flag').setAttribute('aria-pressed', String(pressed));
+    lookAtFlag(pressed);
+  }
+  $('look-flag').onclick = () => toggleFlag($('look-flag').getAttribute('aria-pressed') !== 'true');
   $('confirm-heading').onclick = confirmHeading;
   function displayCall(cue) {
     const call = $('launch-call');
