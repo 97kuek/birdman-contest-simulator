@@ -107,6 +107,17 @@ async function start() {
   const attachedModes=new Set(['pilot','boat']);
   const viewEye=new THREE.Vector3(), viewFocus=new THREE.Vector3(), viewOrientation=new THREE.Quaternion();
   let boatApproach=0, boatTime=0;
+  let boatTransition=null;
+  const blendSeconds=1.6;
+  function startLandingCamera(){
+    const from={
+      eye:camera.position.clone(), focus:controls.target.clone(),
+      rotation:camera.quaternion.clone(), fov:camera.fov, start:performance.now()
+    };
+    boatApproach=1;
+    setView('boat');
+    if(!reduceMotion.matches)boatTransition=from;
+  }
   function followAircraft(mode){
     if(mode==='boat'){
       const now=performance.now();
@@ -125,7 +136,19 @@ async function start() {
       }
       camera.position.copy(facility.localToWorld(viewEye));
       controls.target.copy(modelBase.localToWorld(viewFocus.set(0,0.45,0)));
-      camera.up.set(0,1,0);camera.lookAt(controls.target);camera.updateMatrixWorld();
+      camera.up.set(0,1,0);camera.lookAt(controls.target);
+      if(boatTransition){
+        const from=boatTransition;
+        const progress=THREE.MathUtils.smoothstep((now-from.start)/1000,0,blendSeconds);
+        camera.position.lerp(from.eye,1-progress);
+        camera.position.y+=Math.sin(Math.PI*progress)*1.4;
+        camera.quaternion.slerp(from.rotation,1-progress);
+        controls.target.lerp(from.focus,1-progress);
+        camera.fov=THREE.MathUtils.lerp(from.fov,45,progress);
+        camera.updateProjectionMatrix();
+        if(progress===1)boatTransition=null;
+      }
+      camera.updateMatrixWorld();
       return;
     }
     // Keep the lens just ahead of the face and move it with the prone pilot.
@@ -137,6 +160,7 @@ async function start() {
     camera.updateMatrixWorld();
   }
   function setView(mode){
+    boatTransition=null;
     state.view=mode;
     const ratio=Math.max(1,1.38/camera.aspect);
     let pos,target;
@@ -232,7 +256,7 @@ async function start() {
   trials=setupTrials({facility,crew,modelBase,aircraft,
     setView,view:()=>state.view,
     moveCamera:delta=>{camera.position.add(delta);controls.target.add(delta);},
-    releaseModel:release,
+    releaseModel:release, startLandingCamera,
     onWaterContact:(right,forward,sample)=>{
       if(reduceMotion.matches)return;
       const direction=new THREE.Vector3(Math.sin(sample.track),0,-Math.cos(sample.track)).transformDirection(facility.matrixWorld);

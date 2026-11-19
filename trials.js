@@ -83,7 +83,7 @@ function extendTrail(line,samples){
 }
 
 // Retain the latest completed flight per wind and heading. Only the active pair needs GPU geometry.
-export function setupTrials({facility,crew,modelBase,aircraft,setView,view,moveCamera,releaseModel,onWaterContact}){
+export function setupTrials({facility,crew,modelBase,aircraft,setView,view,moveCamera,releaseModel,startLandingCamera,onWaterContact}){
   const weatherControls=[...document.querySelectorAll('input[name="weather"]')];
   const selectedWeather=()=>weatherControls.find(control=>control.checked).value;
   const rudder=aircraft.getObjectByName('rudder-hinge');
@@ -283,7 +283,6 @@ export function setupTrials({facility,crew,modelBase,aircraft,setView,view,moveC
   function showResult(record){
     resultRecord=record;
     $('result-distance').textContent=record.run.distance.toFixed(2);
-    $('result-duration').textContent=record.run.duration.toFixed(1);
     stage('result');
     $('result-heading').focus({preventScroll:true});
   }
@@ -374,7 +373,7 @@ export function setupTrials({facility,crew,modelBase,aircraft,setView,view,moveC
     instruments(last,'着水');
     stage('landing');
     captions.clear();
-    landing={record,start:performance.now()};
+    landing={record,start:performance.now(),boatAt:null};
   }
   function tick(now){
     if(review){replay.tick(now);return;}
@@ -398,7 +397,13 @@ export function setupTrials({facility,crew,modelBase,aircraft,setView,view,moveC
       const floating=waterPose(record.run,seconds);
       pose(floating);
       instruments(floating,'着水');
-      if(seconds<WATER_RUNOUT_SECONDS)return;
+      if(seconds>=2 && landing.boatAt===null){
+        startLandingCamera();
+        landing.boatAt=now;
+        $('landing-call').hidden=true;
+        $('flight-hud').hidden=true;
+      }
+      if(landing.boatAt===null || now-landing.boatAt<2600)return;
       landing=null;
       for(const r of records.values())r.group.visible=true;
       showResult(record);return;
