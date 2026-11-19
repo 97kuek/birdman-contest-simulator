@@ -13,6 +13,9 @@ const colors = ['#b7441c', '#65489b', '#217547', '#bd3468', '#0567a5'];
 const trialColor = (number) => colors[(number - 1) % colors.length];
 const GO_CAPTION_SECONDS = 0.65;
 const LANDING_CAMERA_DELAY_SECONDS = 2.5;
+const SHORE_CHECK_SECONDS = 0.25;
+const RULING_CAMERA_DELAY_MS = 800;
+const RULING_REVEAL_MS = 2700;
 const RECORD_REVEAL_DELAY_MS = 3500;
 
 // FlightSession holds the history; only the current trial needs a visible trail.
@@ -45,7 +48,7 @@ export function setupTrials({
   const captions = setupCaptions();
   let countdown = null;
   let resultRecord = null;
-  let landing = null;
+  let landing = null, ruling = null;
   function stage(name) {
     stopHeading();
     screen = name;
@@ -132,7 +135,12 @@ export function setupTrials({
     stage('result');
     $('result-heading').focus({ preventScroll: true });
   }
+  function clearRuling() {
+    ruling?.trail.dispose();
+    ruling = null;
+  }
   function prepare() {
+    clearRuling();
     captions.clear();
     crewAnswer('', 0);
     atWater = false;
@@ -169,6 +177,7 @@ export function setupTrials({
     aim();
   };
   function aim() {
+    clearRuling();
     resultRecord = null;
     session.prepareAttempt();
     latestRecord?.trail.setVisible(false);
@@ -209,7 +218,7 @@ export function setupTrials({
     };
     atWater = false;
     clearInput();
-    active = { record, attempt, clock: elapsed, previousTime: now, airborne: false, commentary: createRaceCommentary(attempt.number) };
+    active = { record, attempt, clock: elapsed, previousTime: now, airborne: false, nextShoreCheck: 0, shoreAhead: false, commentary: createRaceCommentary(attempt.number) };
     stage('flight');
     $('viewer').focus({ preventScroll: true });
     tick(active.previousTime);
@@ -234,18 +243,34 @@ export function setupTrials({
     captions.show(commentary.landing(run), 3200);
     landing = { record, start: performance.now(), boatAt: null };
   }
-  function disqualify(sample) {
-    active.record.trail.dispose();
+  function disqualify(sample, now) {
+    const { trail } = active.record;
+    trail.extend([...active.attempt.samples, sample]);
+    ruling = { trail, start: now, cameraMoved: false };
     active = null;
     atWater = false;
     clearInput();
     captions.clear();
     pose(sample);
-    setView('aircraft');
+    stage('ruling');
+    captions.show('ああ、飛行禁止区域に入った！', RULING_REVEAL_MS);
+  }
+  function showRuling(now) {
+    const elapsed = now - ruling.start;
+    if (!ruling.cameraMoved && elapsed >= RULING_CAMERA_DELAY_MS) {
+      ruling.cameraMoved = true;
+      setView('boat');
+    }
+    if (elapsed < RULING_REVEAL_MS) return;
+    captions.clear();
     stage('disqualified');
     $('disqualification-heading').focus({ preventScroll: true });
   }
   function tick(now) {
+    if (screen === 'ruling') {
+      showRuling(now);
+      return;
+    }
     if (screen === 'align') {
       advanceHeading(now);
       return;
@@ -291,7 +316,7 @@ export function setupTrials({
     $('launch-call').hidden = active.clock >= GO_CAPTION_SECONDS;
     const frame = attempt.advance(active.clock, pilotInput(), pilotInput(2));
     if (frame.phase === 'disqualified') {
-      disqualify(frame.sample);
+      disqualify(frame.sample, now);
       return;
     }
     if (frame.phase === 'touchdown') {
@@ -302,8 +327,12 @@ export function setupTrials({
     if (frame.phase === 'release' || frame.phase === 'glide') {
       record.trail.extend(attempt.samples);
       active.airborne = true;
-      const call = active.commentary.airborne(s);
-      if (call) captions.show(call);
+      if (s.t >= active.nextShoreCheck) {
+        active.shoreAhead = session.shoreAhead(s);
+        active.nextShoreCheck = s.t + SHORE_CHECK_SECONDS;
+      }
+      const call = active.commentary.airborne(s, active.shoreAhead);
+      if (call) captions.show(call, active.shoreAhead ? 6500 : 3000);
     }
     pose(s);
     renderWind(s);

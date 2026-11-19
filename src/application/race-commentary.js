@@ -11,13 +11,25 @@ const lines = {
 export function createRaceCommentary(trialNumber) {
   let lastCall = -Infinity, released = false, descending = false, recovered = false;
   let calledLow = false, calledTurn = false, lastHundred = 0;
+  let warned = false, lastUnsafe = -Infinity;
   const choose = options => options[(trialNumber - 1) % options.length];
   function say(time, text) {
     lastCall = time;
     return text;
   }
   return {
-    airborne(s) {
+    airborne(s, shoreAhead = false) {
+      if (shoreAhead) {
+        lastUnsafe = s.t;
+        if (warned) return;
+        warned = true;
+        return say(s.t, 'このままだと飛行禁止区域に入ってしまう！');
+      }
+      if (warned) {
+        if (s.t - lastUnsafe < 1) return;
+        warned = false;
+        return say(s.t, '湖の方へ戻してきた！');
+      }
       if (!released) {
         released = true;
         return say(s.t, choose(lines.release));

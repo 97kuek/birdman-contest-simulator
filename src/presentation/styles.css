@@ -834,21 +834,39 @@ dialog a {
 #disqualification {
   position: absolute;
   z-index: 3;
-  inset: auto auto max(48px, env(safe-area-inset-bottom)) 50%;
+  inset: auto auto max(64px, calc(env(safe-area-inset-bottom) + 52px)) 50%;
   transform: translateX(-50%);
-  width: min(400px, calc(100% - 24px));
-  padding: 13px 16px;
-  border: 1px solid #8eafb5;
-  border-top: 4px solid #ffcf5c;
-  border-radius: 5px;
-  background: #10264bf5;
+  width: min(380px, calc(100% - 24px));
+  padding: 15px 20px 16px;
+  border-inline-start: 5px solid #ffbb4b;
+  box-shadow: 0 5px 22px #08172755;
+  background: linear-gradient(110deg, #102643 60%, #19425c);
   color: white;
-  text-align: center;
 }
-#disqualification h2 { margin: 0; font-size: clamp(18px, 4vw, 24px); }
-#disqualification p { margin: 6px 0 12px; font-size: 14px; }
-#disqualification button { min-height: 44px; padding-inline: 16px; }
+#disqualification h2 {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0;
+  font-size: clamp(32px, 5vw, 48px);
+  line-height: 1.2;
+}
+#disqualification h2 span {
+  padding: 5px 9px;
+  background: #ffcf69;
+  color: #17283e;
+  font-size: 14px;
+}
+#disqualification p { margin: 7px 0 14px; color: #deebf1; font-size: 14px; }
+#disqualification button { min-height: 44px; padding-inline: 18px; }
 #disqualification button + button { margin-left: 6px; }
+@media (prefers-reduced-motion: no-preference) {
+  #disqualification:not([hidden]) { animation: ruling-in .36s ease-out both; }
+  @keyframes ruling-in {
+    from { opacity: 0; translate: 0 9px; }
+    to { opacity: 1; translate: 0 0; }
+  }
+}
 
 /* Replay */
 

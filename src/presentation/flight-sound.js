@@ -1,7 +1,7 @@
 import { byId } from './dom.js';
 
 const PREFS_KEY = 'ryukai.sound.v1';
-const AUDIBLE_PHASES = new Set(['align', 'countdown', 'run', 'glide', 'landing', 'result']);
+const AUDIBLE_PHASES = new Set(['align', 'countdown', 'run', 'glide', 'landing', 'result', 'ruling', 'disqualified']);
 // Keep the launch calls, feet on the deck and splash clear. The theme returns at the reveal.
 const MUSIC_LEVEL = { setup: .33, align: .27, glide: .09, result: .4 };
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));

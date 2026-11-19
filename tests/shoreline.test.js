@@ -82,3 +82,11 @@ test('追走艇の本体と観測席を岸の手前に保ち、水上に戻る�
   boat.update(aircraft, 0, true, coast);
   assert.ok(boat.group.position.x < 0 && boat.group.position.z < -180);
 });
+
+test('岸まで同じ距離でも、翼を含む対地進路が陸に届く場合だけ警告する', () => {
+  const session = new FlightSession(shape, 'head', () => 0, createShoreline([island], 0));
+  const s = { right: 0, forward: 0, heading: 0, pitch: 0, bank: 0, groundSpeed: 3, track: 0 };
+  assert.equal(session.shoreAhead(s), true);
+  assert.equal(session.shoreAhead({ ...s, track: Math.PI }), false);
+  assert.equal(session.shoreAhead({ ...s, groundSpeed: .5 }), false);
+});

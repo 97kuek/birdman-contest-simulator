@@ -150,6 +150,19 @@ export class FlightSession {
     };
   }
 
+  shoreAhead(sample) {
+    if (!this.#shoreContact) return false;
+    // Project the ground track, including sideslip. The same hull and shoreline
+    // decide actual entry, but the prediction never changes the flight result.
+    const lookaheadSeconds = 6;
+    const travel = sample.groundSpeed * lookaheadSeconds;
+    return this.#shoreContact(sample, {
+      ...sample,
+      right: sample.right + travel * Math.sin(sample.track),
+      forward: sample.forward + travel * Math.cos(sample.track),
+    }) !== null;
+  }
+
   waterPose(run, seconds) {
     const contact = run.samples.at(-1);
     const poseAt = time => waterRunoutPose(contact, time, this.hull, run.weather);
