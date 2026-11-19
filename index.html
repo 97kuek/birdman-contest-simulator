@@ -16,7 +16,7 @@
   </header>
   <div id="sound-options" popover aria-label="音の設定">
     <label><input id="instrument-audio" type="checkbox" checked><span>計器の電子音<small>音の高さは対気速度、低空での間隔は高度</small></span></label>
-    <label><input id="environment-audio" type="checkbox" checked><span>環境音・効果音<small>湖岸の波、風切り音、助走、着水</small></span></label>
+    <label><input id="environment-audio" type="checkbox" checked><span>環境音・効果音<small>波、風切り音、助走、着水、追走艇</small></span></label>
   </div>
   <main class="workspace">
     <div class="scene-column">
@@ -111,8 +111,8 @@
   <dialog id="source-dialog" aria-labelledby="source-title"><div class="dialog-top"><h2 id="source-title">資料・出典</h2><button id="close-sources" aria-label="閉じる"><i data-icon="close"></i></button></div>
     <h3>機体</h3><p>鳥科の2025年機「竜海」の三面図をもとに再構成。主翼の桁とリブ、透明機首のフレーム、伏臥姿勢のパイロットと操縦グリップ、胴体の塗り分け、風向ベーンも造形しています。操縦席の液晶はピトー管の向きを考慮した対気速度と、気圧・低空の超音波測距を組み合わせた推定高度を表示します。電子音の音程と間隔は鳥科の25代引継ぎ資料に基づき、速度の切替値は飛行ログから近似しました。計器のレイアウトと追走艇の形状・航路はシミュレーター用に設定しました。断面・外装・内部構造はいずれも写真と図面をもとにした近似を含みます。</p><a href="https://torica-tus.com/2025/11/14/2025/" target="_blank" rel="noreferrer">鳥科の実機資料と三面図 ↗</a>
     <p><a href="https://github.com/torica-org/26th_Electronics/tree/1c47e73979fb83a245cf1c0f7e0d85b7a62a73d7/25th電装の解説" target="_blank" rel="noreferrer">鳥科の25代電装資料 ↗</a></p>
-    <h3>音</h3><p>波音は琵琶湖で収録された環境音です。助走と着水には別収録の効果音を用い、風切り音は対気速度に応じて合成しています。</p>
-    <p>録音素材（CC0）　<a href="https://freesound.org/people/pflanigan/sounds/390287/" target="_blank" rel="noreferrer">湖岸 · pflanigan ↗</a>　<a href="https://freesound.org/people/SoundsAreGr8/sounds/340983/" target="_blank" rel="noreferrer">足音 · SoundsAreGr8 ↗</a>　<a href="https://freesound.org/people/timgormly/sounds/148317/" target="_blank" rel="noreferrer">着水音 · timgormly ↗</a></p>
+    <h3>音</h3><p>波音は琵琶湖で収録された環境音です。助走と着水には別収録の効果音を用い、風切り音は対気速度に応じて合成しています。追走艇にはロワール川で収録された船外機の音を用いています。</p>
+    <p>録音素材（CC0）　<a href="https://freesound.org/people/nomadas/sounds/690161/" target="_blank" rel="noreferrer">船外機 · nomadas ↗</a>　<a href="https://freesound.org/people/pflanigan/sounds/390287/" target="_blank" rel="noreferrer">湖岸 · pflanigan ↗</a>　<a href="https://freesound.org/people/sillygrizzlies/sounds/635059/" target="_blank" rel="noreferrer">木の階段を走る靴音 · sillygrizzlies ↗</a>　<a href="https://freesound.org/people/timgormly/sounds/148317/" target="_blank" rel="noreferrer">着水音 · timgormly ↗</a></p>
     <h3>松原湖岸・湖面</h3><p>国土地理院の標高データと航空写真を加工しています。プラットフォーム近くの湖岸と河口には水域の輪郭を使った地形メッシュと高解像度の航空写真を重ねています。樹木の位置・形は推定です。湖面は風向に沿う波、空と湖岸の反射、浅瀬の色と着水の波紋を描きます。波高は仮定し、飛距離は平均湖面で計測します。</p><a href="https://maps.gsi.go.jp/#16/35.294222/136.254333/" target="_blank" rel="noreferrer">松原湖岸の地理院地図 ↗</a>　<a href="./terrain/source.md" target="_blank">使用データの詳細 ↗</a>
     <h3>飛行モデル</h3><p>全試行で質量100 kg。台の正面へ標準の力で台端まで押すと、離台時の対地速度は8 m/sです。鳥科の訓練用モデルの空力係数を使い、主翼・尾翼の空気力とピッチ運動を計算します。昼は湖から岸へ吹く湖風、夜は岸から湖へ吹く陸風を想定しています。難易度を上げると背景風も突風も強まります。風の分布は試技ごとに変わり、基準機とリプレイはその試技と同じ風を使います。対地速度から風速を引いた対気速度で揚力・抗力を計算します。主翼が水面に近づくと誘導抗力が減り、尾翼への吹き下ろしも変わります。手動飛行では左右キーがラダーを左右10°動かし、離すと中立になります。鳥科の訓練モデルの係数で、ラダー・横滑り・機体の回転による横力とモーメントを計算します。三面図の設計舵角は左右20°です。サーボの遅れは未計測のため、舵角は指令に即応させています。比較用の基準機はGPS由来のコースと推定体重移動を使います。記録は離台点から最初の接水時の機体最後尾までの水平距離です。</p>
     <p>映像では2:03〜2:04に離台し、2:58〜2:59に着水。ログでは離台後約33秒に、実機は約290 m先を高度約2.6 mで飛んでいました。</p>

@@ -106,17 +106,22 @@ async function start() {
   });
   bindViewerControls(host, renderer, cameraRig, atWater);
   const compass = document.querySelector('.compass svg');
+  const motorPosition = new THREE.Vector3();
   let last = 0, sceneTime = 0;
   renderer.setAnimationLoop(now => {
     if (now - last < 30) return;
     const elapsed = last ? Math.min((now - last) / 1000, 0.15) : 0;
     last = now;
     trials?.tick(now);
-    if (trials) sound.update(trials.soundPhase, display.sample, display.instruments, cameraRig.view());
     const underway = boat.update(modelBase, elapsed, reduceMotion.matches);
     const boatSpeed = trials ? (display.sample.groundSpeed ?? 0) * underway : 0;
     lake.setWake(boat.group, THREE.MathUtils.smoothstep(boatSpeed, 0.4, 6));
     cameraRig.update();
+    if (trials) {
+      boat.group.localToWorld(motorPosition.set(0, .45, 2.7));
+      const range = cameraRig.camera.position.distanceTo(motorPosition);
+      sound.update(trials.soundPhase, display.sample, display.instruments, cameraRig.view(), range, boatSpeed);
+    }
     const weatherMode = trials?.weather ?? selectedWeather();
     const weather = WEATHER[weatherMode];
     const period = weather.period ?? 'day';
@@ -149,7 +154,7 @@ async function start() {
   trials = setupTrials({
     session, aircraftPose, setView, view, startLandingCamera,
     crewAnswer: crew.answer,
-    crewTime: time => crew.update(session.launch, time),
+    crewTime: time => crew.update(session.launch, time, (side, contact) => sound.step(side, contact, view())),
     playSplash: sample => sound.splash(sample),
     makeTrail: (run, color) => createFlightTrail(run, color, { facility, release }),
     onWaterContact: (right, forward, sample) => {

@@ -57,7 +57,7 @@ export function createLaunchCrew() {
   let previousTime = -1, previousLaunch = null;
   const start = new THREE.Vector3(), target = new THREE.Vector3(), pole = new THREE.Vector3();
 
-  function update(launch, elapsed) {
+  function update(launch, elapsed, onFootfall) {
     const time = Math.min(elapsed, launch.duration + 1.1);
     if (previousLaunch === launch && previousTime === time) return;
     previousTime = time;
@@ -76,7 +76,15 @@ export function createLaunchCrew() {
       member.root.position.set(x, deckHeight(z), z);
       member.root.rotation.y = -launch.heading;
 
-      const gait = member.phase + travel * Math.PI / 1.10;
+      // Lengthen steps through acceleration, from a short push-off to a sprint.
+      const startingStep = 0.64, finalStep = Math.sqrt(startingStep ** 2 + 0.45 * travel);
+      const steps = 2 * travel / ((startingStep + finalStep) * member.scale);
+      const gait = member.phase + steps * Math.PI;
+      // The two shoes alternate contact as their cosine swing crosses zero.
+      const footfall = Math.floor(gait / Math.PI + 0.5);
+      if (footfall > member.footfall && time <= releasedAt && Number.isFinite(elapsed))
+        onFootfall?.(member.side, footfall);
+      member.footfall = footfall;
       const run = Math.min(1, travel * 2) * (1 - relax);
       const crouch = 0.12 * relax, bounce = 0.034 * Math.cos(2 * gait) * run;
       member.torso.position.set(0, 0.785 + bounce - crouch, 0);
