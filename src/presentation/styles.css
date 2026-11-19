@@ -667,7 +667,7 @@ dialog a {
   position: absolute;
   z-index: 2;
   left: 50%;
-  bottom: 45%;
+  top: max(calc(var(--edge-top) + 112px), 24%);
   transform: translateX(-50%);
   width: max-content;
   max-width: calc(100% - 24px);
@@ -683,11 +683,6 @@ dialog a {
   font-size: clamp(14px, 1.8vw, 21px);
   font-weight: 650;
   pointer-events: none;
-}
-
-[data-camera=pilot] #commentary {
-  top: max(112px, 24%);
-  bottom: auto;
 }
 
 #commentary b {
@@ -1045,7 +1040,8 @@ dialog a {
 
 @media (prefers-reduced-motion: no-preference) {
   [data-stage=result] .record-board {
-    animation: score-reveal .32s cubic-bezier(.16, 1, .3, 1) both;
+    transform-origin: 50% 70%;
+    animation: score-reveal .52s cubic-bezier(.22, .72, .25, 1) both;
   }
 }
 
@@ -1225,7 +1221,7 @@ dialog a {
     top: calc(var(--edge-top) + 169px);
   }
 
-  .flight-lab:is([data-stage=align],[data-stage=flight]) #commentary {
+  .flight-lab #commentary {
     top: max(calc(var(--edge-top) + 164px), 25%);
     bottom: auto;
   }
@@ -1355,11 +1351,9 @@ dialog a {
   .flight-lab:is([data-stage=flight],[data-stage=align]) .scene-foot {
     bottom: max(1px, env(safe-area-inset-bottom));
   }
-  .flight-lab:is([data-stage=align],[data-stage=flight]) #commentary {
+  .flight-lab #commentary {
     top: calc(var(--edge-top) + 104px);
     bottom: auto;
-    left: 50%;
-    transform: translateX(-50%);
     max-width: 54%;
     padding: 4px 8px;
     font-size: 13px;
@@ -1402,17 +1396,9 @@ dialog a {
 }
 
 @keyframes score-reveal {
-  from {
-    opacity: 0;
-    translate: 0 10px;
-    scale: .94;
-  }
-
-  to {
-    opacity: 1;
-    translate: 0 0;
-    scale: 1;
-  }
+  0% { opacity: 0; transform: translateY(15px) scale(.78); }
+  58% { opacity: 1; transform: translateY(-2px) scale(1.045); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .flight-lab[data-period=night] .topbar { background: linear-gradient(#071525bb, transparent); }
@@ -1431,18 +1417,6 @@ dialog a {
 .record-board[data-highlight]:not([data-highlight=""]) {
   border-color: #f2d774;
 }
-
-@media (prefers-reduced-motion: no-preference) {
-  [data-stage=result] .record-board[data-highlight]:not([data-highlight=""]) .flight-score {
-    animation: record-glow .9s ease-out;
-  }
-}
-
-@keyframes record-glow {
-  from { filter: drop-shadow(0 0 6px #ffe588); }
-  to { filter: drop-shadow(0 0 0 transparent); }
-}
-
 
 #tilt-option label { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
 #tilt-option input { width: 18px; height: 18px; accent-color: var(--rally-navy); }
