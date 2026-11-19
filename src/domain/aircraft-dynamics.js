@@ -1,4 +1,5 @@
 import { LAUNCH } from './launch.js';
+import { courseAt } from './race2025.js';
 import { GRAVITY, RADIANS_PER_DEGREE } from './units.js';
 import { WIND_RISE_METRES, windAt } from './weather.js';
 
@@ -6,7 +7,7 @@ export const BASE_DESIGN = Object.freeze({ span: 25.1, incidence: 3.2 });
 export const CG_HEIGHT = 0.45;
 export const RUDDER_LIMIT_DEG = 10;
 
-// TORICA Tatsumi.csv and AerodynamicCalculator.cs, revision 3bddd010.
+// TORICA Tatsumi.csv and FlightModel/isoSim1.cs, revision 3bddd010.
 // Span here is the aerodynamic calculation span. The design input uses the drawing span.
 const TATSUMI = Object.freeze({
   area: 17.92, span: 24.514, aspectRatio: 33.534, efficiency: 0.987,
@@ -107,8 +108,11 @@ export function aircraftDynamics({ span, incidence }, launch, options) {
 
   function airflow({ pathLength, u, w, v, pitch, bank, heading }, time) {
     const wind = windAt(weather, pathLength, time, windRiseLength);
-    const headingCos = referenceControl ? launchCos : Math.cos(heading);
-    const headingSin = referenceControl ? launchSin : Math.sin(heading);
+    // Fixed wind cards are in platform axes, including on the prescribed reference track.
+    // The historical scalar wind scenario is the calibrated longitudinal component.
+    const windHeading = referenceControl && wind.crosswind !== undefined
+      ? launch.heading + courseAt(pathLength).heading : heading;
+    const headingCos = Math.cos(windHeading), headingSin = Math.sin(windHeading);
     const crosswind = wind.crosswind ?? 0;
     const headwind = wind.headwind * headingCos + crosswind * headingSin;
     const airU = u + headwind, airW = w - wind.updraft;
@@ -143,9 +147,11 @@ export function aircraftDynamics({ span, incidence }, launch, options) {
       + wingLift * TATSUMI.wingMomentArmChords * chord - tailArm * tailLift + lift * shift;
     const shiftRate = weightShiftRate(state, speed, pilotInput, options);
     if (referenceControl) {
+      // Pressure uses the complete airspeed. Lift and drag rotate in the pitch plane.
+      const pitchPlaneSpeed = Math.hypot(airU, airW);
       return {
-        pathLength: u, height: w, u: (-drag * airU - lift * airW) / (speed * LAUNCH.mass),
-        w: (lift * airU - drag * airW) / (speed * LAUNCH.mass) - GRAVITY, pitch: q, q: moment / pitchInertia,
+        pathLength: u, height: w, u: (-drag * airU - lift * airW) / (pitchPlaneSpeed * LAUNCH.mass),
+        w: (lift * airU - drag * airW) / (pitchPlaneSpeed * LAUNCH.mass) - GRAVITY, pitch: q, q: moment / pitchInertia,
         shift: shiftRate, bank: 0, heading: 0, right: u * launchSin, forward: u * launchCos, v: 0, p: 0, r: 0,
       };
     }

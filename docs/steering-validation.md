@@ -14,7 +14,7 @@
 
 ## モデル値と座標の読み方
 
-- 竜海用の訓練シミュレーターでは最大ラダー指令 `drMAX` は10°。横滑り角、ロール角速度、ヨー角速度、ラダー角から横力とロール・ヨーモーメントを計算する。これは別途試せる計算モデルで、大会機の設計舵角や実測した応答時間とは区別する。[竜海用パラメーター](https://github.com/Kimama-2005/torica-sim2025-unity/blob/3bddd0106db223ed864c4938ef3194a9af173682/TORICA%20sim%20Develop/Assets/Tatsumi.csv)・[訓練モデルの横力とモーメント](https://github.com/Kimama-2005/torica-sim2025-unity/blob/3bddd0106db223ed864c4938ef3194a9af173682/TORICA%20sim%20Develop/Assets/Script/Plane/AerodynamicCalculator.cs#L411-L426)
+- 竜海用の訓練シミュレーターでは最大ラダー指令 `drMAX` は10°。横滑り角、ロール角速度、ヨー角速度、ラダー角から横力とロール・ヨーモーメントを計算する。これは別途試せる計算モデルで、大会機の設計舵角や実測した応答時間とは区別する。[竜海用パラメーター](https://github.com/Kimama-2005/torica-sim2025-unity/blob/3bddd0106db223ed864c4938ef3194a9af173682/TORICA%20sim%20Develop/Assets/Tatsumi.csv)・[訓練モデルの横力とモーメント](https://github.com/Kimama-2005/torica-sim2025-unity/blob/3bddd0106db223ed864c4938ef3194a9af173682/TORICA%20sim%20Develop/Assets/Script/Plane/FlightModel/isoSim1.cs#L90-L127)
 - 鳥科の風解析は北から時計回りを正、右バンクを正と定義し、主IMUの `Yaw` を `325° − Yaw` に変換している。絶対方位の換算にはこの基準が含まれる。GPSの進行方位は緯度・経度から独立に求められ、機首方位とは風や横滑りで差が生じる。[鳥科の風ベクトル解析](https://github.com/torica-org/25th_Analysis/blob/115723c24ce9e64c07c79215770acc7559518d42/getWindVector/getWindFromFlightData.m)
 
 ## 映像とログの時刻をそろえる
