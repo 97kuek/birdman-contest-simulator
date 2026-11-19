@@ -61,7 +61,7 @@ function chart(title, unit, seriesKey, modelColumn, imuColumn, ticks) {
       'stroke-dasharray': dashed ? '5 4' : 'none' },g);
   }
   const alternatives = {};
-  for (const key of ['previous','fixed']) alternatives[key] = line(data[key][seriesKey], modelColumn, colors.alternative, true);
+  for (const key of ['previous','fixed','lateral']) alternatives[key] = line(data[key][seriesKey], modelColumn, colors.alternative, true);
   line(data.current[seriesKey], modelColumn, colors.model, false);
   if (imuColumn !== null) line(imuRows, imuColumn, colors.imu, false);
   const cursor = svg('line', { y1:top, y2:h-bottom, stroke:'#213b58','stroke-width':1.5 },g);

@@ -2,6 +2,7 @@
 import { opening4c0464e as previous } from './reference-openings.js';
 import { writeFileSync } from 'node:fs';
 import { angleSlope, readTatsumiLog } from './tatsumi-log.js';
+import { lateralInitialState, lateralOpening } from './tatsumi-lateral-conditions.js';
 import { BASE_DESIGN, createFlight, poseAt } from '../src/domain/flight.js';
 import { createAircraft } from '../src/rendering/aircraft.js';
 import { modelHull } from '../src/rendering/collision-hull.js';
@@ -9,7 +10,8 @@ import { modelHull } from '../src/rendering/collision-hull.js';
 const logOrigin = 3.9;
 const duration = 3;
 const halfWindow = 0.20;
-const rows = readTatsumiLog(process.argv[2]).map(row => ({ t: row.time - logOrigin, pitch: row.pitchDeg }));
+const team = readTatsumiLog(process.argv[2]);
+const rows = team.map(row => ({ t: row.time - logOrigin, pitch: row.pitchDeg }));
 const hull = modelHull(createAircraft());
 const round = n => Math.round(n * 1000) / 1000;
 
@@ -26,8 +28,8 @@ const rateWindows = Array.from({ length: Math.round(duration / rateStep) + 1 }, 
 });
 const imuRates = rateWindows.map(({ t, samples }) => [t, round(angleSlope(samples, p => p.pitch))]);
 
-function model(opening) {
-  const flight = createFlight(BASE_DESIGN, hull, { referenceControl: true, opening });
+function model(opening, releaseExperiment) {
+  const flight = createFlight(BASE_DESIGN, hull, { referenceControl: true, opening, releaseExperiment });
   flight.advanceTo(duration + halfWindow + 0.1);
   const run = { samples: flight.samples, duration: flight.samples.at(-1).t };
   const pitchAt = p => poseAt(run, p.t).pitch * 180 / Math.PI;
@@ -40,6 +42,6 @@ function model(opening) {
 }
 
 const fixedUntil = duration + halfWindow + 1;
-const data = { logOrigin, duration, halfWindow, imu, imuRates, current: model(), previous: model(previous),
+const data = { logOrigin, duration, halfWindow, imu, imuRates, current: model(), lateral: model(undefined,lateralOpening(lateralInitialState(team))), previous: model(previous),
   fixed: model({ holdUntil: fixedUntil, easeAt: fixedUntil, resumeTrimAt: fixedUntil }) };
 writeFileSync(new URL('../src/presentation/opening-comparison.json', import.meta.url), JSON.stringify(data) + '\n');

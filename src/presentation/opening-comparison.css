@@ -49,3 +49,8 @@ select{font:inherit;color:inherit;border:1px solid #b5aabe;border-radius:3px;pad
 .angles p{color:#42576b}
 .angles .jumps{justify-content:start}
 .alt-value{font-size:.76rem;color:#705484}
+
+#roll-comparison{margin-top:24px}
+#roll-comparison h2{font-size:1.1rem}
+#roll-comparison img{display:block;width:100%;max-width:1000px;height:auto}
+#roll-comparison p{font-size:.85rem;line-height:1.6}

@@ -18,8 +18,8 @@ function readPinnedRows(path, expectedBlob, fields) {
 }
 
 export function readTatsumiLog(path) {
-  return readPinnedRows(path, '24ce501f21a25c5ef42e5b71acae320862691096', ['Time','Altitude','Airspeed','Pitch'])
-    .map(([time,height,speed,pitch]) => ({ time, height, speed, pitchDeg: -pitch }));
+  return readPinnedRows(path, '24ce501f21a25c5ef42e5b71acae320862691096', ['Time','Altitude','Airspeed','Pitch','AoS','Yaw','Roll'])
+    .map(([time,height,speed,pitch,aos,yaw,roll]) => ({ time, height, speed, pitchDeg: -pitch, aos, yaw, roll }));
 }
 
 export function readRollLog(path) {

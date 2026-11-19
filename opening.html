@@ -27,11 +27,16 @@
     </section>
     <section class="telemetry" aria-label="実機とモデルの時系列">
       <div class="legend"><span class="imu">実機 IMU</span><span class="model">基準操縦モデル</span><span class="interval">0.50–1.25 秒</span></div>
-      <label class="compare">比較試算 <select id="alternative"><option value="fixed">身体を離台位置に保持</option><option value="previous">調整前の基準操縦</option><option value="">表示しない</option></select></label>
+      <label class="compare">比較試算 <select id="alternative"><option value="lateral">横滑り・ヨーと翼の風を含む再現試算</option><option value="fixed">身体を離台位置に保持</option><option value="previous">調整前の基準操縦</option><option value="">表示しない</option></select></label>
       <div id="plots"></div>
       <p class="explain">身体位置は操縦モデルの推定で、後方を正としています。実機のピッチは主IMUの収録点を線で結んでいます。ピッチ変化率は両系列とも実際の収録時刻の前後0.20秒で直線を当てた値です。</p>
     </section>
   </div>
+  <section id="roll-comparison" aria-labelledby="roll-heading">
+    <h2 id="roll-heading">離台後10秒のロール</h2>
+    <img src="./docs/tatsumi-opening-lateral.png" width="1480" height="720" loading="lazy" alt="2秒後のバンク変化は実測で右約1.9度。従来モデルは左1.06度、離台前の横運動を加えると右0.34度、左右の翼に風の差を仮定すると右1.82度。">
+    <p>両IMU・モデルとも離台時からの変化を表示。再現試算の翼の風は推定条件です。<a href="https://github.com/97kuek/birdman-contest-simulator/blob/main/docs/tatsumi-opening-lateral.md">条件別の誤差と計算方法 ↗</a></p>
+  </section>
   <footer><a href="https://github.com/97kuek/birdman-contest-simulator/blob/main/docs/tatsumi-video-timing.md">映像で確認できたこと ↗</a><a href="https://github.com/97kuek/birdman-contest-simulator/blob/main/docs/tatsumi-wing-handoff.md">左右の翼持ちの手放し ↗</a><a href="https://github.com/97kuek/birdman-contest-simulator/blob/main/docs/tatsumi-wing-handoff-roll.md">手放し順と両IMUのロール ↗</a><a href="https://github.com/97kuek/birdman-contest-simulator/blob/main/docs/tatsumi-opening-window.md">操縦条件別の比較 ↗</a><a href="https://github.com/97kuek/birdman-contest-simulator/blob/main/docs/tatsumi-release-loads.md">0.75秒の差と手放し・尾翼の風 ↗</a><a href="https://github.com/torica-org/25th_Analysis/blob/115723c24ce9e64c07c79215770acc7559518d42/flightDataPlot/src/2025_Tatsumi.csv">鳥科の機上ログ ↗</a></footer>
 </main>
 <script type="module" src="./src/presentation/opening-comparison.js"></script>

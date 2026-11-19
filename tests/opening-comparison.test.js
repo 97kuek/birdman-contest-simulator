@@ -27,3 +27,16 @@ test('0.75秒の表示には検証表と同じ時刻窓の傾きを使う', () =
   assert.equal(rate(figure.imuRates).toFixed(2), '-11.56');
   assert.equal(rate(figure.current.rates).toFixed(2), '-6.87');
 });
+
+test('大会再現のロールとピッチは同じ自由飛行を積分し、2秒で右へ傾く', async () => {
+  const { lateralOpening } = await import('../analysis/tatsumi-lateral-conditions.js');
+  const rad = Math.PI/180;
+  const flight = createFlight(BASE_DESIGN,[[-1,-.45],[1,-.45]],{referenceControl:true,
+    releaseExperiment:lateralOpening({bank:2.5*rad,rollRate:2.087277*rad,lateralVelocity:-.579526,yawRate:1.413253*rad})});
+  flight.advanceTo(3);
+  const at2 = flight.samples.find(p=>p.t===2);
+  assert.ok(Math.abs((at2.bank-flight.samples[0].bank)/rad-1.815)<.005);
+  for (const [i,[,pitch]] of figure.lateral.states.entries()) {
+    assert.ok(Math.abs(flight.samples[i].pitch/rad-pitch)<.00052);
+  }
+});
