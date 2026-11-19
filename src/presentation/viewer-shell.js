@@ -2,7 +2,6 @@ import { byId } from './dom.js';
 
 const paths = {
   play:'M7 4.5 19 12 7 19.5z', pause:'M7 5h3v14H7z M14 5h3v14h-3z',
-  chart:'M3 4v15h18 M6 14l4-5 4 3 6-7',
   book:'M3 5q5-2 9 1 4-3 9-1v14q-5-2-9 1-4-3-9-1z M12 6v14',
   pin:'M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0z M14 10a2 2 0 1 1-4 0 2 2 0 0 1 4 0z',
   plus:'M5 12h14m-7-7v14', minus:'M5 12h14', frame:'M3 9V4h5m8 0h5v5m0 6v5h-5m-8 0H3v-5',

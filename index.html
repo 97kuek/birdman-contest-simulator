@@ -85,16 +85,7 @@
           <input id="replay-seek" type="range" min="0" step="0.01" value="0" aria-label="離台後の再生位置（秒）">
         </div>
         <button id="replay-speed" class="transport-button" type="button" aria-label="再生速度を切り替え">1×</button>
-        <button id="replay-compare" class="transport-button" type="button" aria-label="離台後10秒の飛行比較" aria-expanded="false" aria-controls="replay-analysis" title="離台後10秒の飛行比較"><i data-icon="chart"></i></button>
         <button id="replay-close" class="transport-button" type="button" aria-label="飛行結果に戻る" title="飛行結果に戻る"><i data-icon="close"></i></button>
-      </div>
-      <div id="replay-analysis" hidden>
-        <div class="replay-legend"><strong>離台後10秒</strong><span class="pilot-line">選択した飛行</span><span class="base-line">基準機</span><span class="log-dot">2025年実機</span></div>
-        <div id="replay-charts"></div>
-        <details id="replay-log"><summary>操縦入力・計測条件</summary>
-          <p id="replay-condition"></p><p class="replay-note">帯は体重移動。高度は模擬計器の推定値と、鳥科が補正した実機の気圧高度。</p>
-          <p id="replay-inputs"></p>
-        </details>
       </div>
     </section></div>
     <aside id="flight-settings" class="inspector" role="dialog" aria-label="飛行準備">

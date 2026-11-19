@@ -118,7 +118,7 @@ export function setupTrials({
     record.trail.setVisible(true);
     setView('pilot');
     stage('replay');
-    replay.open(record, session.referenceFor(record.run));
+    replay.open(record);
   }
   $('result-replay').onclick = () => openReplay(resultRecord, $('result-replay'));
 
