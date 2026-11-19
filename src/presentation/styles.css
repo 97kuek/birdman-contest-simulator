@@ -1422,3 +1422,16 @@ dialog a {
   from { filter: drop-shadow(0 0 6px #ffe588); }
   to { filter: drop-shadow(0 0 0 transparent); }
 }
+
+
+#tilt-option label { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+#tilt-option input { width: 18px; height: 18px; accent-color: var(--rally-navy); }
+#tilt-option small { display: block; font-size: 12px; }
+#tilt-option:not(:has(input:checked)) #tilt-tip { display: none; }
+body[data-stage=flight][data-tilt=active] #touch-controls { display: none; }
+
+#camera-menu { display: none; }
+@media (any-pointer: coarse) and (max-width: 1000px) {
+  .flight-lab:is([data-stage=align],[data-stage=countdown],[data-stage=flight]) #camera-menu { display: inline-grid; }
+  .flight-lab:is([data-stage=align],[data-stage=countdown],[data-stage=flight]) #camera-menu[aria-expanded=false] ~ button { display: none; }
+}

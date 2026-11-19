@@ -52,6 +52,7 @@ export function setupTrials({
   const releaseWaveTimes = new WeakMap();
   function stage(name) {
     stopHeading();
+    if (name !== 'flight' && name !== 'countdown') tilt.end();
     screen = name;
     document.body.dataset.stage = screen;
     $('flight-settings').hidden = name !== 'setup';
@@ -64,7 +65,7 @@ export function setupTrials({
     $('flight-action').textContent = name === 'flight' ? '飛行を中断' : '準備に戻る';
     $('previous-result').hidden = !session.latest;
   }
-  const { pilotInput, clearInput, releaseInput, advanceHeading, stopHeading } = bindPilotControls({
+  const { tilt, pilotInput, clearInput, releaseInput, advanceHeading, stopHeading } = bindPilotControls({
     isFlying: () => Boolean(active),
     isAiming: () => screen === 'align',
     view,
@@ -188,6 +189,7 @@ export function setupTrials({
   function confirmHeading() {
     if (screen !== 'align') return;
     advanceHeading(performance.now());
+    tilt.calibrate();
     countdown = { seconds: 0, last: performance.now() };
     stage('countdown');
     displayCall(launchCue(0));

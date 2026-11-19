@@ -1,3 +1,4 @@
+import { setupTiltControl } from './tilt-control.js';
 import { byId as $ } from './dom.js';
 
 const TAP_HEADING_DEGREES = 0.1;
@@ -44,13 +45,15 @@ export function bindPilotControls({
   confirmHeading,
   advanceToInputTime,
 }) {
+  const tilt = setupTiltControl();
   const held = new Map();
   const padPointers = new Map();
   const padButtons = [...$('touch-controls').querySelectorAll('[data-command]')];
   let touch = null;
   function pilotInput(axis = 1) {
     const directions = new Set(held.values());
-    return Number(directions.has(axis)) - Number(directions.has(-axis));
+    if (directions.has(axis) || directions.has(-axis)) return Number(directions.has(axis)) - Number(directions.has(-axis));
+    return tilt.value(axis);
   }
   function showInput() {
     for (const button of padButtons) {
@@ -188,5 +191,5 @@ export function bindPilotControls({
   // During rotation the buttons move away from the fingers. Some browsers
   // keep pointer capture across this change without sending pointercancel.
   matchMedia('(orientation: portrait)').addEventListener('change', releaseInput);
-  return { pilotInput, clearInput, releaseInput, advanceHeading: heading.advance, stopHeading: heading.cancel };
+  return { tilt, pilotInput, clearInput, releaseInput, advanceHeading: heading.advance, stopHeading: heading.cancel };
 }
