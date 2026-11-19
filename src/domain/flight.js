@@ -1,14 +1,15 @@
-import { aircraftDynamics, referenceTiming, releaseState } from './aircraft-dynamics.js';
+import { aircraftDynamics, releaseState } from './aircraft-dynamics.js';
 import { aircraftProfile } from './aircraft-profiles.js';
 import { advanceElevator, replayElevator } from './elevator.js';
 import { aircraftShoreContact } from './shoreline.js';
-import { cgShiftFromBody } from './pilot-shift.js';
+import { cgShiftFromBody, referenceTiming, resolveOpening } from './pilot-shift.js';
 import { rampWingMotion } from './ramp-wing.js';
 import { launchProfile } from './launch.js';
 import { geometryAt, hullAtControls, landingMeasurement } from './water-contact.js';
 
 export { BASE_DESIGN, QX25_DESIGN, RUDDER_LIMIT_DEG } from './aircraft-profiles.js';
-export { CG_HEIGHT, referenceTiming } from './aircraft-dynamics.js';
+export { referenceTiming } from './pilot-shift.js';
+export { CG_HEIGHT } from './aircraft-dynamics.js';
 export { LAUNCH, launchProfile, MAX_LAUNCH_HEADING_DEGREES, rampAt, RAMP_LENGTH } from './launch.js';
 export { hull2D, WATER_RUNOUT_SECONDS, waterRunoutPose } from './water-contact.js';
 
@@ -44,7 +45,7 @@ function recordCommand(log, command, start, end) {
 }
 
 export function createFlight(design, hull, {
-  contestOpening = true, rigidWing = false, release = true, pilot = true, wind = true, weather = 'reference', gustOffset = 0, push = 1, coast = 0, direction = 0,
+  contestOpening = true, opening, releaseAttitude, rigidWing = false, release = true, pilot = true, wind = true, weather = 'reference', gustOffset = 0, push = 1, coast = 0, direction = 0,
   aircraftId = design.aircraftId ?? 'ryukai', firstLand, referenceControl: requestedReference = false, returnSeconds = referenceTiming.returnSeconds, onsetMetres = referenceTiming.onsetMetres,
 } = {}) {
   if (!(returnSeconds > 0) || !Number.isFinite(returnSeconds) || !Number.isFinite(onsetMetres)) {
@@ -55,9 +56,9 @@ export function createFlight(design, hull, {
   const referenceControl = requestedReference && aircraftId === 'ryukai';
   design = { ...design };
   const launch = launchProfile(push, coast, direction, profile.deckClearance);
-  const { loadsAt, rates, location } = aircraftDynamics(design, launch, { aircraftId, rigidWing, pilot, wind, weather, gustOffset, referenceControl, returnSeconds, onsetMetres,
+  const { loadsAt, rates, location } = aircraftDynamics(design, launch, { aircraftId, opening: resolveOpening(opening), rigidWing, pilot, wind, weather, gustOffset, referenceControl, returnSeconds, onsetMetres,
     contestOpening: contestOpening && pilot && aircraftId === 'ryukai' });
-  let state = releaseState(launch, release, pilot, profile);
+  let state = releaseState(launch, release, pilot, profile, releaseAttitude);
   const rampWing = rigidWing ? null : rampWingMotion(launch, state, loadsAt, DT);
   if (rampWing) Object.assign(state, rampWing.release);
   let loads = loadsAt(state, 0);

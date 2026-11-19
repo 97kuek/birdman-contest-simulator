@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Euler, Quaternion, Vector3 } from 'three';
+import { horizontalTailLoad } from '../src/domain/aerodynamic-lift.js';
 import { aircraftDynamics, releaseState } from '../src/domain/aircraft-dynamics.js';
 import { BASE_DESIGN, launchProfile, simulateFlight } from '../src/domain/flight.js';
 import { geometryAt, hullAtRudder, landingMeasurement } from '../src/domain/water-contact.js';
@@ -97,4 +98,21 @@ test('局所風で左右の半翼に生じる揚力差が正負のロールを�
   near(rollingAccelerationBeyondSideslip('cross', 0), 0);
   assert.ok(rollingAccelerationBeyondSideslip('day-hard', 1) > .01);
   assert.ok(rollingAccelerationBeyondSideslip('day-hard', 2) < -.01);
+});
+
+test('尾翼揚力は尾翼位置の流速に直交し、並進と回転の仕事率の和がゼロになる', () => {
+  const arm = 2.9, density = 1.164, area = 1.736;
+  const axialSpeed = 8;
+  for (const downSpeed of [-1, 0, 1]) for (const q of [-0.4, 0, 0.25]) {
+    const alpha = Math.atan2(downSpeed, axialSpeed);
+    const tail = horizontalTailLoad({ axialSpeed, downSpeed, alpha }, q, arm, density, area, 4, 0.02, 1.4);
+    const forward = tail.lift * Math.sin(alpha) - tail.drag * Math.cos(alpha);
+    const translationPower = axialSpeed * forward - downSpeed * tail.upwardNormal;
+    const pitchPower = -arm * tail.upwardNormal * q;
+    near(translationPower + pitchPower, 0);
+    const localDown = downSpeed + arm * q;
+    const speed = Math.hypot(axialSpeed, localDown);
+    const expectedCL = 4 * (Math.atan2(localDown, axialSpeed) + 0.02);
+    near(tail.upwardNormal, 0.5 * density * speed * area * expectedCL * axialSpeed);
+  }
 });

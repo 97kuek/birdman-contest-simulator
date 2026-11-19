@@ -79,15 +79,15 @@ test('QXの舵角で水平尾翼後縁を上げ、方位舵はそのヒンジま
   assert.equal(tail[2], 1);
 });
 
-test('剛体比較時に機体を省略した竜海の操舵試技と基準飛行が従来の数値に一致する', () => {
+test('剛体比較時に機体を省略した竜海の操舵試技と基準飛行が計算済みの着水時刻と距離に一致する', () => {
   const flight = createFlight(BASE_DESIGN, hull, { weather: 'head', rigidWing: true, contestOpening: false });
   flight.advanceTo(.5, -1, 1);
   flight.advanceTo(1, 1, -1);
   flight.advanceTo(120);
   const ref = simulateFlight(BASE_DESIGN, hull, { weather: 'head', rigidWing: true, contestOpening: false });
   for (const [run, duration, distance] of [
-    [flight.result, 32.55583131025747, 307.21661158943715],
-    [ref, 50.83150111958256, 408.3915983676386],
+    [flight.result, 32.55959336707358, 307.27255022533507],
+    [ref, 51.06963445504252, 409.6225972269924],
   ]) {
     assert.equal(run.aircraftId, 'ryukai');
     assert.ok(run.samples.every(sample => sample.elevatorDeg === 0));

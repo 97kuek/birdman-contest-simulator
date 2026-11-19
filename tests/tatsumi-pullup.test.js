@@ -47,3 +47,27 @@ test('弾性翼と離台条件を固定した竜海の基準操縦で、10秒の
   const previous = errors(false);
   errors(true).forEach((value, i) => assert.ok(value < previous[i], value + ' vs ' + previous[i]));
 });
+
+test('竜海の引き起こしで2〜5秒の3計器を保ち、5〜10秒のピッチの過大応答を抑える', () => {
+  const run = createFlight(BASE_DESIGN, hull, { referenceControl: true });
+  run.advanceTo(10);
+  const series = pullupLog.map(log => {
+    const pose = run.samples[Math.round(log.t * SAMPLES_PER_SECOND)];
+    const meter = readFlightInstruments(pose);
+    return { t: log.t, pitch: pose.pitch * 180 / Math.PI, pitchError: pose.pitch * 180 / Math.PI - log.pitchDeg,
+      heightError: meter.altitude - log.height, speedError: meter.airspeed - log.speed };
+  });
+  function rmse(from, to, key) {
+    const rows = series.filter(row => row.t >= from && row.t <= to);
+    return Math.sqrt(rows.reduce((sum, row) => sum + row[key] ** 2, 0) / rows.length);
+  }
+  // dd499b8 scored 1.756°, 0.510 m and 0.1824 m/s in the pull-up window.
+  assert.ok(rmse(2, 5, 'pitchError') < 1.75);
+  assert.ok(rmse(2, 5, 'heightError') < .51);
+  assert.ok(rmse(2, 5, 'speedError') < .183);
+  assert.ok(rmse(5, 10, 'pitchError') < .65);
+  const minimum = Math.min(...series.filter(row => row.t <= 2).map(row => row.pitch));
+  assert.ok(Math.abs(minimum - (-12.75)) < 2.3);
+  const level = run.samples.find(sample => sample.t >= 1 && sample.pitch >= 0);
+  assert.ok(Math.abs(level.t - 3.01) < .1);
+});
