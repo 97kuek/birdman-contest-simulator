@@ -1,7 +1,7 @@
 // node analysis/tatsumi-release.js [--csv]
+import { opening4c0464e as adopted } from './reference-openings.js';
 import { BASE_DESIGN, poseAt, simulateFlight } from '../src/domain/flight.js';
 import { readFlightInstruments } from '../src/domain/flight-instruments.js';
-import { TATSUMI_PULLUP } from '../src/domain/pilot-shift.js';
 import { pullupLog } from '../src/domain/pullup-data.js';
 import { createAircraft } from '../src/rendering/aircraft.js';
 import { modelHull } from '../src/rendering/collision-hull.js';
@@ -9,10 +9,11 @@ import { readTatsumiLog } from './tatsumi-log.js';
 import { recoveryEvents } from './pullup-analysis.js';
 
 const hull = modelHull(createAircraft());
-const previous = { holdUntil: 0.4, easeAt: 2.6, resumeTrimAt: 4.9, activeResponseSeconds: 0.45 };
+// Reproduce the 4c0464e report after later changes to the opening controller.
+const previous = { holdUntil: 0.4, easeAt: 2.6, resumeTrimAt: 4.9, activeResponseSeconds: 0.45, activeBodyRate: 0.30 };
 const measured = { pitchDeg: -0.19, pitchRateDeg: -14.41 };
-const takeup = { holdUntil: TATSUMI_PULLUP.holdUntil, activeResponseSeconds: TATSUMI_PULLUP.activeResponseSeconds };
-const neutral = { easeAt: TATSUMI_PULLUP.easeAt, resumeTrimAt: TATSUMI_PULLUP.resumeTrimAt };
+const takeup = { holdUntil: adopted.holdUntil, activeResponseSeconds: adopted.activeResponseSeconds };
+const neutral = { easeAt: adopted.easeAt, resumeTrimAt: adopted.resumeTrimAt };
 const trials = [
   ['former-input', previous],
   ['angle-only', previous, { pitchDeg: measured.pitchDeg }],
@@ -23,8 +24,8 @@ const trials = [
   ['neutral-onset-only', { ...previous, easeAt: neutral.easeAt }],
   ['trim-onset-only', { ...previous, resumeTrimAt: neutral.resumeTrimAt }],
   ['neutral-and-trim', { ...previous, ...neutral }],
-  ['adopted', TATSUMI_PULLUP],
-  ['adopted-with-imu', TATSUMI_PULLUP, measured],
+  ['adopted', adopted],
+  ['adopted-with-imu', adopted, measured],
 ];
 const csv = process.argv.includes('--csv');
 const round = x => Number(x.toFixed(3));

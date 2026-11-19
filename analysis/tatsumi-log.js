@@ -14,3 +14,16 @@ export function readTatsumiLog(path) {
   return rows.map(row => ({ time: row[index('Time')], height: row[index('Altitude')],
     speed: row[index('Airspeed')], pitchDeg: -row[index('Pitch')] }));
 }
+
+// Least-squares pitch change in degrees/second over the actual recording times.
+export function pitchSlope(samples, getPitch) {
+  const meanTime = samples.reduce((sum, p) => sum + p.t, 0) / samples.length;
+  const meanPitch = samples.reduce((sum, p) => sum + getPitch(p), 0) / samples.length;
+  let covariance = 0, timeVariance = 0;
+  for (const sample of samples) {
+    const dt = sample.t - meanTime;
+    covariance += dt * (getPitch(sample) - meanPitch);
+    timeVariance += dt * dt;
+  }
+  return timeVariance > 0 ? covariance / timeVariance : null;
+}

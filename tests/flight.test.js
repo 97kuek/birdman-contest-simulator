@@ -10,6 +10,7 @@ import {readFlightInstruments} from '../src/domain/flight-instruments.js';
 import {openingTrace} from '../src/application/opening-trace.js';
 import {modelHull} from '../src/rendering/collision-hull.js';
 import {WEATHER, windAt} from '../src/domain/weather.js';
+import { cgShiftFromBody, PILOT_SHIFT, TATSUMI_PULLUP } from '../src/domain/pilot-shift.js';
 
 function calculate(design, options) {
   const hull=modelHull(createAircraft(design.span,design.incidence));
@@ -194,7 +195,8 @@ test('Pilot input timing is repeatable across render cadences and neutral return
     assert.equal(early.samples.at(-1).bottomHeight,0);
     for(let i=1;i<early.samples.length;i++){
       const prev=early.samples[i-1],next=early.samples[i];
-      assert.ok(Math.abs(next.shift-prev.shift)<=0.15*(next.t-prev.t)+1e-9);
+      const maxBodyRate = prev.t < TATSUMI_PULLUP.easeAt ? TATSUMI_PULLUP.activeBodyRate : PILOT_SHIFT.maxBodyRate;
+      assert.ok(Math.abs(next.shift-prev.shift)<=cgShiftFromBody(maxBodyRate)*(next.t-prev.t)+1e-9);
     }
   }
 });

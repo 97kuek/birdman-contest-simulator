@@ -7,7 +7,7 @@ const ryukai = aircraftProfile();
 // The effective moving mass and the cabin travel are simulation assumptions.
 export const PILOT_SHIFT = Object.freeze({
   emptyMass: ryukai.emptyMass, fixedPayloadMass: 4, releaseCgShift: ryukai.releaseCgShift,
-  maxBodyTravel: 0.10, maxBodyRate: 0.30,
+  maxBodyTravel: 0.10, maxBodyRate: 0.30, cruiseActiveResponseSeconds: 0.20,
 });
 function movingMassFraction(profile) {
   return (profile.mass - profile.emptyMass - PILOT_SHIFT.fixedPayloadMass) / profile.mass;
@@ -20,7 +20,9 @@ export const limitBodyShift = metres => Math.max(-PILOT_SHIFT.maxBodyTravel, Mat
 
 // Inferred input for the 2025 reference flight. Times are seconds from release.
 // The target moves through the same travel and rate limits as a player's input.
-export const TATSUMI_PULLUP = Object.freeze({ holdUntil: 0.5, easeAt: 2.5, resumeTrimAt: 4.4, activeResponseSeconds: 0.2 });
+export const TATSUMI_PULLUP = Object.freeze({
+  holdUntil: 0.60, easeAt: 2.45, resumeTrimAt: 4.4, activeResponseSeconds: 0.12, activeBodyRate: 0.42,
+});
 
 export function launchBodyTarget(time, input, opening = TATSUMI_PULLUP) {
   const rest = time < opening.holdUntil ? bodyShiftFromCg(ryukai.releaseCgShift) : 0;
@@ -52,10 +54,10 @@ function trimBodyTarget({ pathLength, w, q }, speed, clearance, { pilot, onsetMe
 export function resolveOpening(overrides) {
   if (!overrides) return TATSUMI_PULLUP;
   const opening = { ...TATSUMI_PULLUP, ...overrides };
-  const { holdUntil, easeAt, resumeTrimAt, activeResponseSeconds } = opening;
-  if (![holdUntil, easeAt, resumeTrimAt, activeResponseSeconds].every(Number.isFinite)
-      || holdUntil < 0 || easeAt < holdUntil || resumeTrimAt < easeAt || activeResponseSeconds <= 0) {
-    throw new RangeError('Opening control times must be ordered and the response time must be positive.');
+  const { holdUntil, easeAt, resumeTrimAt, activeResponseSeconds, activeBodyRate } = opening;
+  if (![holdUntil, easeAt, resumeTrimAt, activeResponseSeconds, activeBodyRate].every(Number.isFinite)
+      || holdUntil < 0 || easeAt < holdUntil || resumeTrimAt < easeAt || activeResponseSeconds <= 0 || activeBodyRate <= 0) {
+    throw new RangeError('Opening control times must be ordered and response time and speed limit must be positive.');
   }
   return opening;
 }
@@ -64,13 +66,16 @@ export function weightShiftRate(state, time, speed, pilotInput, clearance, optio
   const { pilot, referenceControl, contestOpening, opening = TATSUMI_PULLUP, returnSeconds } = options;
   const { bodyShift, pathLength } = state;
   const direct = contestOpening && (!referenceControl || time < opening.resumeTrimAt);
-  let desired, responseTime = referenceTiming.returnSeconds;
+  let desired, responseTime = referenceTiming.returnSeconds, rateLimit = PILOT_SHIFT.maxBodyRate;
   if (direct) {
     const pulling = time >= opening.holdUntil && time < opening.easeAt;
     const command = referenceControl ? Number(pulling) : pilotInput;
     desired = launchBodyTarget(time, command, opening);
     // Deliberate movement settles faster than a release to neutral. Blend for analog inputs.
-    responseTime += Math.abs(command) * (opening.activeResponseSeconds - responseTime);
+    const earlyPull = command > 0 && time < opening.easeAt;
+    const activeTime = earlyPull ? opening.activeResponseSeconds : PILOT_SHIFT.cruiseActiveResponseSeconds;
+    responseTime += Math.abs(command) * (activeTime - responseTime);
+    if (earlyPull) rateLimit += Math.abs(command) * (opening.activeBodyRate - rateLimit);
   } else {
     desired = referenceControl ? trimBodyTarget(state, speed, clearance, options)
       : limitBodyShift(PILOT_SHIFT.maxBodyTravel * pilotInput);
@@ -78,5 +83,5 @@ export function weightShiftRate(state, time, speed, pilotInput, clearance, optio
       responseTime = returnSeconds;
     }
   }
-  return clamp((desired - bodyShift) / responseTime, -PILOT_SHIFT.maxBodyRate, PILOT_SHIFT.maxBodyRate);
+  return clamp((desired - bodyShift) / responseTime, -rateLimit, rateLimit);
 }
