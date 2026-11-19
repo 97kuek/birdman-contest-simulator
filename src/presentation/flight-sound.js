@@ -2,6 +2,8 @@ import { byId } from './dom.js';
 
 const PREFS_KEY = 'ryukai.sound.v1';
 const AUDIBLE_PHASES = new Set(['align', 'countdown', 'run', 'glide', 'landing', 'result']);
+// Keep the launch calls, feet on the deck and splash clear. The theme returns at the reveal.
+const MUSIC_LEVEL = { setup: .33, align: .27, glide: .09, result: .4 };
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 function mixer(context) {
@@ -12,6 +14,7 @@ function mixer(context) {
     return node;
   }
   const ambience = gain(context.destination), instruments = gain(context.destination);
+  const music = gain(context.destination);
   const shore = gain(ambience), wind = gain(ambience), motor = gain(ambience);
   const footsteps = gain(ambience);
   const runners = [-1, 0, 1].map(side => {
@@ -22,12 +25,12 @@ function mixer(context) {
   });
   let outboard, lastRate;
   const parameters = new Map();
-  function level(node, value) {
+  function level(node, value, fade = 0.018) {
     if (parameters.get(node) === value) return;
     parameters.set(node, value);
     const now = context.currentTime;
     node.gain.cancelScheduledValues(now);
-    node.gain.setTargetAtTime(value, now, 0.018);
+    node.gain.setTargetAtTime(value, now, fade);
   }
 
   const recordings = new Map(), pending = new Set();
@@ -50,6 +53,7 @@ function mixer(context) {
     }).then(bytes => context.decodeAudioData(bytes)).then(buffer => {
       recordings.set(name, buffer);
       if (name === 'outboard') outboard = play(buffer, motor, true);
+      if (name === 'lake-theme') play(buffer, music, true);
       if (name === 'shore') play(buffer, shore, true);
     }).catch(() => { /* A missing recording must not interrupt piloting. */ })
       .finally(() => pending.delete(name));
@@ -72,6 +76,8 @@ function mixer(context) {
 
   return {
     prepareAmbience,
+    prepareMusic: () => load('lake-theme'),
+    musicLevel: value => level(music, value, value ? .32 : .045),
     enable(environment, electronic, running = false) {
       level(footsteps, environment && running ? 1 : 0);
       level(ambience, environment ? 1 : 0);
@@ -118,6 +124,7 @@ function mixer(context) {
 
 export function setupFlightSound() {
   const instrument = byId('instrument-audio'), environment = byId('environment-audio');
+  const music = byId('music-audio');
   const settings = byId('sound-settings'), dialog = byId('source-dialog');
   const Audio = window.AudioContext ?? window.webkitAudioContext;
   if (!Audio) settings.hidden = true;
@@ -125,6 +132,7 @@ export function setupFlightSound() {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY));
     instrument.checked = saved?.instrument ?? true;
     environment.checked = saved?.environment ?? true;
+    music.checked = saved?.music ?? true;
   } catch { /* Storage is optional in private browsing. */ }
 
   let context, mix, phase, lastPulse = -Infinity;
@@ -132,33 +140,36 @@ export function setupFlightSound() {
     return !document.hidden && !dialog.open;
   }
   function gates(cockpit) {
-    const audible = available() && AUDIBLE_PHASES.has(phase);
+    const visible = available();
+    mix?.musicLevel(visible && music.checked ? (MUSIC_LEVEL[phase] ?? 0) : 0);
+    const audible = visible && AUDIBLE_PHASES.has(phase);
     mix?.enable(audible && environment.checked, audible && cockpit && instrument.checked && phase === 'glide', phase === 'run');
   }
   function unlock() {
-    if (!Audio || (!environment.checked && !instrument.checked)) return;
+    if (!Audio || (!environment.checked && !instrument.checked && !music.checked)) return;
     context ??= new Audio();
     mix ??= mixer(context);
     if (context.state !== 'running') context.resume().catch(() => {});
     if (environment.checked) mix.prepareAmbience();
+    if (music.checked) mix.prepareMusic();
   }
-  for (const button of document.querySelectorAll('[data-view]')) button.addEventListener('click', unlock);
+  for (const button of document.querySelectorAll('[data-view], #flight-settings input, #sound-settings')) button.addEventListener('click', unlock);
   for (const id of ['previous-result', 'launch', 'retry', 'result-replay', 'confirm-heading', 'replay-play']) {
     byId(id).addEventListener('click', unlock);
   }
   function reflectPreferences() {
-    settings.dataset.muted = String(!instrument.checked && !environment.checked);
+    settings.dataset.muted = String(!instrument.checked && !environment.checked && !music.checked);
   }
-  for (const control of [instrument, environment]) control.onchange = () => {
+  for (const control of [instrument, environment, music]) control.onchange = () => {
     reflectPreferences();
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ instrument: instrument.checked, environment: environment.checked }));
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ instrument: instrument.checked, environment: environment.checked, music: music.checked }));
     } catch { /* Settings still apply for this visit. */ }
     unlock();
     gates(document.body.dataset.camera === 'pilot');
   };
   reflectPreferences();
-  const silence = () => { mix?.enable(false, false); lastPulse = -Infinity; };
+  const silence = () => { mix?.enable(false, false); mix?.musicLevel(0); lastPulse = -Infinity; };
   document.addEventListener('visibilitychange', silence);
   window.addEventListener('pagehide', silence);
   new MutationObserver(() => { if (dialog.open) silence(); }).observe(dialog, { attributes: true, attributeFilter: ['open'] });
