@@ -1,7 +1,7 @@
-import {createAircraft} from './aircraft.js';
-import {BASE_DESIGN, simulateFlight} from './flight.js';
-import {modelHull} from './trials.js';
-import {pullupLog} from './pullup-data.js';
+import {createAircraft} from '../src/rendering/aircraft.js';
+import {BASE_DESIGN, simulateFlight} from '../src/domain/flight.js';
+import {modelHull} from '../src/rendering/collision-hull.js';
+import {pullupLog} from '../src/domain/pullup-data.js';
 import {pullupSeries, recoveryEvents, recoveryErrors, onsetDistances, returnTimes} from './pullup-analysis.js';
 
 const hull=modelHull(createAircraft(BASE_DESIGN.span,BASE_DESIGN.incidence));

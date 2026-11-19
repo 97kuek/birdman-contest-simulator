@@ -1,5 +1,5 @@
-import {poseAt} from './flight.js';
-import {pullupLog} from './pullup-data.js';
+import {poseAt} from '../src/domain/flight.js';
+import {pullupLog} from '../src/domain/pullup-data.js';
 
 export function pullupSeries(run) {
   return pullupLog.map(({t}) => {
