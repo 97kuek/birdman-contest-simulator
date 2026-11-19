@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <title>竜海｜離台後3秒の飛行比較</title>
+  <link rel="stylesheet" href="./src/presentation/opening-comparison.css">
+</head>
+<body>
+<main>
+  <a class="back" href="./">← シミュレーター</a>
+  <header><p>東京理科大学 鳥科 · 2025年大会</p><h1>竜海 <span>離台後3秒の飛行比較</span></h1></header>
+  <div class="layout">
+    <section aria-label="大会映像と再生操作">
+      <div class="screen"><div id="film"></div></div>
+      <div class="source"><span id="film-status" role="status">大会映像を読み込み中</span><a id="watch" href="https://www.youtube.com/watch?v=brdhsnknoKs&amp;t=123s" target="_blank" rel="noreferrer">公式映像 ↗</a></div>
+      <div class="transport">
+        <button id="play" type="button">▶ 再生</button>
+        <label for="time">離台後 <output id="elapsed">0.00</output> 秒</label>
+        <input id="time" type="range" min="0" max="3" step="0.01" value="0" aria-label="離台からの経過秒">
+        <div class="jumps" aria-label="注目時刻に移動"><button type="button" data-time="0">離台</button><button type="button" data-time=".5">0.50 秒</button><button type="button" data-time=".75">0.75 秒</button><button type="button" data-time="1.25">1.25 秒</button><button type="button" data-time="3">3.00 秒</button></div>
+      </div>
+      <p id="clocks"></p>
+      <p id="shot" class="observation"></p>
+      <details class="angles"><summary>映像に写った胴体ブームの傾き</summary><p>画面の水平線を基準にした投影角です。時刻を選ぶと、その場面を表示します。</p><div class="jumps"><button type="button" data-time="1.44">1.44 秒　約−14°</button><button type="button" data-time="2.07">2.07 秒　約−13°</button><button type="button" data-time="2.57">2.57 秒　約−7°</button></div></details><p class="sync" id="sync"></p>
+    </section>
+    <section class="telemetry" aria-label="実機とモデルの時系列">
+      <div class="legend"><span class="imu">実機 IMU</span><span class="model">基準操縦モデル</span><span class="interval">0.50–1.25 秒</span></div>
+      <label class="compare">比較試算 <select id="alternative"><option value="fixed">身体を離台位置に保持</option><option value="previous">調整前の基準操縦</option><option value="">表示しない</option></select></label>
+      <div id="plots"></div>
+      <p class="explain">身体位置は操縦モデルの推定で、後方を正としています。実機のピッチは主IMUの収録点を線で結んでいます。ピッチ変化率は両系列とも実際の収録時刻の前後0.20秒で直線を当てた値です。</p>
+    </section>
+  </div>
+  <footer><a href="https://github.com/97kuek/birdman-contest-simulator/blob/main/docs/tatsumi-video-timing.md">映像で確認できたこと ↗</a><a href="https://github.com/97kuek/birdman-contest-simulator/blob/main/docs/tatsumi-opening-window.md">操縦条件別の比較 ↗</a><a href="https://github.com/torica-org/25th_Analysis/blob/115723c24ce9e64c07c79215770acc7559518d42/flightDataPlot/src/2025_Tatsumi.csv">鳥科の機上ログ ↗</a></footer>
+</main>
+<script type="module" src="./src/presentation/opening-comparison.js"></script>
+</body>
+</html>

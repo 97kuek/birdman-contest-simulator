@@ -6,7 +6,7 @@
 
 [人力プロペラ機部門の追加に向けた設計メモ](docs/propeller-aircraft.md)
 
-[ブラウザでプレイする](https://97kuek.github.io/birdman-contest-simulator/)
+[ブラウザでプレイする](https://97kuek.github.io/birdman-contest-simulator/) ／ [竜海の大会映像・IMU・推定身体位置を同じ時刻で見る](https://97kuek.github.io/birdman-contest-simulator/opening.html)
 
 ## 起動
 
