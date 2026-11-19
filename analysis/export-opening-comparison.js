@@ -1,7 +1,7 @@
 // node analysis/export-opening-comparison.js path/to/2025_Tatsumi.csv
 import { opening4c0464e as previous } from './reference-openings.js';
 import { writeFileSync } from 'node:fs';
-import { pitchSlope, readTatsumiLog } from './tatsumi-log.js';
+import { angleSlope, readTatsumiLog } from './tatsumi-log.js';
 import { BASE_DESIGN, createFlight, poseAt } from '../src/domain/flight.js';
 import { createAircraft } from '../src/rendering/aircraft.js';
 import { modelHull } from '../src/rendering/collision-hull.js';
@@ -24,7 +24,7 @@ const rateWindows = Array.from({ length: Math.round(duration / rateStep) + 1 }, 
   const t = round(i * rateStep);
   return { t, samples: windowAt(t) };
 });
-const imuRates = rateWindows.map(({ t, samples }) => [t, round(pitchSlope(samples, p => p.pitch))]);
+const imuRates = rateWindows.map(({ t, samples }) => [t, round(angleSlope(samples, p => p.pitch))]);
 
 function model(opening) {
   const flight = createFlight(BASE_DESIGN, hull, { referenceControl: true, opening });
@@ -35,7 +35,7 @@ function model(opening) {
     .map(s => [round(s.t), round(s.pitch * 180 / Math.PI), round(s.bodyShift * 100)]);
   // The solver starts at release. Never pad the filter with a fictitious ramp attitude.
   const rates = rateWindows.filter(({ samples }) => samples[0].t >= 0)
-    .map(({ t, samples }) => [t, round(pitchSlope(samples, pitchAt))]);
+    .map(({ t, samples }) => [t, round(angleSlope(samples, pitchAt))]);
   return { states, rates };
 }
 

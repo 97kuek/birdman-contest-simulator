@@ -1,5 +1,5 @@
 // node analysis/release-loads.js path/to/2025_Tatsumi.csv [--json]
-import { readTatsumiLog, pitchSlope } from './tatsumi-log.js';
+import { readTatsumiLog, angleSlope } from './tatsumi-log.js';
 import { BASE_DESIGN, createFlight, poseAt } from '../src/domain/flight.js';
 import { aircraftProfile } from '../src/domain/aircraft-profiles.js';
 import { readFlightInstruments } from '../src/domain/flight-instruments.js';
@@ -49,7 +49,7 @@ function observations(origin) {
   const clock = records.map(r => ({ t:r.time-origin, pitch:r.pitchDeg, speed:r.speed, height:r.height }));
   const window = (t, half) => clock.filter(p => Math.abs(p.t-t) <= half + 1e-12);
   const release = window(0, slopeHalfWindow);
-  const pitchRateDeg = pitchSlope(release, p => p.pitch);
+  const pitchRateDeg = angleSlope(release, p => p.pitch);
   const pitchDeg = mean(release.map(p => p.pitch - p.t * pitchRateDeg));
   const quarters = Array.from({ length:41 }, (_,i) => {
     const t = i/4, points = window(t,.25);
@@ -60,8 +60,8 @@ function observations(origin) {
 const pitchAt = (flight,t) => poseAt(flight,t).pitch / RADIANS_PER_DEGREE;
 function rateAt(flight, obs, t, half = slopeHalfWindow) {
   const points = obs.window(t, half);
-  const imu = pitchSlope(points, p => p.pitch);
-  const model = pitchSlope(points, p => pitchAt(flight,p.t));
+  const imu = angleSlope(points, p => p.pitch);
+  const model = angleSlope(points, p => pitchAt(flight,p.t));
   return { imu, model, gap:model-imu };
 }
 function errors(flight,obs,start,end) {

@@ -51,3 +51,5 @@
 python3 analysis/release-imu.py path/to/2025FlightLog.csv path/to/2025_Tatsumi.csv
 node analysis/release-loads.js path/to/2025_Tatsumi.csv --offsets-csv
 ```
+
+同じ離台時刻で左右の手放しを1コマずらした場合のバンク角と、離台後10秒間の両IMUとの比較を掲載した。[手放し順とロールの感度試験](tatsumi-wing-handoff-roll.md)

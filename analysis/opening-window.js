@@ -8,7 +8,7 @@ import { RADIANS_PER_DEGREE } from '../src/domain/units.js';
 import { createAircraft } from '../src/rendering/aircraft.js';
 import { modelHull } from '../src/rendering/collision-hull.js';
 import { recoveryEvents } from './pullup-analysis.js';
-import { readTatsumiLog, pitchSlope } from './tatsumi-log.js';
+import { readTatsumiLog, angleSlope } from './tatsumi-log.js';
 
 const hull = modelHull(createAircraft());
 const { holdUntil, activeResponseSeconds, activeBodyRate, easeAt } = TATSUMI_PULLUP;
@@ -51,8 +51,8 @@ for (const [name, opening] of Object.entries(trials)) {
     const targets = [.50, .75, 1.00, 1.25];
     const differences = targets.map(t => {
       const window = clock.filter(row => Math.abs(row.t - t) <= .2);
-      const measured = pitchSlope(window, row => row.pitch);
-      const model = pitchSlope(window, row => pitchAt(row.t));
+      const measured = angleSlope(window, row => row.pitch);
+      const model = angleSlope(window, row => pitchAt(row.t));
       if (origin === 3.9) rates.push({ name, t, n: window.length, imu: round(measured), model: round(model),
         bodyCm: round(poseAt(run, t).bodyShift * 100) });
       return model - measured;
