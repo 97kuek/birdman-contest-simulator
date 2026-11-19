@@ -10,7 +10,8 @@ const cues = [
   [7.3, '1'],
   [8.3, 'GO'],
 ];
-export function launchCue(seconds) {
+export function launchCue(seconds, aircraftId = 'ryukai') {
   const [at, label, wing = ''] = cues.findLast(([at]) => at <= seconds);
-  return { label, wing, go: label === 'GO', elapsed: seconds - at };
+  const call = aircraftId === 'qx25' ? label.replace('左翼', '左').replace('右翼', '右') : label;
+  return { label: call, wing, go: label === 'GO', elapsed: seconds - at };
 }

@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { FlightSession } from './application/flight-session.js';
-import { BASE_DESIGN } from './domain/flight.js';
 import { createShoreline } from './domain/shoreline.js';
 import { WIND_GRID_SIZE } from './domain/lake-breeze.js';
 import { WEATHER, windAt } from './domain/weather.js';
@@ -9,6 +8,7 @@ import { setupFlightSound } from './presentation/flight-sound.js';
 import { selectedWeather, setupTrials } from './presentation/flight-screen.js';
 import { bindViewerControls, setupViewerShell, showCameraMode, trackViewportFraction } from './presentation/viewer-shell.js';
 import { createAircraft } from './rendering/aircraft.js';
+import { createQx25Aircraft } from './rendering/aircraft/qx25.js';
 import { createAircraftPose } from './rendering/aircraft-pose.js';
 import { createCockpitDisplay } from './rendering/aircraft/display.js';
 import { createDaylight } from './rendering/daylight.js';
@@ -51,7 +51,7 @@ async function start() {
     antialias: true, alpha: false, logarithmicDepthBuffer: true, powerPreference: 'high-performance',
   });
   host.append(renderer.domElement);
-  renderer.domElement.setAttribute('aria-label', '竜海と松原湖岸の3Dモデル。ドラッグで回転、ホイールで拡大縮小');
+  renderer.domElement.setAttribute('aria-label', '滑空機と松原湖岸の3Dモデル。ドラッグで回転、ホイールで拡大縮小');
   const compact = matchMedia('(pointer:coarse) and (max-width:1000px)').matches;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, compact ? 1.5 : 2));
   renderer.shadowMap.enabled = true;
@@ -89,17 +89,19 @@ async function start() {
       part.castShadow = true;
     }
   });
-  const crew = createLaunchCrew();
+  const toricaCrew = createLaunchCrew();
+  let crew = toricaCrew;
   enableReflection(crew.group);
   facility.add(crew.group);
   const modelBase = new THREE.Group();
   modelBase.position.set(0, deckHeight(3) + 0.04, 3);
   facility.add(modelBase);
-  const aircraft = createAircraft(BASE_DESIGN.span, BASE_DESIGN.incidence);
+  const ryukai = createAircraft();
+  let aircraft = ryukai;
   enableReflection(aircraft);
   modelBase.add(aircraft);
 
-  let trials, setNight, firstLand;
+  let trials, setNight, firstLand, current;
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
   const atWater = () => trials?.atWater;
   const boat = createChaseBoat();
@@ -128,14 +130,14 @@ async function start() {
     if (trials) {
       boat.group.localToWorld(motorPosition.set(0, .45, 2.7));
       const range = cameraRig.camera.position.distanceTo(motorPosition);
-      sound.update(trials.soundPhase, display.sample, display.instruments, cameraRig.view(), range, boatSpeed);
+      sound.update(trials.soundPhase, current.display.sample, current.display.instruments, cameraRig.view(), range, boatSpeed);
     }
     const weatherMode = trials?.weather ?? selectedWeather();
     const weather = WEATHER[weatherMode];
     const period = weather.period ?? 'day';
     if (document.body.dataset.period !== period) document.body.dataset.period = period;
     setNight?.(period === 'night');
-    const sample = trials ? display.sample : null;
+    const sample = current?.display.sample;
     const windTime = sample?.windTime ?? sample?.t ?? 0;
     const airflow = flag.update(weatherMode, sample?.gustOffset ?? 0, windTime, visualTime);
     flagInset(trials?.showFlag, flag, airflow, sample?.heading ?? 0);
@@ -162,15 +164,39 @@ async function start() {
   lake.setShallows(landscape.userData.shallows);
   firstLand = createShoreline(landscape.userData.shoreRings, facility.rotation.y);
   const { view, setView, startLandingCamera, moveCamera } = cameraRig;
-  const session = new FlightSession(modelHull(aircraft), selectedWeather(), drawWindOffset, firstLand);
-  const display = createCockpitDisplay(aircraft, {
-    describe: text => renderer.domElement.setAttribute('aria-description', text),
-  });
-  const aircraftPose = createAircraftPose({ modelBase, aircraft, crew, view, moveCamera, display });
+  const fleet = new Map();
+  function selectAircraft(id) {
+    let entry = fleet.get(id);
+    if (!entry) {
+      const model = id === 'ryukai' ? ryukai : createQx25Aircraft();
+      if (model !== ryukai) enableReflection(model);
+      const teamCrew = id === 'ryukai' ? toricaCrew : createLaunchCrew(id);
+      if (teamCrew !== toricaCrew) enableReflection(teamCrew.group);
+      const session = new FlightSession(modelHull(model), selectedWeather(), drawWindOffset, firstLand, id);
+      const display = createCockpitDisplay(model, {
+        aircraftId: id,
+        describe: text => renderer.domElement.setAttribute('aria-description', text),
+      });
+      const aircraftPose = createAircraftPose({ modelBase, aircraft: model, crew: teamCrew, view, moveCamera, display });
+      entry = { model, crew: teamCrew, session, display, aircraftPose };
+      fleet.set(id, entry);
+    }
+    if (aircraft !== entry.model) {
+      modelBase.remove(aircraft);
+      aircraft = entry.model;
+      modelBase.add(aircraft);
+      cameraRig.setAircraft(aircraft);
+      facility.remove(crew.group);
+      crew = entry.crew;
+      facility.add(crew.group);
+    }
+    current = entry;
+    return entry;
+  }
   trials = setupTrials({
-    session, aircraftPose, setView, view, startLandingCamera,
-    crewAnswer: crew.answer,
-    crewTime: time => crew.update(session.launch, time, (side, contact) => sound.step(side, contact, view())),
+    ...selectAircraft('ryukai'), selectAircraft, setView, view, startLandingCamera,
+    crewAnswer: (side, time) => crew.answer(side, time),
+    crewTime: time => crew.update(current.session.launch, time, (side, contact) => sound.step(side, contact, view())),
     playSplash: sample => sound.splash(sample),
     makeTrail: (run, color) => createFlightTrail(run, color, { facility, release }),
     sceneSeconds: () => sceneTime,

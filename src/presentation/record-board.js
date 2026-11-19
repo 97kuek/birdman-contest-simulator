@@ -1,4 +1,5 @@
 import { GLIDER_RECORDS } from '../application/flight-records.js';
+import { aircraftCards } from './aircraft-picker.js';
 import { WEATHER } from '../domain/weather.js';
 import { byId as $ } from './dom.js';
 
@@ -41,7 +42,7 @@ export function showRecordBoard(outcome) {
   share.hidden = !scored;
   if (scored) {
     const link = new URL('https://twitter.com/intent/tweet');
-    link.searchParams.set('text', '竜海で ' + board.value + ' m 飛びました！ #鳥人間コンテストシミュレーター');
+    link.searchParams.set('text', aircraftCards[outcome.run.aircraftId ?? 'ryukai'].name + 'で ' + board.value + ' m 飛びました！ #鳥人間コンテストシミュレーター');
     link.searchParams.set('url', 'https://97kuek.github.io/birdman-contest-simulator/');
     share.href = link.href;
   } else {

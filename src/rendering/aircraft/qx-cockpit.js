@@ -129,7 +129,8 @@ export function addQxCockpit(root, m) {
   }
   box(hardware,[0,.153,-.492],[.31,.053,.395],m.padding,'chest-rest');
   rod(hardware,[-.164,.164,.966],[.164,.164,.966],.014,m.carbon,'footrest');
-  const panel = box(hardware,[0,.168,-1.15],[.16,.084,.019],m.carbon,'game-instrument-case');
+  rod(hardware,[0,.101,-1.22],[0,.184,-1.265],.009,m.aluminium,'display-bracket');
+  const panel = box(hardware,[0,.201,-1.27],[.16,.084,.019],m.carbon,'game-instrument-case');
   panel.rotation.x = -.30;
   const mount = joint(root, 'cockpit-display-mount', ...panel.position.toArray());
   mount.rotation.copy(panel.rotation);

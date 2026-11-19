@@ -7,6 +7,7 @@ import { byId as $ } from './dom.js';
 import { setupCaptions } from './captions.js';
 import { setupReplay } from './replay.js';
 import { bindPilotControls } from './pilot-controls.js';
+import { aircraftCards, bindAircraftPicker } from './aircraft-picker.js';
 import { updateWindMeter } from './wind-meter.js';
 
 const colors = ['#b7441c', '#65489b', '#217547', '#bd3468', '#0567a5'];
@@ -27,6 +28,7 @@ export function selectedWeather() {
 export function setupTrials({
   session,
   aircraftPose,
+  selectAircraft,
   crewTime,
   crewAnswer,
   makeTrail,
@@ -37,7 +39,6 @@ export function setupTrials({
   playSplash,
 }) {
   const weatherControls = document.querySelectorAll('input[name="period"],input[name="difficulty"]');
-  const { pose } = aircraftPose;
   const records = new FlightRecords(() => window.localStorage);
   const renderWind = (s) => updateWindMeter(visibleWeather(), s);
   let latestRecord = null;
@@ -61,7 +62,7 @@ export function setupTrials({
     $('align-panel').hidden = name !== 'align';
     $('launch-call').hidden = name !== 'countdown';
     $('wind-meter').hidden = !['align', 'countdown', 'flight', 'replay'].includes(name);
-    $('flight-action').hidden = !['align', 'countdown', 'flight'].includes(name);
+    $('flight-action').hidden = !(['align', 'countdown', 'flight'].includes(name) || (name === 'result' && resultRecord));
     $('flight-action').textContent = name === 'flight' ? '飛行を中断' : '準備に戻る';
     $('previous-result').hidden = !session.latest;
   }
@@ -101,14 +102,14 @@ export function setupTrials({
     showPose(s, afterContact) {
       const { record } = review;
       if (afterContact > 0) s = session.waterPose(record.run, afterContact);
-      pose(s);
+      aircraftPose.pose(s);
       record.trail.replayTo(record.run, s.t);
       renderWind(s);
     },
     onClose() {
       const prior = review;
       prior.record.trail.showContact(prior.record.run);
-      aircraftPose.restore(prior.pose);
+      aircraftPose.pose(prior.pose);
       review = null;
       stage('result');
       setView(prior.view);
@@ -118,7 +119,7 @@ export function setupTrials({
   function openReplay(record, button) {
     if (!record || active || review) return;
     captions.clear();
-    review = { record, button, pose: aircraftPose.capture(), view: view() };
+    review = { record, button, pose: aircraftPose.sample, view: view() };
     record.trail.setVisible(true);
     setView('pilot');
     stage('replay');
@@ -164,7 +165,7 @@ export function setupTrials({
       };
       latestRecord = previous;
     }
-    pose(session.waterPose(previous.run, WATER_RUNOUT_SECONDS));
+    aircraftPose.pose(session.waterPose(previous.run, WATER_RUNOUT_SECONDS));
     atWater = true;
     previous.trail.setVisible(true);
     crewTime(Infinity);
@@ -192,7 +193,7 @@ export function setupTrials({
     tilt.calibrate();
     countdown = { seconds: 0, last: performance.now() };
     stage('countdown');
-    displayCall(launchCue(0));
+    displayCall(launchCue(0, session.aircraftId));
     $('launch-call').classList.remove('go');
     captions.clear();
     $('viewer').focus({ preventScroll: true });
@@ -203,7 +204,8 @@ export function setupTrials({
     if ($('call-text').textContent === cue.label && call.dataset.wing === cue.wing) return;
     call.dataset.wing = cue.wing;
     $('call-speaker').hidden = !cue.wing;
-    $('call-speaker').textContent = cue.wing === 'left' ? '左翼' : cue.wing === 'right' ? '右翼' : '';
+    const side = cue.wing === 'left' ? '左' : cue.wing === 'right' ? '右' : '';
+    $('call-speaker').textContent = side && side + (session.aircraftId === 'qx25' ? '側' : '翼');
     $('call-text').textContent = cue.label;
   }
   function start(now, elapsed) {
@@ -217,7 +219,7 @@ export function setupTrials({
     };
     atWater = false;
     clearInput();
-    active = { record, attempt, clock: elapsed, previousTime: now, airborne: false, nextShoreCheck: 0, shoreAhead: false, commentary: createRaceCommentary(attempt.number) };
+    active = { record, attempt, clock: elapsed, previousTime: now, airborne: false, nextShoreCheck: 0, shoreAhead: false, commentary: createRaceCommentary(attempt.number, aircraftCards[session.aircraftId].name) };
     stage('flight');
     $('viewer').focus({ preventScroll: true });
     tick(active.previousTime);
@@ -233,7 +235,7 @@ export function setupTrials({
     latestRecord = record;
     record.trail.showContact(run);
     const last = run.samples.at(-1);
-    pose(last);
+    aircraftPose.pose(last);
     playSplash(last);
     active = null;
     atWater = true;
@@ -250,7 +252,7 @@ export function setupTrials({
     atWater = false;
     clearInput();
     captions.clear();
-    pose(sample);
+    aircraftPose.pose(sample);
     stage('ruling');
     captions.show('ああ、飛行禁止区域に入った！', RULING_REVEAL_MS);
   }
@@ -281,7 +283,7 @@ export function setupTrials({
       if (!document.hidden && !$('source-dialog').open)
         countdown.seconds += Math.max(0, now - countdown.last) / 1000;
       countdown.last = Math.max(now, countdown.last);
-      const cue = launchCue(countdown.seconds);
+      const cue = launchCue(countdown.seconds, session.aircraftId);
       displayCall(cue);
       crewAnswer(cue.wing, cue.elapsed);
       if (cue.go) {
@@ -295,7 +297,7 @@ export function setupTrials({
       const { record } = landing;
       const seconds = (now - landing.start) / 1000;
       const floating = session.waterPose(record.run, seconds);
-      pose(floating);
+      aircraftPose.pose(floating);
       if (seconds >= LANDING_CAMERA_DELAY_SECONDS && landing.boatAt === null) {
         startLandingCamera();
         landing.boatAt = now;
@@ -332,7 +334,7 @@ export function setupTrials({
       const call = active.commentary.airborne(s, active.shoreAhead);
       if (call) captions.show(call, active.shoreAhead ? 6500 : 3000);
     }
-    pose(s);
+    aircraftPose.pose(s);
     renderWind(s);
   }
   aircraftPose.placeOnDeck(session.launch, session.onDeck);
@@ -361,6 +363,10 @@ export function setupTrials({
   function visibleWeather() {
     return review?.record.run.weather ?? resultRecord?.run.weather ?? session.weather;
   }
+  bindAircraftPicker(session.aircraftId, () => screen === 'setup', id => {
+    ({ session, aircraftPose } = selectAircraft(id));
+    changeConditions();
+  });
   $('launch').onclick = aim;
   $('launch').disabled = false;
   stage('setup');

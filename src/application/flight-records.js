@@ -17,7 +17,7 @@ export class FlightRecords {
     if (this.#scores.has(run)) return this.#scores.get(run);
     const metres = run.distance.toFixed(2);
     const cm = Number(metres.replace('.', ''));
-    const key = 'ryukai.personal-best.cm.v1.' + run.weather;
+    const key = (run.aircraftId ?? 'ryukai') + '.personal-best.cm.v1.' + run.weather;
     let prior = this.#best.get(key) ?? null;
     let storage;
     try {

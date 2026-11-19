@@ -40,7 +40,11 @@ test('再挑戦と再読込では時間帯・難易度の自己ベストを引�
   assert.equal(records.forRun(next), record);
   assert.equal(records.record(next), record);
 
+  const kyushu = { ...run(300), aircraftId: 'qx25' };
+  assert.equal(records.record(kyushu).personal, 'first');
+
   const reopened = new FlightRecords(() => storage);
+  assert.equal(reopened.record({ ...kyushu, distance: 298 }).best, 30000);
   assert.equal(reopened.record(run(342.1)).best, 34503);
   assert.equal(reopened.record(run(345.04)).personal, 'improved');
 });
@@ -82,6 +86,9 @@ test('再挑戦と履歴表示で、記録板の強調と公式記録の説明�
   assert.equal(elements['record-official'].hidden, true);
   assert.equal(elements['record-official'].textContent, '');
   assert.match(elements['record-detail'].textContent, /651.20 m/);
+  const kyushu = { ...run(300), aircraftId: 'qx25' };
+  showRecordBoard({ kind: 'scored', run: kyushu, score: records.record(kyushu) });
+  assert.match(new URL(elements['share-result'].href).searchParams.get('text'), /^QX-25で 300.00 m/);
   showRecordBoard({ kind: 'disqualified' });
   assert.equal(elements['result-value'].textContent, '失格');
   assert.equal(elements['result-heading'].textContent, 'ただ今の記録');

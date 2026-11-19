@@ -2,13 +2,13 @@
 const MIN_PAUSE = 5;
 const DEGREE = Math.PI / 180;
 const lines = {
-  release: ['さあ、竜海が飛び出した！', 'いった、竜海！', '竜海、湖上に出ました。'],
   recovery: ['おっと、機首が上がった！', 'ここで機首を上げてきた！'],
   low: ['低い、まだ飛んでいる！', '水面ぎりぎり、どこまで伸びるか！'],
-  landing: ['ああ、ここで着水！', '竜海、ここで水面に降りました。', 'いま着水です！'],
 };
 
-export function createRaceCommentary(trialNumber) {
+export function createRaceCommentary(trialNumber, aircraftName = '竜海') {
+  const release = ['さあ、' + aircraftName + 'が飛び出した！', 'いった、' + aircraftName + '！', aircraftName + '、湖上に出ました。'];
+  const landing = ['ああ、ここで着水！', aircraftName + '、ここで水面に降りました。', 'いま着水です！'];
   let lastCall = -Infinity, released = false, descending = false, recovered = false;
   let calledLow = false, calledTurn = false, lastHundred = 0;
   let warned = false, lastUnsafe = -Infinity;
@@ -32,7 +32,7 @@ export function createRaceCommentary(trialNumber) {
       }
       if (!released) {
         released = true;
-        return say(s.t, choose(lines.release));
+        return say(s.t, choose(release));
       }
       if (s.verticalSpeed < -.45) descending = true;
       const pullup = !recovered && descending && s.verticalSpeed > .15 && s.pitch > 0;
@@ -62,7 +62,7 @@ export function createRaceCommentary(trialNumber) {
     },
     landing(run) {
       if (run.distance >= 400 && lastHundred < 4) return '400メートルを越えて、ここで着水！';
-      return choose(lines.landing);
+      return choose(landing);
     },
   };
 }

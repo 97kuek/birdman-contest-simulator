@@ -437,6 +437,10 @@ dialog a {
 }
 
 .identity {
+  display: grid;
+  grid-template-columns: auto minmax(0,1fr) auto;
+  align-items: center;
+  column-gap: 6px;
   border-bottom: 2px solid #b5dbef;
   padding-bottom: 18px;
   margin-bottom: 19px;
@@ -446,6 +450,23 @@ dialog a {
   padding: 14px 16px;
   overflow: hidden;
 }
+
+.aircraft-arrow {
+  width: 44px;
+  min-height: 44px;
+  border: 1px solid #b5d4e8;
+  border-radius: 5px;
+  background: #ffffffcf;
+  color: var(--rally-navy);
+  font: 600 28px/1 system-ui;
+}
+.aircraft-arrow:hover { background: #fff; }
+.aircraft-card { min-width: 0; }
+.aircraft-card .model-title { display: grid; gap: 2px; }
+.aircraft-card .model-title span, .model-year span { white-space: nowrap; }
+.aircraft-card .model-year { display: flex; flex-wrap: wrap; gap: 0 .4em; }
+.aircraft-card .model-title h3 { white-space: nowrap; font-size: clamp(25px, 3vw, 40px); }
+
 
 .weather-choices {
   display: grid;
