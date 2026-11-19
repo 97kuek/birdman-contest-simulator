@@ -134,7 +134,6 @@ export function setupTrials({facility,crew,modelBase,aircraft,setView,view,moveC
   }
   function changeDirection(step){
     direction=Math.max(-30,Math.min(30,direction+step));
-    $('launch-direction').value=direction===0?'正面 0°':(direction<0?'左 ':'右 ')+Math.abs(direction)+'°';
     $('direction-left').disabled=direction===-30;
     $('direction-right').disabled=direction===30;
     changeConditions();
@@ -210,7 +209,7 @@ export function setupTrials({facility,crew,modelBase,aircraft,setView,view,moveC
     modelBase.position.set(right,s.height,-forward).add(offset);
     if(view()==='aircraft')moveCamera(modelBase.getWorldPosition(new THREE.Vector3()).sub(old));
   }
-  function renderWind(heading,pathLength,t,preview=false){
+  function renderWind(heading,pathLength,t){
     const wind=windAt(mode,pathLength,t);
     const speed=Math.hypot(wind.headwind,wind.crosswind??0);
     const relative=heading+Math.atan2(-(wind.crosswind??0),wind.headwind);
@@ -218,10 +217,10 @@ export function setupTrials({facility,crew,modelBase,aircraft,setView,view,moveC
     const from=Math.abs(side)<.22?(along>=0?'正面':'後方'):(side>0?'左':'右')+(Math.abs(along)<.22?'横':along>0?'前':'後');
     $('wind-arrow').style.transform='rotate('+(180-relative/radians)+'deg)';
     $('wind-arrow').style.opacity=speed<.05?0:1;
-    $('wind-place').textContent=preview?'プラットフォームの風':'現在地の風';
-    $('wind-value').textContent=speed<.05?'無風':from+'から '+speed.toFixed(1)+' m/s';
-    const vertical=Math.abs(wind.updraft);
-    $('wind-detail').textContent=vertical>=.05?(wind.updraft>0?'上昇流 ':'下降流 ')+vertical.toFixed(1)+' m/s':'▲ 機首　矢印は風の流れ';
+    $('wind-value').textContent=speed.toFixed(1)+' m/s';
+    const label=speed<.05?'無風':from+'からの風 '+speed.toFixed(1)+' m/s';
+    $('wind-meter').setAttribute('aria-label',label);
+    $('wind-meter').title=label;
   }
   function instruments(s,phase){
     const tilt=(value,positive,negative)=>Math.abs(value/radians)<.1?'水平':(value>0?positive:negative)+Math.abs(value/radians).toFixed(1)+'°';
@@ -322,7 +321,7 @@ export function setupTrials({facility,crew,modelBase,aircraft,setView,view,moveC
     stage('align');
     captions.show('東京理科大学・鳥科の竜海です。');
     setView('pilot');
-    renderWind(launch.heading,0,0,true);
+    renderWind(launch.heading,0,0);
     $('viewer').focus({preventScroll:true});
   }
   function confirmHeading(){
@@ -458,7 +457,7 @@ export function setupTrials({facility,crew,modelBase,aircraft,setView,view,moveC
     records.clear();
     mode=selectedWeather();
     launch=launchProfile(1,0,direction);
-    renderWind(launch.heading,0,0,true);
+    renderWind(launch.heading,0,0);
     placeOnDeck();
     $('previous-result').hidden=!latestByConditions.has(historyKey());
   }

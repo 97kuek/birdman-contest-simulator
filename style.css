@@ -4,7 +4,7 @@
 #viewer{isolation:isolate;position:relative;overflow:hidden;background:#a9cdd5}#canvas-host,#canvas-host>canvas{width:100%;height:100%;display:block;position:absolute;inset:0}#canvas-host>canvas{touch-action:none}#viewer::after{content:"";z-index:0;position:absolute;pointer-events:none;inset:65% 0 0;background:linear-gradient(transparent,rgba(9,39,48,.46))}.view-switch,.compass,.camera-tools,.scene-foot,#loading{z-index:1}.view-switch{position:absolute;top:19px;left:20px;display:flex;gap:3px;padding:4px;background:rgba(250,253,250,.96);box-shadow:0 2px 13px #1536332a;border-radius:9px}.view-switch button{border-radius:6px;padding:7px 12px;font-size:12px;font-weight:650;white-space:nowrap}.view-switch button[aria-pressed=true]{background:#214f55;color:white}.view-switch .icon{width:16px;height:16px}
 .compass{width:39px;height:57px;border-radius:22px;position:absolute;right:20px;top:19px;background:#204b52cf;color:white;display:flex;flex-direction:column;align-items:center;padding:3px 0}.compass span{font:600 10px/16px system-ui}.compass svg{width:25px;height:27px}
 #loading{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);color:#fff;background:#244d54eb;padding:10px 16px;border-radius:7px;font-size:13px;max-width:85%;text-align:center}
-.scene-foot{position:absolute;bottom:19px;left:21px;color:white;text-shadow:0 1px 5px #0b333d}.place{display:flex;align-items:center;gap:7px;font-size:15px;font-weight:650}.gestures{font-size:11px;margin:4px 0 0 24px;color:#edf8f6}.camera-tools{position:absolute;right:19px;bottom:20px;display:flex;background:#f7fcf8f0;border-radius:7px;padding:3px}.camera-tools button{padding:7px;border-radius:4px}.camera-tools .icon{width:16px;height:16px}
+.scene-foot{position:absolute;bottom:19px;left:21px;color:white;text-shadow:0 1px 5px #0b333d}.place{display:flex;align-items:center;gap:7px;font-size:15px;font-weight:650}.camera-tools{position:absolute;right:19px;bottom:20px;display:flex;background:#f7fcf8f0;border-radius:7px;padding:3px}.camera-tools button{padding:7px;border-radius:4px}.camera-tools .icon{width:16px;height:16px}
 .model-year{font-size:11px;color:var(--muted);font-weight:550}.model-title{display:flex;align-items:baseline;gap:13px;margin:3px 0 13px}.model-title span{color:var(--muted);font-size:12px}.dialog-top{display:flex;align-items:center;justify-content:space-between}.inspector h3{margin:0;font-size:15px}
 dialog{max-width:min(500px,90vw);max-height:82dvh;padding:24px;border-radius:12px;border:1px solid #c2d4cf;color:var(--ink);box-shadow:0 15px 90px #16363d45}dialog::backdrop{background:#102a36a3}.dialog-top h2{margin:0;font-size:19px}.dialog-top button{padding:6px;border-radius:5px}dialog h3{font-size:14px;margin:22px 0 4px}dialog p,dialog a{font-size:12px;line-height:1.8}dialog p{margin:5px 0}dialog a{color:#125962} [hidden]{display:none!important}
 .map-credit{margin:6px 0 0 24px;font-size:9px;color:#fff;text-shadow:0 1px 3px #15383d}
@@ -84,7 +84,7 @@ dialog{max-width:min(500px,90vw);max-height:82dvh;padding:24px;border-radius:12p
   .flight-lab:is([data-stage=setup],[data-stage=result]) .camera-tools { right:8px;top:115px;bottom:auto }
   .setup-scroll,#comparison { padding:15px 17px }.setup-title { margin:0 0 8px }
   .identity { margin-bottom:12px;padding-bottom:9px }.model-title h3 { font-size:34px }
-  .scene-foot { left:10px;bottom:9px }.map-credit { margin-left:0;font-size:8px }.gestures { display:none }
+  .scene-foot { left:10px;bottom:9px }.map-credit { margin-left:0;font-size:8px }
   .camera-tools { right:8px;bottom:8px }.view-switch { top:9px;left:8px }.view-switch button { padding:5px 8px }
   .compass { top:9px;right:8px }.setup-launch { padding:8px 17px max(8px,env(safe-area-inset-bottom)) }
   #replay-panel { inset:auto 8px 52px }
@@ -93,11 +93,11 @@ dialog{max-width:min(500px,90vw);max-height:82dvh;padding:24px;border-radius:12p
   #replay-time {font-size:10px}
 }
 
-.direction-field,.direction-field>div,.instrument-head {display:flex;align-items:center;justify-content:space-between}
-.direction-field {margin:0 0 14px;font-size:14px}
-.direction-field>div {border:1px solid #b7c9c5;border-radius:7px;background:white}
-.direction-field button {width:42px;height:40px;color:#18565d;font-size:20px}
-.direction-field output {min-width:68px;text-align:center;font-weight:650}
+.instrument-head {display:flex;align-items:center;justify-content:space-between}
+.direction-field {display:flex;align-items:center;gap:3px;font-size:13px;font-weight:650;white-space:nowrap}
+.direction-field button {width:40px;height:42px;border-radius:5px;color:#18565d;font-size:21px}
+.direction-field button:hover {background:#e5efec}
+
 #flight-hud {display:block;background:#10333dec;border:1px solid #86a8a15e;border-radius:9px;padding:9px 13px;color:#f2f6ed;pointer-events:none}
 .instrument-head {border-bottom:1px solid #92afa759;gap:15px;padding-bottom:4px;letter-spacing:.06em}
 .pitch-gauge {display:flex;align-items:center;gap:11px;line-height:1.4;border-top:1px solid #92afa744;padding-top:5px}
@@ -120,11 +120,11 @@ dialog{max-width:min(500px,90vw);max-height:82dvh;padding:24px;border-radius:12p
   .flight-lab[data-stage=replay] #replay-panel {left:auto;width:48%;max-height:70dvh}
 }
 
-.flight-lab:is([data-stage=flight],[data-stage=replay],[data-stage=landing]) .scene-foot :is(.place,.gestures) {display:none}
+.flight-lab:is([data-stage=flight],[data-stage=replay],[data-stage=landing]) .scene-foot .place {display:none}
 #result-heading:focus,.setup-title:focus,#viewer:focus {outline:none}
 
-#align-panel {position:absolute;z-index:2;bottom:12%;left:50%;transform:translateX(-50%);width:min(300px,calc(100% - 24px));border:1px solid #c2d3cd;background:#f8fbf8f5;padding:16px 20px;border-radius:12px;box-shadow:0 5px 32px #14363d38}
-#align-panel .primary {width:100%}
+#align-panel {position:absolute;z-index:2;bottom:12%;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;max-width:calc(100% - 20px);border:1px solid #c2d3cd;background:#f8fbf8f5;padding:5px 6px;border-radius:9px;box-shadow:0 5px 32px #14363d38}
+#align-panel .primary {width:auto;min-height:42px;padding:6px 12px;white-space:nowrap}
 #align-panel kbd {font:600 11px ui-monospace,monospace;border:1px solid #a7cbc9;border-radius:3px;padding:1px 4px;margin-right:4px}
 #launch-call {position:absolute;z-index:2;top:33%;left:50%;transform:translateX(-50%);text-align:center;white-space:nowrap;color:white;pointer-events:none}
 #launch-call small {display:inline-block;background:#113c48ef;border-bottom:2px solid #e4bf71;padding:3px 12px;font-size:12px;font-weight:700;letter-spacing:.13em}
@@ -139,12 +139,9 @@ dialog{max-width:min(500px,90vw);max-height:82dvh;padding:24px;border-radius:12p
 @media(max-height:540px){#commentary {bottom:auto;top:38%}}
 
 #wind-meter {position:absolute;top:132px;right:18px;z-index:1;display:flex;align-items:center;gap:9px;background:#123c46ed;color:#fff;border-radius:9px;padding:8px 12px;font-variant-numeric:tabular-nums}
-#wind-meter small,#wind-meter strong {display:block}
-#wind-meter small {color:#cfdfd9;font-size:10px}
-#wind-meter strong {font-size:15px}
-.wind-dial {width:37px;height:37px;position:relative;border-radius:50%;border:1px solid #91b4b2;display:grid;place-items:center}
-.wind-dial span {position:absolute;top:-5px;background:#18424a;font-size:8px;color:#f4d38a}
-#wind-arrow {font:600 24px/1 system-ui;color:#baf2ea}
+#wind-meter strong {font-size:15px;white-space:nowrap}
+.wind-dial {width:39px;height:39px}
+#wind-arrow {transform-origin:24px 24px}
 @media(max-width:740px){
   #wind-meter {top:112px;right:8px}
   .flight-lab[data-stage=replay] #wind-meter {top:auto;bottom:calc(50dvh + 62px)}

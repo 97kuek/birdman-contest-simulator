@@ -24,8 +24,12 @@
       </nav>
       <div class="compass" aria-label="画面上の北方向"><span>N</span><svg viewBox="0 0 28 28" aria-hidden="true"><path fill="#e6f5ed" d="m14 1 4.5 17-4.5-3-4.5 3z"/><path fill="#789493" d="m14 27-4.5-13 4.5 2 4.5-2z"/></svg></div>
       <section id="wind-meter" aria-label="機首を上にした風の流れ" hidden>
-        <div class="wind-dial" title="上が機首・矢印は風の流れる方向"><span>▲</span><b id="wind-arrow" aria-hidden="true">↑</b></div>
-        <div><small id="wind-place"></small><strong id="wind-value"></strong><small id="wind-detail"></small></div>
+        <svg class="wind-dial" viewBox="0 0 48 48" aria-hidden="true">
+          <circle cx="24" cy="24" r="21" fill="none" stroke="#789d9e"/>
+          <path d="M24 14l2 8 8 4v2l-9-2v5l3 2-4-1-4 1 3-2v-5l-9 2v-2l8-4z" fill="#ffdf90"/>
+          <g id="wind-arrow" fill="none" stroke="#c4fff4" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M24 45V34m-4 4 4-4 4 4"/></g>
+        </svg>
+        <strong id="wind-value"></strong>
       </section>
       <section class="flight-hud" id="flight-hud" aria-label="飛行計器" hidden>
         <div class="instrument-head"><strong id="phase"></strong><span id="course-value"></span><span id="instrument-time"></span></div>
@@ -33,14 +37,14 @@
         <div class="pitch-gauge"><div class="horizon" aria-hidden="true"><i id="pitch-horizon"></i></div>
           <span>機首 <b id="pitch-value"></b></span><span>傾き <b id="bank-value"></b></span><span>ラダー <b id="rudder-value"></b></span></div>
       </section>
-      <div id="align-panel" hidden><div class="direction-field" role="group" aria-label="発進方向"><strong>発進方向</strong><div>
-        <button id="direction-left" aria-label="発進方向を左へ1度">←</button><output id="launch-direction" aria-live="polite">正面 0°</output><button id="direction-right" aria-label="発進方向を右へ1度">→</button></div></div>
-        <button id="confirm-heading" class="primary"><kbd>Space</kbd> 方向を決めて発進</button></div>
+      <div id="align-panel" hidden><div class="direction-field" role="group" aria-label="発進方向">
+        <button id="direction-left" aria-label="機首を左へ">←</button><span aria-hidden="true">発進方向</span><button id="direction-right" aria-label="機首を右へ">→</button>
+        </div><button id="confirm-heading" class="primary" aria-keyshortcuts="Space"><kbd>Space</kbd> 発進</button></div>
       <div id="launch-call" role="status" hidden><small>プラットフォーム <b>／</b> 竜海</small><strong id="call-text"></strong></div>
       <div id="commentary" role="status" hidden><b>実況</b><span id="commentary-text"></span></div>
       <div id="landing-call" role="status" hidden>着水</div>
       <div id="loading" role="status">3Dシーンを読み込み中…</div>
-      <div class="scene-foot"><div class="place"><i data-icon="pin"></i><span>彦根・松原湖岸</span></div><div class="gestures">ドラッグで回転　·　スクロールで拡大</div><div class="map-credit">地形・写真・水域：国土地理院／国土数値情報</div></div>
+      <div class="scene-foot"><div class="place"><i data-icon="pin"></i><span>彦根・松原湖岸</span></div><div class="map-credit">地形・写真・水域：国土地理院／国土数値情報</div></div>
       <div class="camera-tools" aria-label="視点の操作"><button id="zoom-in" aria-label="拡大"><i data-icon="plus"></i></button><button id="zoom-out" aria-label="縮小"><i data-icon="minus"></i></button><button id="camera-reset" aria-label="現在の視点に戻す"><i data-icon="undo"></i></button><button id="fullscreen" aria-label="全画面表示" title="全画面表示"><i data-icon="frame"></i></button></div>
     </section>
     <section id="comparison" role="dialog" aria-labelledby="result-heading" hidden>

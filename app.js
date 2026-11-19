@@ -169,7 +169,6 @@ async function start() {
     camera.fov=mode==='pilot'?76:fixed?45:38;
     camera.near=mode==='pilot'?0.02:0.18;
     camera.updateProjectionMatrix();
-    document.querySelector('.gestures').textContent=mode==='boat'?(trials?.atWater?'ボートから着水地点を表示':'湖面上1.65 mから追走'):fixed?'機体の姿勢に追従':'ドラッグで回転　·　スクロールで拡大';
     if(fixed){
       followAircraft(mode);
     }else if(mode==='tracks'){
