@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RAMP_LENGTH } from '../domain/launch.js';
+import { createPlatformMarkings } from './platform-markings.js';
 import { deckHeight, deckRun } from './launch-deck.js';
 
 // Metres. The published launch run is 10 m down a 3.5° incline.
@@ -38,7 +39,7 @@ export function createPlatform({ shoreDistance = 100 } = {}) {
   group.name = '松原湖岸・プラットフォーム';
   const shoreEnd = Math.max(rear + 8, shoreDistance);
   const positions = [], colors = [], tubes = [];
-  const red = '#d8254e', blue = '#36bfdc', yellow = '#ffdb3a';
+  const red = '#dd3154', blue = '#439cc9', yellow = '#ffda61';
   const steel = '#718085', lightSteel = '#a3aeb0', braces = '#667679';
   const paint = new THREE.Color();
 
@@ -77,7 +78,12 @@ export function createPlatform({ shoreDistance = 100 } = {}) {
     const innerA = fanPoint(left, radius - 0.67), innerB = fanPoint(right, radius - 0.67);
     triangle(fanPoint(0, 0), innerA, innerB, yellow);
     quad(a, b, innerB, innerA, red);
-    quad(a, [a[0], a[1] - 0.18, a[2]], [b[0], b[1] - 0.18, b[2]], b, '#b32543');
+    // A red painted lip over a dark, deeper bearer along the curved nose.
+    quad(a, fanPoint(left, radius, -.065), fanPoint(right, radius, -.065), b, red);
+    quad(fanPoint(left, radius, -.065), fanPoint(left, radius, -.25),
+      fanPoint(right, radius, -.25), fanPoint(right, radius, -.065), '#47515a');
+    quad(fanPoint(left, radius, -.25), fanPoint(left, radius - .38, -.25),
+      fanPoint(right, radius - .38, -.25), fanPoint(right, radius, -.25), '#485259');
   }
   for (const sign of [-1, 1]) {
     const edge = sign * halfWidth;
@@ -86,14 +92,41 @@ export function createPlatform({ shoreDistance = 100 } = {}) {
   }
   panel(-halfWidth, halfWidth, deckRun, rear, blue);
   // The painted centre lane carries through from the staging deck into the fan.
-  panel(-0.7, 0.7, deckRun, rear, yellow, 0.006);
+  const laneHalf = .86;
+  const laneJoin = deckRun * (1 - laneHalf / (radius * Math.tan(halfAngle)));
+  panel(-laneHalf, laneHalf, laneJoin, deckRun, yellow, .004);
+  panel(-laneHalf, laneHalf, deckRun, rear, yellow, .004);
   for (const sign of [-1, 1]) {
     // Rear service galleries are lower than the launch surface. No rail
     // crosses the launch edge or the area swept by an aircraft at departure.
     const inner = sign * halfWidth, outer = sign * (halfWidth + 1.1);
     panel(Math.min(inner, outer), Math.max(inner, outer), 7.5, rear, '#a99678', -0.5);
     for (const y of [0.05, 0.52]) tube(at(outer, 7.5, y), at(outer, rear, y), 0.055, lightSteel);
-    for (let z = 7.5; z <= rear; z += 2.1) tube(at(outer, z, -0.57), at(outer, z, 0.55), 0.062, steel);
+    quad(at(outer, 7.5, -.50), at(outer, rear, -.50), at(outer, rear, -.69), at(outer, 7.5, -.69), '#73838b');
+    for (let z = 7.5; z <= rear; z += 2.1) {
+      tube(at(outer, z, -.57), at(outer, z, .55), .062, steel);
+      tube(at(inner, z, -1.52), at(outer, z, -.55), .075, braces);
+    }
+    tube(at(outer, 5.45, -.54), at(outer, 15.1, -.54), .075, steel);
+    for (const z of [5.45, 9.95, 15.08]) {
+      tube(at(inner, z, -.25), at(outer, z, -.54), .068, steel);
+      tube(at(outer, z, -.55), at(outer, z, -2.25), .054, steel);
+    }
+  }
+
+  // At 2:55 the foremost deck projects past the scaffold uprights on
+  // steep dark diagonal shores. Their spacing and sections are approximated.
+  // https://www.youtube.com/watch?v=SFUEIepMicU&t=175s
+  for (let i = 0; i <= 12; i++) {
+    const angle = halfAngle * (2 * i / 12 - 1);
+    const foot = fanPoint(angle, radius - 2.70, -5.45);
+    const lip = fanPoint(angle, radius - .17, -.23);
+    tube(foot, lip, .135, '#4e5960');
+    tube(fanPoint(angle, radius - 2.70, -.23), lip, .16, steel);
+    if (i < 12) {
+      const next = halfAngle * (2 * (i + 1) / 12 - 1);
+      tube(foot, fanPoint(next, radius - 2.70, -5.45), .082, braces);
+    }
   }
 
   const rows = [0.95, 3.3, 6.25, 9.3, 12.35, 15.65];
@@ -149,6 +182,8 @@ export function createPlatform({ shoreDistance = 100 } = {}) {
       tube(pier(x, z0, -0.17), pier(x, z1, -0.17), 0.15, steel);
       tube(pier(x, z0, 0.85), pier(x, z1, 0.85), 0.049, lightSteel);
       tube(pier(x, z0, 0.4), pier(x, z1, 0.4), 0.034, lightSteel);
+      const midZ = (z0 + z1) / 2;
+      tube(pier(x, midZ, -.14), pier(x, midZ, .86), .049, steel);
       tube(pier(x, z0, -0.25), [x, 0.27, z1], 0.061, braces);
       if (j === bays - 1) tube([x, -0.4, z1], pier(x, z1, 0.85), 0.085, steel);
     }
@@ -168,6 +203,7 @@ export function createPlatform({ shoreDistance = 100 } = {}) {
   deck.name = '助走面・作業床・木製搬入路';
   deck.receiveShadow = deck.castShadow = true;
   group.add(deck);
+  group.add(createPlatformMarkings(halfWidth, deckRun));
 
   const frame = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 8),
     new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.34, roughness: 0.55 }), tubes.length);
