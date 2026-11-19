@@ -1,3 +1,5 @@
+import { RADIANS_PER_DEGREE } from './units.js';
+
 // Sampled from TORICA's 2025_Tatsumi.csv. The origin is log time 3.9 s.
 // Coordinates are horizontal metres in the launch platform frame. See flight-validation.md.
 export const observations = [
@@ -25,22 +27,21 @@ export const observations = [
 export const officialDistance = 433.02;
 
 // Ground-track directions estimated from broad intervals of the GPS trace.
-// All designs follow this course. Continue on the last tangent beyond the data.
-const radians = Math.PI / 180;
+// Reference flights follow this course. Continue on the last tangent beyond the data.
 const headings = [[0, 0], [35, 18], [120, 8], [200, 7], [315, -17], [465, -58]];
 export function courseAt(length) {
   let right = 0, forward = 0;
   for (let i = 1; i < headings.length; i++) {
     const [start, from] = headings[i - 1], [end, to] = headings[i];
-    const curvature = (to - from) * radians / (end - start);
+    const curvature = (to - from) * RADIANS_PER_DEGREE / (end - start);
     const arc = Math.min(length, end) - start;
-    const initial = from * radians, heading = initial + arc * curvature;
+    const initial = from * RADIANS_PER_DEGREE, heading = initial + arc * curvature;
     right += (Math.cos(initial) - Math.cos(heading)) / curvature;
     forward += (Math.sin(heading) - Math.sin(initial)) / curvature;
     if (length <= end) return { right, forward, heading };
   }
   const [end, to] = headings.at(-1);
-  const heading = to * radians;
+  const heading = to * RADIANS_PER_DEGREE;
   return {right: right + (length-end)*Math.sin(heading),
     forward: forward + (length-end)*Math.cos(heading), heading};
 }
