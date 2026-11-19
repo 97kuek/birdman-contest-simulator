@@ -32,6 +32,7 @@ function svg(tag, props, parent) {
 }
 const charts = [];
 function chart(title, unit, seriesKey, modelColumn, imuColumn, ticks) {
+  const imuRows = seriesKey === 'rates' ? data.imuRates : data.imu;
   const figure = document.createElement('figure'), caption = document.createElement('figcaption');
   const label = document.createElement('strong');
   label.textContent = title + ' (' + unit + ')';
@@ -62,11 +63,11 @@ function chart(title, unit, seriesKey, modelColumn, imuColumn, ticks) {
   const alternatives = {};
   for (const key of ['previous','fixed']) alternatives[key] = line(data[key][seriesKey], modelColumn, colors.alternative, true);
   line(data.current[seriesKey], modelColumn, colors.model, false);
-  if (imuColumn !== null) line(data.imu, imuColumn, colors.imu, false);
+  if (imuColumn !== null) line(imuRows, imuColumn, colors.imu, false);
   const cursor = svg('line', { y1:top, y2:h-bottom, stroke:'#213b58','stroke-width':1.5 },g);
   const readings = [];
   for (const [name, rows, column, text] of [
-    ['imu',data.imu,imuColumn,'実機'], ['model',data.current[seriesKey],modelColumn,'モデル'],
+    ['imu',imuRows,imuColumn,'実機'], ['model',data.current[seriesKey],modelColumn,'モデル'],
   ]) {
     if (column === null) continue;
     const out = document.createElement('span');
@@ -94,7 +95,7 @@ function chart(title, unit, seriesKey, modelColumn, imuColumn, ticks) {
   });
 }
 chart('ピッチ', '°', 'states', 1, 1, [-20,-15,-10,-5,0,5]);
-chart('ピッチ変化率', '°/s', 'rates', 1, 2, [-20,-10,0,10,20]);
+chart('ピッチ変化率', '°/s', 'rates', 1, 1, [-20,-10,0,10,20]);
 chart('身体位置', 'cm', 'states', 2, null, [-10,-5,0,5,10]);
 
 let time = 0, player, ready = false, playing = false, frame, lastTick, failed = false;

@@ -18,7 +18,13 @@ const first = rows.findIndex(p => p.t >= 0) - 1;
 const last = rows.findIndex(p => p.t > duration);
 const clock = rows.slice(first, last + 1);
 const windowAt = t => rows.filter(p => Math.abs(p.t - t) <= halfWindow);
-const imu = clock.map(p => [round(p.t), p.pitch, round(pitchSlope(windowAt(p.t), s => s.pitch))]);
+const imu = clock.map(p => [round(p.t), p.pitch]);
+const rateStep = 0.05;
+const rateWindows = Array.from({ length: Math.round(duration / rateStep) + 1 }, (_, i) => {
+  const t = round(i * rateStep);
+  return { t, samples: windowAt(t) };
+});
+const imuRates = rateWindows.map(({ t, samples }) => [t, round(pitchSlope(samples, p => p.pitch))]);
 
 function model(opening) {
   const flight = createFlight(BASE_DESIGN, hull, { referenceControl: true, opening });
@@ -28,12 +34,12 @@ function model(opening) {
   const states = run.samples.filter(s => s.t <= duration)
     .map(s => [round(s.t), round(s.pitch * 180 / Math.PI), round(s.bodyShift * 100)]);
   // The solver starts at release. Never pad the filter with a fictitious ramp attitude.
-  const rates = clock.filter(p => windowAt(p.t)[0].t >= 0)
-    .map(p => [round(p.t), round(pitchSlope(windowAt(p.t), pitchAt))]);
+  const rates = rateWindows.filter(({ samples }) => samples[0].t >= 0)
+    .map(({ t, samples }) => [t, round(pitchSlope(samples, pitchAt))]);
   return { states, rates };
 }
 
 const fixedUntil = duration + halfWindow + 1;
-const data = { logOrigin, duration, halfWindow, imu, current: model(), previous: model(previous),
+const data = { logOrigin, duration, halfWindow, imu, imuRates, current: model(), previous: model(previous),
   fixed: model({ holdUntil: fixedUntil, easeAt: fixedUntil, resumeTrimAt: fixedUntil }) };
 writeFileSync(new URL('../src/presentation/opening-comparison.json', import.meta.url), JSON.stringify(data) + '\n');

@@ -21,3 +21,9 @@ test('比較画面の現在と調整前の全61姿勢は公開ソルバーの同
   assert.ok(figure.fixed.states.every(([, , body]) => body === figure.fixed.states[0][2]));
   assert.ok(figure.imu[0][0] < 0 && figure.imu.at(-1)[0] > figure.duration);
 });
+
+test('0.75秒の表示には検証表と同じ時刻窓の傾きを使う', () => {
+  const rate = rows => rows.find(([t]) => t === .75)[1];
+  assert.equal(rate(figure.imuRates).toFixed(2), '-11.56');
+  assert.equal(rate(figure.current.rates).toFixed(2), '-6.87');
+});
