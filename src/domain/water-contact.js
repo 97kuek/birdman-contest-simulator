@@ -19,14 +19,30 @@ export function hull2D(points) {
   return [...chain(sorted), ...chain(sorted.reverse())];
 }
 
+export function hullAtControls(hull, rudderDeg, elevatorDeg = 0) {
+  const turn = rudderDeg && hull.fin, pitch = elevatorDeg && hull.elevator;
+  if (!turn && !pitch) return hull;
+  let fin = hull.fin ?? [], elevator = hull.elevator ?? [];
+  if (turn) {
+    const angle = rudderDeg * RADIANS_PER_DEGREE, cos = Math.cos(angle), sin = Math.sin(angle);
+    fin = fin.map(([aft, up, side]) => {
+      const arm = aft - hull.hingeZ;
+      return [hull.hingeZ + cos * arm - sin * side, up, cos * side + sin * arm];
+    });
+  }
+  if (pitch) {
+    const angle = elevatorDeg * RADIANS_PER_DEGREE, cos = Math.cos(angle), sin = Math.sin(angle);
+    elevator = elevator.map(([aft, up, side]) => {
+      const along = aft - hull.elevatorHingeZ, above = up - hull.elevatorHingeUp;
+      return [hull.elevatorHingeZ + cos * along - sin * above,
+        hull.elevatorHingeUp + sin * along + cos * above, side];
+    });
+  }
+  return hull.fixed.concat(fin, elevator);
+}
+
 export function hullAtRudder(hull, degrees) {
-  if (!degrees || !hull.fin) return hull;
-  const cos = Math.cos(degrees * RADIANS_PER_DEGREE), sin = Math.sin(degrees * RADIANS_PER_DEGREE);
-  const fin = hull.fin.map(([aft, up, side]) => {
-    const arm = aft - hull.hingeZ;
-    return [hull.hingeZ + cos * arm - sin * side, up, cos * side + sin * arm];
-  });
-  return hull.fixed.concat(fin);
+  return hullAtControls(hull, degrees);
 }
 
 // Project model vertices about the CG. Banking requires the three-dimensional hull.
@@ -85,7 +101,9 @@ export function waterRunoutPose(contact, seconds, hull, wind) {
   const bank = contact.bank * remaining ** 2;
   const forward = contact.forward + along * travel, right = contact.right + across * travel;
   const windTime = contact.t + t;
-  const bottom = geometryAt(pitch, hull, bank).bottom;
+  const rudderDeg = (contact.rudderDeg ?? 0) * remaining;
+  const elevatorDeg = (contact.elevatorDeg ?? 0) * remaining;
+  const bottom = geometryAt(pitch, hull.elevator ? hullAtControls(hull, rudderDeg, elevatorDeg) : hull, bank).bottom;
   const immersion = RUNOUT.immersion * (1 - remaining ** 2);
   const heave = Math.max(-RUNOUT.maxHeave, Math.min(0, contact.verticalSpeed * RUNOUT.heaveResponse))
     * Math.sin(RUNOUT.heaveFrequency * t) * remaining ** 3;
@@ -99,6 +117,6 @@ export function waterRunoutPose(contact, seconds, hull, wind) {
     headwind, updraft, pitchRate: pitchDerivative * Math.cos(bank),
     rollRate: -2 * contact.bank * remaining / WATER_RUNOUT_SECONDS, yawRate: -pitchDerivative * Math.sin(bank),
     height, bottomHeight: 0, verticalSpeed: 0, pitch, bank,
-    rudderDeg: contact.rudderDeg * remaining, shift: contact.shift * remaining,
+    rudderDeg, elevatorDeg, bodyShift: contact.bodyShift === undefined ? undefined : contact.bodyShift * remaining, shift: contact.shift * remaining,
   };
 }

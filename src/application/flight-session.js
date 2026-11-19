@@ -1,5 +1,4 @@
 import {
-  BASE_DESIGN,
   CG_HEIGHT,
   LAUNCH,
   MAX_LAUNCH_HEADING_DEGREES,
@@ -12,17 +11,18 @@ import {
   waterRunoutPose,
 } from '../domain/flight.js';
 import { aircraftShoreContact } from '../domain/shoreline.js';
-import { PILOT_SHIFT } from '../domain/pilot-shift.js';
+import { aircraftProfile } from '../domain/aircraft-profiles.js';
+import { bodyShiftFromCg } from '../domain/pilot-shift.js';
 import { RADIANS_PER_DEGREE } from '../domain/units.js';
 import { WEATHER, windAt } from '../domain/weather.js';
 
-function rampSample(launch, weather, elapsed, gustOffset) {
+function rampSample(launch, weather, elapsed, gustOffset, profile) {
   const ramp = rampAt(launch, elapsed);
   const remaining = RAMP_LENGTH - ramp.travel;
   const right = launch.edgeRight - remaining * launch.rightStep;
   const forward = launch.edgeForward - remaining * launch.forwardStep;
   const windTime = elapsed - launch.duration;
-  const bottomHeight = launch.edgeHeight + LAUNCH.deckClearance + remaining * launch.dropStep;
+  const bottomHeight = launch.edgeHeight + launch.deckClearance + remaining * launch.dropStep;
   const height = bottomHeight + CG_HEIGHT;
   const wind = windAt(weather, { right, forward, height, gustOffset }, windTime);
   return {
@@ -30,7 +30,7 @@ function rampSample(launch, weather, elapsed, gustOffset) {
     right, forward, windTime, gustOffset,
     heading: launch.heading,
     rampTravel: ramp.travel,
-    shift: PILOT_SHIFT.releaseCgShift,
+    shift: profile.releaseCgShift, bodyShift: bodyShiftFromCg(profile.releaseCgShift, profile), elevatorDeg: 0, rudderDeg: 0,
     track: launch.heading,
     groundSpeed: ramp.speed * Math.hypot(launch.forwardStep, launch.rightStep),
     verticalSpeed: -ramp.speed * launch.dropStep,
@@ -54,12 +54,15 @@ export class FlightSession {
   #gustOffset = 0;
   #drawWindOffset;
   #firstLand;
+  #profile;
   #shoreContact;
   #runoutLimits = new WeakMap();
   #prepared = false;
   #runReferences = new WeakMap();
 
-  constructor(hull, weather, drawWindOffset = () => 0, firstLand) {
+  constructor(hull, weather, drawWindOffset = () => 0, firstLand, aircraftId = 'ryukai') {
+    this.#profile = aircraftProfile(aircraftId);
+    this.aircraftId = aircraftId;
     this.#firstLand = firstLand;
     this.#shoreContact = aircraftShoreContact(hull, firstLand);
     this.#drawWindOffset = drawWindOffset;
@@ -74,7 +77,7 @@ export class FlightSession {
       this.#gustOffset = 0;
     }
     this.weather = weather;
-    this.launch = Object.freeze(launchProfile(1, 0, heading));
+    this.launch = Object.freeze(launchProfile(1, 0, heading, this.#profile.deckClearance));
     this.#baseline = null;
   }
 
@@ -88,17 +91,17 @@ export class FlightSession {
 
   get options() {
     const { push, coast, direction } = this.launch;
-    return { weather: this.weather, gustOffset: this.#gustOffset, push, coast, direction };
+    return { aircraftId: this.aircraftId, weather: this.weather, gustOffset: this.#gustOffset, push, coast, direction };
   }
 
   get reference() {
-    return (this.#baseline ??= simulateFlight(BASE_DESIGN, this.hull, this.options));
+    return (this.#baseline ??= simulateFlight(this.#profile.design, this.hull, this.options));
   }
 
   referenceFor(run) {
     if (!this.#runReferences.has(run)) {
       const { push, coast, direction } = run.launch;
-      const reference = simulateFlight(run.design, this.hull, { weather: run.weather, gustOffset: run.gustOffset ?? 0,
+      const reference = simulateFlight(run.design, this.hull, { aircraftId: run.aircraftId, weather: run.weather, gustOffset: run.gustOffset ?? 0,
         push, coast, direction });
       this.#runReferences.set(run, reference);
     }
@@ -113,7 +116,7 @@ export class FlightSession {
   }
 
   get onDeck() {
-    return rampSample(this.launch, this.weather, 0, this.options.gustOffset);
+    return rampSample(this.launch, this.weather, 0, this.options.gustOffset, this.#profile);
   }
 
   startAttempt() {
@@ -123,7 +126,8 @@ export class FlightSession {
     const weather = this.weather;
     const key = this.conditionKey;
     const options = this.options;
-    const flight = createFlight(BASE_DESIGN, this.hull, { ...options, firstLand: this.#firstLand });
+    const profile = this.#profile;
+    const flight = createFlight(profile.design, this.hull, { ...options, firstLand: this.#firstLand });
     const number = ++this.#attemptNumber;
     const remember = (run) => {
       if ((this.#history.get(key)?.number ?? 0) < number) this.#history.set(key, { run, number });
@@ -137,7 +141,7 @@ export class FlightSession {
         if (airTime < 0) {
           return {
             phase: elapsed < launch.handoffTime ? 'push' : 'handoff',
-            sample: rampSample(launch, weather, elapsed, options.gustOffset),
+            sample: rampSample(launch, weather, elapsed, options.gustOffset, profile),
           };
         }
         flight.advanceTo(airTime, weightShift, rudder);

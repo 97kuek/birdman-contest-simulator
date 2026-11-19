@@ -1,23 +1,13 @@
+import { aircraftProfile } from './aircraft-profiles.js';
 import { LAUNCH } from './launch.js';
 import { bodyShiftFromCg, cgShiftFromBody, limitBodyShift, PILOT_SHIFT } from './pilot-shift.js';
 import { courseAt } from './race2025.js';
 import { GRAVITY, RADIANS_PER_DEGREE } from './units.js';
 import { WEATHER, WIND_RISE_METRES, windAt } from './weather.js';
 
-export const BASE_DESIGN = Object.freeze({ span: 25.1, incidence: 3.2 });
+export { BASE_DESIGN, RUDDER_LIMIT_DEG } from './aircraft-profiles.js';
 export const CG_HEIGHT = 0.45;
-export const RUDDER_LIMIT_DEG = 10;
 
-// TORICA Tatsumi.csv and FlightModel/isoSim1.cs, revision 3bddd010.
-// Span here is the aerodynamic calculation span. The design input uses the drawing span.
-const TATSUMI = Object.freeze({
-  area: 17.92, span: 24.514, aspectRatio: 33.534, efficiency: 0.987,
-  chord: 0.812, tailArm: 2.9, tailArea: 1.736, wingHeight: 0.555,
-  pitchInertia: 51, rollInertia: 993.022, yawInertia: 1028.254,
-  airDensity: 1.164, cruiseSpeed: 10.5, wingLiftSlopePerDegree: 0.103, tailLiftSlopePerDegree: 0.079,
-  maxLiftCoefficient: 1.4, dragCoefficient: 0.015, wingMomentCoefficient: -0.132,
-  wingMomentArmChords: 0.1, referenceTailVolume: 0.346,
-});
 const GROUND_EFFECT = Object.freeze({ heightScale: 33, heightExponent: 1.5, minimumRatio: 0.23 });
 const DRAG = Object.freeze({ variableAreaFraction: 0.7, fixedAreaFraction: 0.3, postStallFactor: 1.25 });
 const MIN_POST_STALL_LIFT_FRACTION = 0.45;
@@ -37,35 +27,34 @@ const PILOT = Object.freeze({
 
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 
-export function releaseState(launch, release, pilot) {
+export function releaseState(launch, release, pilot, profile = aircraftProfile()) {
   const pitch = (release ? LAUNCH.pitchDeg : LAUNCH.deckDeg) * RADIANS_PER_DEGREE;
   const flightPath = (release ? LAUNCH.pathDeg : LAUNCH.deckDeg) * RADIANS_PER_DEGREE;
   return {
-    pathLength: 0, height: launch.edgeHeight + CG_HEIGHT + LAUNCH.deckClearance,
+    pathLength: 0, height: launch.edgeHeight + CG_HEIGHT + profile.deckClearance,
     u: launch.speed * Math.cos(flightPath), w: launch.speed * Math.sin(flightPath),
-    pitch, q: release ? LAUNCH.pitchRateDeg * RADIANS_PER_DEGREE : 0, bodyShift: pilot ? bodyShiftFromCg(PILOT_SHIFT.releaseCgShift) : 0,
+    pitch, q: release ? profile.releasePitchRateDeg * RADIANS_PER_DEGREE : 0, bodyShift: pilot ? bodyShiftFromCg(profile.releaseCgShift, profile) : 0,
     bank: 0, heading: launch.heading, right: 0, forward: 0, v: 0, p: 0, r: 0,
   };
 }
 
 // Empirical bounded lift after stall, not a tunnel measurement of either section.
-function liftCoefficient(angle, slope) {
-  const maximum = TATSUMI.maxLiftCoefficient;
+function liftCoefficient(angle, slope, maximum) {
   const linear = slope * angle;
   if (Math.abs(linear) <= maximum) return linear;
   const beyondStall = Math.abs(angle) - maximum / slope;
   return Math.sign(linear) * maximum * Math.max(MIN_POST_STALL_LIFT_FRACTION, Math.cos(2 * beyondStall));
 }
 
-function lateralLoads(beta, rudderRightDeg, rollRate, yawRate, speed, span, pressureArea) {
+function lateralLoads(beta, rudderRightDeg, rollRate, yawRate, speed, span, pressureArea, rudderScales) {
   const rateScale = span / (2 * speed);
   const p = rollRate * rateScale, r = yawRate * rateScale;
   const dr = -rudderRightDeg; // TORICA maps right-hand input to negative dr.
-  const coefficient = axis => axis.beta * beta + axis.roll * p + axis.yaw * r + axis.rudder * dr;
+  const coefficient = (axis, scale) => axis.beta * beta + axis.roll * p + axis.yaw * r + axis.rudder * dr * scale;
   return {
-    side: pressureArea * coefficient(SIDE),
-    roll: pressureArea * span * coefficient(ROLL),
-    yaw: pressureArea * span * coefficient(YAW),
+    side: pressureArea * coefficient(SIDE, rudderScales.force),
+    roll: pressureArea * span * coefficient(ROLL, rudderScales.force),
+    yaw: pressureArea * span * coefficient(YAW, rudderScales.yaw),
   };
 }
 
@@ -89,24 +78,33 @@ function weightShiftRate(state, speed, pilotInput, { pilot, referenceControl, on
   return clamp((desired - bodyShift) / responseTime, -PILOT_SHIFT.maxBodyRate, PILOT_SHIFT.maxBodyRate);
 }
 
-export function aircraftDynamics({ span, incidence }, launch, options) {
+export function aircraftDynamics(design, launch, options) {
   const { referenceControl, weather, wind, gustOffset = 0 } = options;
-  const { efficiency, chord, tailArm, tailArea, pitchInertia, rollInertia, yawInertia, airDensity } = TATSUMI;
-  const area = TATSUMI.area * span / BASE_DESIGN.span;
-  const effectiveSpan = span * (TATSUMI.span / BASE_DESIGN.span);
+  const { span, incidence } = design;
+  const profile = aircraftProfile(options.aircraftId ?? design.aircraftId);
+  const { efficiency, chord, tailArm, tailArea, pitchInertia, rollInertia, yawInertia, airDensity } = profile;
+  const area = profile.area * span / profile.design.span;
+  const effectiveSpan = span * (profile.span / profile.design.span);
   const aspectRatio = effectiveSpan ** 2 / area;
+  // Transfer the trainer's rudder derivatives by fin area and yaw moment arm;
+  // QX uses a hinged rudder on a fixed fin. Its flap effectiveness is estimated.
+  const trainer = aircraftProfile();
+  const finRatio = (profile.finArea / profile.area) / (trainer.finArea / trainer.area);
+  const rudderForceScale = profile.rudderEffectiveness * finRatio;
+  const rudderScales = { force: rudderForceScale,
+    yaw: rudderForceScale * ((profile.finArm / profile.span) / (trainer.finArm / trainer.span)) };
   const resolveWingGust = !referenceControl && Boolean(WEATHER[weather].field);
   // Centroid of a semi-elliptical span load, measured from the aircraft centreline.
   const halfWingArm = effectiveSpan * 2 / (3 * Math.PI);
-  const wingSlope = (TATSUMI.wingLiftSlopePerDegree / RADIANS_PER_DEGREE)
-    * (1 + 2 / (efficiency * TATSUMI.aspectRatio)) / (1 + 2 / (efficiency * aspectRatio));
-  const tailSlope = TATSUMI.tailLiftSlopePerDegree / RADIANS_PER_DEGREE;
+  const wingSlope = (profile.wingLiftSlopePerDegree / RADIANS_PER_DEGREE)
+    * (1 + 2 / (efficiency * profile.aspectRatio)) / (1 + 2 / (efficiency * aspectRatio));
+  const tailSlope = profile.tailLiftSlopePerDegree / RADIANS_PER_DEGREE;
   // Reference wing and tail lift coefficients trim the baseline at its design cruise.
-  const baseCL = LAUNCH.mass * GRAVITY / (0.5 * airDensity * TATSUMI.cruiseSpeed ** 2 * TATSUMI.area);
-  const tailCL0 = (TATSUMI.wingMomentCoefficient + baseCL * TATSUMI.wingMomentArmChords)
-    / (TATSUMI.referenceTailVolume + tailArea / TATSUMI.area * TATSUMI.wingMomentArmChords);
-  const wingCL0 = baseCL - tailCL0 * tailArea / TATSUMI.area;
-  const parasite = TATSUMI.dragCoefficient * (DRAG.variableAreaFraction * area + DRAG.fixedAreaFraction * TATSUMI.area);
+  const baseCL = profile.mass * GRAVITY / (0.5 * airDensity * profile.cruiseSpeed ** 2 * profile.area);
+  const tailCL0 = (profile.wingMomentCoefficient + baseCL * profile.wingMomentArmChords)
+    / (profile.referenceTailVolume + tailArea / profile.area * profile.wingMomentArmChords);
+  const wingCL0 = baseCL - tailCL0 * tailArea / profile.area;
+  const parasite = profile.dragCoefficient * (DRAG.variableAreaFraction * area + DRAG.fixedAreaFraction * profile.area);
   const windRiseLength = wind ? WIND_RISE_METRES.current : WIND_RISE_METRES.previous;
   const launchCos = Math.cos(launch.heading), launchSin = Math.sin(launch.heading);
 
@@ -143,13 +141,18 @@ export function aircraftDynamics({ span, incidence }, launch, options) {
     const { height, u, w, q, bodyShift, heading, v, p, r } = state;
     const { speed, alpha, beta, airU, airW, cp, sp, cb, sb } = airflow(state, time);
     const pressure = 0.5 * airDensity * speed ** 2;
-    const wingHeight = Math.max(0, height + TATSUMI.wingHeight - CG_HEIGHT);
+    const wingHeight = Math.max(0, height + profile.wingHeight - CG_HEIGHT);
     const groundRatio = GROUND_EFFECT.heightScale * (wingHeight / effectiveSpan) ** GROUND_EFFECT.heightExponent;
     const groundFactor = (GROUND_EFFECT.minimumRatio + groundRatio) / (1 + groundRatio);
-    const wingAngle = wingCL0 / wingSlope + alpha + (incidence - BASE_DESIGN.incidence) * RADIANS_PER_DEGREE;
-    const cl = liftCoefficient(wingAngle, wingSlope);
+    const wingAngle = wingCL0 / wingSlope + alpha + (incidence - profile.design.incidence) * RADIANS_PER_DEGREE;
+    const cl = liftCoefficient(wingAngle, wingSlope, profile.maxLiftCoefficient);
     const downwash = (wingCL0 - groundFactor * cl) / (Math.PI * efficiency * aspectRatio);
-    const tailCL = liftCoefficient(tailCL0 / tailSlope + alpha + downwash + q * tailArm / speed, tailSlope);
+    // Positive input moves the pilot aft and raises the elevator trailing edge.
+    // Less upward tail force about the CG produces a nose-up moment.
+    const elevatorAngle = pilotInput * profile.elevatorLimitDeg * RADIANS_PER_DEGREE;
+    const tailAngle = tailCL0 / tailSlope + alpha + downwash + q * tailArm / speed
+      - elevatorAngle * profile.elevatorEffectiveness;
+    const tailCL = liftCoefficient(tailAngle, tailSlope, profile.maxLiftCoefficient);
     let wingLift = pressure * area * cl, gustRoll = 0;
     if (resolveWingGust) {
       const center = location(state);
@@ -161,7 +164,7 @@ export function aircraftDynamics({ span, incidence }, launch, options) {
           right: center.right + arm * wingRight, forward: center.forward + arm * wingForward,
           height: wingHeight - arm * cp * sb, heading,
         });
-        const localCL = liftCoefficient(wingAngle + air.alpha - alpha, wingSlope);
+        const localCL = liftCoefficient(wingAngle + air.alpha - alpha, wingSlope, profile.maxLiftCoefficient);
         return .25 * airDensity * air.speed ** 2 * area * localCL;
       };
       const left = halfLift(-halfWingArm), right = halfLift(halfWingArm);
@@ -170,25 +173,25 @@ export function aircraftDynamics({ span, incidence }, launch, options) {
     }
     const tailLift = pressure * tailArea * tailCL;
     const lift = wingLift + tailLift;
-    const wingStall = Math.max(0, Math.abs(wingAngle) - TATSUMI.maxLiftCoefficient / wingSlope);
+    const wingStall = Math.max(0, Math.abs(wingAngle) - profile.maxLiftCoefficient / wingSlope);
     const inducedDrag = groundFactor * (lift / (pressure * area)) ** 2 / (Math.PI * aspectRatio * efficiency);
     const drag = pressure * (parasite + area * (inducedDrag + DRAG.postStallFactor * Math.sin(wingStall) ** 2));
     // Project the aerodynamic force onto the normal to the body-axis CG lever.
     const upwardNormal = lift * Math.cos(alpha) + drag * Math.sin(alpha);
-    const moment = TATSUMI.wingMomentCoefficient * pressure * area * chord
-      + wingLift * TATSUMI.wingMomentArmChords * chord - tailArm * tailLift + upwardNormal * cgShiftFromBody(bodyShift);
+    const moment = profile.wingMomentCoefficient * pressure * area * chord
+      + wingLift * profile.wingMomentArmChords * chord - tailArm * tailLift + upwardNormal * cgShiftFromBody(bodyShift, profile);
     const shiftRate = weightShiftRate(state, speed, pilotInput, options);
     if (referenceControl) {
       // Pressure uses the complete airspeed. Lift and drag rotate in the pitch plane.
       const pitchPlaneSpeed = Math.hypot(airU, airW);
       return {
-        pathLength: u, height: w, u: (-drag * airU - lift * airW) / (pitchPlaneSpeed * LAUNCH.mass),
-        w: (lift * airU - drag * airW) / (pitchPlaneSpeed * LAUNCH.mass) - GRAVITY, pitch: q, q: moment / pitchInertia,
+        pathLength: u, height: w, u: (-drag * airU - lift * airW) / (pitchPlaneSpeed * profile.mass),
+        w: (lift * airU - drag * airW) / (pitchPlaneSpeed * profile.mass) - GRAVITY, pitch: q, q: moment / pitchInertia,
         bodyShift: shiftRate, bank: 0, heading: 0, right: u * launchSin, forward: u * launchCos, v: 0, p: 0, r: 0,
       };
     }
 
-    const loads = lateralLoads(beta, turnInput * RUDDER_LIMIT_DEG, p, r, speed, effectiveSpan, pressure * area);
+    const loads = lateralLoads(beta, turnInput * profile.rudderLimitDeg, p, r, speed, effectiveSpan, pressure * area, rudderScales);
     const axial = lift * Math.sin(alpha) - drag * Math.cos(alpha);
     const normal = -lift * Math.cos(alpha) - drag * Math.sin(alpha);
     const down = loads.side * sb + normal * cb;
@@ -198,10 +201,10 @@ export function aircraftDynamics({ span, incidence }, launch, options) {
     const sh = Math.sin(heading), ch = Math.cos(heading);
     return {
       pathLength: Math.hypot(u, v), height: w,
-      u: forwardForce / LAUNCH.mass + headingRate * v, w: upForce / LAUNCH.mass - GRAVITY,
+      u: forwardForce / profile.mass + headingRate * v, w: upForce / profile.mass - GRAVITY,
       pitch: q * cb - r * sb, q: (moment + (yawInertia - rollInertia) * r * p) / pitchInertia,
       bodyShift: shiftRate, bank: p + headingRate * sp, heading: headingRate,
-      right: u * sh + v * ch, forward: u * ch - v * sh, v: rightForce / LAUNCH.mass - headingRate * u,
+      right: u * sh + v * ch, forward: u * ch - v * sh, v: rightForce / profile.mass - headingRate * u,
       p: (loads.roll + gustRoll + (pitchInertia - yawInertia) * q * r) / rollInertia,
       r: (loads.yaw + (rollInertia - pitchInertia) * p * q) / yawInertia,
     };

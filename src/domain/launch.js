@@ -11,7 +11,7 @@ export const RAMP_LENGTH = 10;
 export const MAX_LAUNCH_HEADING_DEGREES = 30;
 
 // Constant effective push along the deck. After hand-off only the slope accelerates the glider.
-export function launchProfile(push = 1, coast = 0, direction = 0) {
+export function launchProfile(push = 1, coast = 0, direction = 0, deckClearance = LAUNCH.deckClearance) {
   if (!Number.isFinite(push) || push <= 0 || !Number.isFinite(coast) || coast < 0 || coast > RAMP_LENGTH ||
       !Number.isFinite(direction) || Math.abs(direction) >= 90) {
     throw new RangeError('Invalid ramp push or hand-off distance.');
@@ -35,7 +35,7 @@ export function launchProfile(push = 1, coast = 0, direction = 0) {
   const duration = handoffTime + 2 * coast / (speed + handoffSpeed);
   return {
     push, coast, direction, heading, rightStep, forwardStep, dropStep, edgeRight, edgeForward,
-    edgeHeight, downhill, acceleration, pushed, handoffSpeed, handoffTime, speed, duration,
+    edgeHeight, deckClearance, downhill, acceleration, pushed, handoffSpeed, handoffTime, speed, duration,
   };
 }
 

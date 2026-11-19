@@ -1,10 +1,12 @@
-import { aircraftDynamics, referenceTiming, releaseState, RUDDER_LIMIT_DEG } from './aircraft-dynamics.js';
+import { aircraftDynamics, referenceTiming, releaseState } from './aircraft-dynamics.js';
+import { aircraftProfile } from './aircraft-profiles.js';
 import { aircraftShoreContact } from './shoreline.js';
 import { cgShiftFromBody } from './pilot-shift.js';
 import { launchProfile } from './launch.js';
-import { geometryAt, hullAtRudder, landingMeasurement } from './water-contact.js';
+import { geometryAt, hullAtControls, landingMeasurement } from './water-contact.js';
 
-export { BASE_DESIGN, CG_HEIGHT, referenceTiming, RUDDER_LIMIT_DEG } from './aircraft-dynamics.js';
+export { BASE_DESIGN, QX25_DESIGN, RUDDER_LIMIT_DEG } from './aircraft-profiles.js';
+export { CG_HEIGHT, referenceTiming } from './aircraft-dynamics.js';
 export { LAUNCH, launchProfile, MAX_LAUNCH_HEADING_DEGREES, rampAt, RAMP_LENGTH } from './launch.js';
 export { hull2D, WATER_RUNOUT_SECONDS, waterRunoutPose } from './water-contact.js';
 
@@ -37,18 +39,21 @@ function recordCommand(log, command, start, end) {
   else log.push({ start, end, direction: command });
 }
 
-export function createFlight({ span, incidence }, hull, {
+export function createFlight(design, hull, {
   release = true, pilot = true, wind = true, weather = 'reference', gustOffset = 0, push = 1, coast = 0, direction = 0,
-  firstLand, referenceControl = false, returnSeconds = referenceTiming.returnSeconds, onsetMetres = referenceTiming.onsetMetres,
+  aircraftId = design.aircraftId ?? 'ryukai', firstLand, referenceControl: requestedReference = false, returnSeconds = referenceTiming.returnSeconds, onsetMetres = referenceTiming.onsetMetres,
 } = {}) {
   if (!(returnSeconds > 0) || !Number.isFinite(returnSeconds) || !Number.isFinite(onsetMetres)) {
     throw new RangeError('Pilot return time must be positive and timing parameters must be finite.');
   }
-  const design = { span, incidence };
-  const launch = launchProfile(push, coast, direction);
-  const { airflow, rates, location } = aircraftDynamics(design, launch, { pilot, wind, weather, gustOffset, referenceControl, returnSeconds, onsetMetres });
-  let state = releaseState(launch, release, pilot);
-  let rudderDeg = 0, collisionHull = hull;
+  const profile = aircraftProfile(aircraftId);
+  // The prescribed course and controller were reconstructed from Tatsumi telemetry.
+  const referenceControl = requestedReference && aircraftId === 'ryukai';
+  design = { ...design };
+  const launch = launchProfile(push, coast, direction, profile.deckClearance);
+  const { airflow, rates, location } = aircraftDynamics(design, launch, { aircraftId, pilot, wind, weather, gustOffset, referenceControl, returnSeconds, onsetMetres });
+  let state = releaseState(launch, release, pilot, profile);
+  let rudderDeg = 0, elevatorDeg = 0, collisionHull = hull;
   const shoreContact = aircraftShoreContact(hull, firstLand);
   let step = 0, result = null, disqualified = null;
   const inputs = [], turnInputs = [];
@@ -66,8 +71,8 @@ export function createFlight({ span, incidence }, hull, {
     return {
       t, pathLength, right, forward, gustOffset, heading, track, bank,
       distance: Math.hypot(right - launch.edgeRight, forward - launch.edgeForward), height, bottomHeight: bottomHeight(state),
-      pitch, speed, groundSpeed: Math.hypot(u, v), verticalSpeed: w, pitchRate: q, shift: cgShiftFromBody(bodyShift), headwind, updraft,
-      rudderDeg, sideslipDeg: beta, rollRate: p, yawRate: r,
+      pitch, speed, groundSpeed: Math.hypot(u, v), verticalSpeed: w, pitchRate: q, bodyShift, shift: cgShiftFromBody(bodyShift, profile), headwind, updraft,
+      rudderDeg, elevatorDeg, sideslipDeg: beta, rollRate: p, yawRate: r,
     };
   }
 
@@ -109,7 +114,7 @@ export function createFlight({ span, incidence }, hull, {
         return;
       }
       samples.push(last);
-      result = { ...positions, weather, gustOffset, launch, design, samples, inputs, turnInputs, duration: last.t, distance };
+      result = { ...positions, aircraftId, weather, gustOffset, launch, design, samples, inputs, turnInputs, duration: last.t, distance };
       return;
     }
     state = next;
@@ -127,10 +132,13 @@ export function createFlight({ span, incidence }, hull, {
       if (target <= step || result || disqualified) return;
       const start = step * DT;
       turnInput = Math.max(-1, Math.min(1, turnInput));
-      const degrees = turnInput * RUDDER_LIMIT_DEG;
-      if (degrees !== rudderDeg) {
-        rudderDeg = degrees;
-        collisionHull = hullAtRudder(hull, degrees);
+      pilotInput = Math.max(-1, Math.min(1, pilotInput));
+      const turnDegrees = turnInput * profile.rudderLimitDeg;
+      const pitchDegrees = profile.elevatorLimitDeg ? pilotInput * profile.elevatorLimitDeg : 0;
+      if (turnDegrees !== rudderDeg || pitchDegrees !== elevatorDeg) {
+        rudderDeg = turnDegrees;
+        elevatorDeg = pitchDegrees;
+        collisionHull = hullAtControls(hull, rudderDeg, elevatorDeg);
         clearance = bottomHeight(state);
       }
       while (step < target && !result && !disqualified) integrate(pilotInput, turnInput);
@@ -151,19 +159,22 @@ export function simulateFlight(design, hull, options) {
 }
 
 export function poseAt(run, t) {
-  // Hold the commanded rudder angle across reversals between recorded poses.
-  const held = run.turnInputs?.find(input => input.start <= Math.max(0, t) && t < input.end);
-  const rudderDeg = (held?.direction ?? 0) * RUDDER_LIMIT_DEG;
-  if (t <= 0) return { ...run.samples[0], rudderDeg };
   if (t >= run.duration) return run.samples.at(-1);
+  // Surface commands are held across sample boundaries, even on a quick reversal.
+  const profile = aircraftProfile(run.aircraftId);
+  const time = Math.max(0, t);
+  const held = inputs => inputs?.find(input => input.start <= time && time < input.end)?.direction ?? 0;
+  const rudderDeg = held(run.turnInputs) * profile.rudderLimitDeg;
+  const elevatorDeg = profile.elevatorLimitDeg ? held(run.inputs) * profile.elevatorLimitDeg : 0;
+  if (t <= 0) return { ...run.samples[0], rudderDeg, elevatorDeg };
   const i = Math.min(Math.floor(t * SAMPLES_PER_SECOND), run.samples.length - 2);
   const a = run.samples[i], b = run.samples[i + 1], fraction = (t - a.t) / (b.t - a.t);
   const lerp = key => a[key] + fraction * (b[key] - a[key]);
   return {
     t, gustOffset: run.gustOffset ?? 0, right: lerp('right'), forward: lerp('forward'), heading: lerp('heading'), bank: lerp('bank'), track: lerp('track'),
-    rudderDeg, sideslipDeg: lerp('sideslipDeg'), rollRate: lerp('rollRate'), pitchRate: lerp('pitchRate'), yawRate: lerp('yawRate'),
+    rudderDeg, elevatorDeg, sideslipDeg: lerp('sideslipDeg'), rollRate: lerp('rollRate'), pitchRate: lerp('pitchRate'), yawRate: lerp('yawRate'),
     distance: lerp('distance'), pathLength: lerp('pathLength'), height: lerp('height'), bottomHeight: lerp('bottomHeight'),
     pitch: lerp('pitch'), speed: lerp('speed'), groundSpeed: lerp('groundSpeed'), verticalSpeed: lerp('verticalSpeed'),
-    shift: lerp('shift'), headwind: lerp('headwind'), updraft: lerp('updraft'),
+    bodyShift: a.bodyShift === undefined ? undefined : lerp('bodyShift'), shift: lerp('shift'), headwind: lerp('headwind'), updraft: lerp('updraft'),
   };
 }
