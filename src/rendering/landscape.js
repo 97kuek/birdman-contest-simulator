@@ -42,7 +42,7 @@ async function loadPhoto(loader, name) {
 async function readLayer(layer, loader) {
   const [buffer, photo] = await Promise.all([
     readGrid(layer.name + '.bin'),
-    layer.name === 'basin' ? null : loadPhoto(loader, layer.name + '.jpg'),
+    layer.name === 'basin' ? null : loadPhoto(loader, layer.name + '.webp'),
   ]);
   if (buffer.byteLength !== layer.width * layer.height * 2) {
     throw new Error(`Invalid elevation grid: ${layer.name}`);
@@ -63,7 +63,7 @@ export async function addLandscape(scene) {
   const [assetsByLayer, objects, detail, detailBuffer, detailPhoto, shallowsMask, facades, landMask] = await Promise.all([
     readMetadata('index.json').then(layers => Promise.all(layers.map(layer => readLayer(layer, loader)))),
     readMetadata('shoreline.json'), readMetadata('matsubara.json'), readGrid('matsubara.bin'),
-    loadPhoto(loader, 'matsubara.jpg'), loader.loadAsync(assetUrl('shallows.png').href),
+    loadPhoto(loader, 'matsubara.webp'), loader.loadAsync(assetUrl('shallows.png').href),
     loadPhoto(loader, 'facades.jpg'), loader.loadAsync(assetUrl('land-mask.png').href),
   ]);
   facades.wrapS = THREE.RepeatWrapping;
