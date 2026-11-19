@@ -9,6 +9,11 @@ export { BASE_DESIGN, RUDDER_LIMIT_DEG } from './aircraft-profiles.js';
 export const CG_HEIGHT = 0.45;
 
 const GROUND_EFFECT = Object.freeze({ heightScale: 33, heightExponent: 1.5, minimumRatio: 0.23 });
+export function groundEffectFactor(wingHeight, span) {
+  const ratio = GROUND_EFFECT.heightScale * (Math.max(0, wingHeight) / span) ** GROUND_EFFECT.heightExponent;
+  return (GROUND_EFFECT.minimumRatio + ratio) / (1 + ratio);
+}
+
 const DRAG = Object.freeze({ variableAreaFraction: 0.7, fixedAreaFraction: 0.3, postStallFactor: 1.25 });
 const MIN_POST_STALL_LIFT_FRACTION = 0.45;
 
@@ -84,6 +89,8 @@ export function aircraftDynamics(design, launch, options) {
   const profile = aircraftProfile(options.aircraftId ?? design.aircraftId);
   const { efficiency, chord, tailArm, tailArea, pitchInertia, rollInertia, yawInertia, airDensity } = profile;
   const area = profile.area * span / profile.design.span;
+  const wingMountHeight = design.wingMountHeight ?? profile.wingHeight;
+  if (!Number.isFinite(wingMountHeight)) throw new RangeError('Wing height must be finite.');
   const effectiveSpan = span * (profile.span / profile.design.span);
   const aspectRatio = effectiveSpan ** 2 / area;
   // Transfer the trainer's rudder derivatives by fin area and yaw moment arm;
@@ -141,9 +148,8 @@ export function aircraftDynamics(design, launch, options) {
     const { height, u, w, q, bodyShift, heading, v, p, r } = state;
     const { speed, alpha, beta, airU, airW, cp, sp, cb, sb } = airflow(state, time);
     const pressure = 0.5 * airDensity * speed ** 2;
-    const wingHeight = Math.max(0, height + profile.wingHeight - CG_HEIGHT);
-    const groundRatio = GROUND_EFFECT.heightScale * (wingHeight / effectiveSpan) ** GROUND_EFFECT.heightExponent;
-    const groundFactor = (GROUND_EFFECT.minimumRatio + groundRatio) / (1 + groundRatio);
+    const wingHeight = Math.max(0, height + wingMountHeight - CG_HEIGHT);
+    const groundFactor = groundEffectFactor(wingHeight, effectiveSpan);
     const wingAngle = wingCL0 / wingSlope + alpha + (incidence - profile.design.incidence) * RADIANS_PER_DEGREE;
     const cl = liftCoefficient(wingAngle, wingSlope, profile.maxLiftCoefficient);
     const downwash = (wingCL0 - groundFactor * cl) / (Math.PI * efficiency * aspectRatio);
