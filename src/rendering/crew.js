@@ -108,5 +108,13 @@ export function createLaunchCrew() {
     }
   }
 
-  return { group, update };
+  function answer(wing, seconds) {
+    const side = wing === 'left' ? -1 : wing === 'right' ? 1 : 0;
+    const nod = Math.sin(Math.PI * Math.min(1, seconds / 0.48)) ** 2;
+    for (const member of members) {
+      member.head.rotation.x = -member.torso.rotation.x * 0.65
+        + (side && member.side === side ? 0.19 * nod : 0);
+    }
+  }
+  return { group, update, answer };
 }

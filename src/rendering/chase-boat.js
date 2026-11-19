@@ -189,6 +189,7 @@ export function createChaseBoat() {
     group.position.y = reducedMotion ? 0 : .022 * Math.sin(clock * 1.7);
     group.rotation.x = reducedMotion ? 0 : .007 * Math.sin(clock * 1.25);
     group.rotation.z = reducedMotion ? 0 : .010 * Math.sin(clock * 1.52);
+    return underway;
   }
 
   return { group, eye, update };

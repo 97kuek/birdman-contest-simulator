@@ -1,4 +1,7 @@
+import { WIND_CELL_METRES, WIND_GRID_SIZE } from '../domain/lake-breeze.js';
+
 export const atmosphere = `
+uniform float nightScene;
 uniform float clockTime;
 uniform float meanWind;
 uniform float gust;
@@ -22,12 +25,33 @@ vec3 skyColor(vec3 ray) {
   vec2 p=ray.xz/max(.08,h+.055)*1.35-windDirection(vec2(.906,.423))*clockTime*(.0006+meanWind*.0007);
   float cloud=.55*noiseField(p)+.28*noiseField(p*2.04+14.)+.12*noiseField(p*4.2)+.05*noiseField(p*9.1);
   float cover=smoothstep(.50,.70,cloud)*smoothstep(.008,.15,h);
+  if(nightScene>.5) {
+    vec3 dusk=mix(vec3(.095,.145,.205),vec3(.009,.018,.047),pow(h,.42));
+    vec3 cloudLight=mix(vec3(.055,.080,.13),vec3(.14,.19,.26),pow(sunDot,10.));
+    vec3 sky=mix(dusk,cloudLight,cover*.80);
+    float disc=smoothstep(.99980,.99994,sunDot);
+    return sky+(1.-.78*cover)*(vec3(.13,.18,.27)*pow(sunDot,100.)+vec3(.80,.87,.95)*disc);
+  }
   color=mix(color,mix(vec3(.74,.79,.80),vec3(.98,.95,.86),cloud),cover*.86);
   return color+vec3(.46,.36,.18)*pow(sunDot,28.)+vec3(.9,.77,.48)*smoothstep(.9996,.99994,sunDot);
 }
 `;
 
 export const waterField = `
+uniform sampler2D localWindGrid;
+uniform vec4 localWind; // incoming head/cross, along/lateral amplitudes, in platform axes
+uniform vec2 windPlatform; // cos and sin of the platform's world yaw
+uniform float windOffset;
+uniform float fieldTime;
+float surfaceWindSpeed(vec2 world){
+  vec2 platform=vec2(dot(world,vec2(windPlatform.x,-windPlatform.y)),
+                     dot(world,vec2(-windPlatform.y,-windPlatform.x)));
+  vec2 cell=(platform+localWind.yx*fieldTime)/${WIND_CELL_METRES}.0+vec2(windOffset,0.);
+  vec2 f=fract(cell);
+  vec2 uv=(floor(cell)+f*f*(3.-2.*f)+.5)/${WIND_GRID_SIZE}.0;
+  vec2 disturbance=texture2D(localWindGrid,uv).rg*2.-1.;
+  return length(localWind.xy+localWind.zw*disturbance);
+}
 uniform sampler2D shallowMask;
 uniform vec4 shoreBounds;
 uniform float shoreReady;
@@ -69,7 +93,8 @@ vec3 waves(vec2 p,float shore,float footprint){
   }
   vec2 drift=p*.016-windDirection(vec2(.906,.423))*clockTime*.022;
   float waveGroup=.76+.48*noiseField(drift);
-  float windScale=.13+.64*meanWind+.28*gust;
+  float speed=windOffset>=0.?surfaceWindSpeed(p):meanWind;
+  float windScale=.13+.64*speed+.28*gust;
   float offshore=1.-.72*shore;
   vec3 surface=band(p,windDirection(vec2(.921,.390)),9.7,.027,0.,footprint)
               +band(p,windDirection(vec2(.725,.689)),4.1,.021,2.,footprint)
