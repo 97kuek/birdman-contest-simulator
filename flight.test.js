@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createAircraft} from './aircraft.js';
-import {BASE_DESIGN, CG_HEIGHT, LAUNCH, launchProfile, rampAt, createFlight, previousFactors, simulateFlight, poseAt} from './flight.js';
+import {BASE_DESIGN, CG_HEIGHT, LAUNCH, launchProfile, rampAt, createFlight, previousFactors, simulateFlight, poseAt, WATER_RUNOUT_SECONDS, waterRunoutPose} from './flight.js';
 import {observations, officialDistance, courseAt} from './race2025.js';
 import {pullupLog} from './pullup-data.js';
 import {pullupErrors, pullupSeries, recoveryErrors, recoveryEvents} from './pullup-analysis.js';
@@ -320,4 +320,21 @@ test('Weight shift moves the pilot while the hands and outer contact hull stay f
   assert.equal(body.position.z,.05);
   assert.ok(grip.getWorldPosition(grip.position.clone()).equals(initial));
   assert.deepEqual(modelHull(model),hull);
+});
+
+test('Water runout follows contact velocity, slows to rest, and preserves the scored sample',()=>{
+  const hull=[[-1,-.45],[1,-.45],[0,.5]];
+  const contact=Object.freeze({forward:120,right:10,height:.45,bottomHeight:0,t:24,pitch:0,bank:0,
+    track:-Math.PI/4,heading:0,groundSpeed:8,verticalSpeed:-.5,shift:0,rudderDeg:0});
+  const wind={headwind:1,crosswind:0};
+  const at=t=>waterRunoutPose(contact,t,hull,wind);
+  assert.deepEqual(at(0),contact);
+  const first=at(.001), midway=at(2), rest=at(WATER_RUNOUT_SECONDS);
+  assert.ok(Math.abs(Math.hypot(first.forward-120,first.right-10)/.001-8)<.01);
+  assert.ok(first.right<contact.right && midway.forward>first.forward && rest.forward>midway.forward);
+  assert.ok(first.groundSpeed>midway.groundSpeed && midway.groundSpeed>rest.groundSpeed);
+  assert.equal(rest.groundSpeed,0);
+  assert.equal(rest.speed,1);
+  assert.equal(rest.t,24);
+  assert.deepEqual(at(20),rest);
 });

@@ -1,6 +1,6 @@
 import {pullupLog} from './pullup-data.js';
 import {WEATHER} from './weather.js';
-import {poseAt} from './flight.js';
+import {poseAt, WATER_RUNOUT_SECONDS} from './flight.js';
 
 const byId=id=>document.getElementById(id);
 const windowSeconds=10;
@@ -44,7 +44,7 @@ export function setupReplay({showPose,onClose}){
   const panel=byId('replay-panel'), play=byId('replay-play'), seek=byId('replay-seek'), speed=byId('replay-speed');
   const compare=byId('replay-compare'), analysis=byId('replay-analysis');
   const rates=[1,2,0.5];
-  let rateIndex=0, run=null, reference=null, time=0, last=0, playing=false, cursors=[];
+  let endTime=0, rateIndex=0, run=null, reference=null, time=0, last=0, playing=false, cursors=[];
   function setRate(index){
     rateIndex=index;
     speed.textContent=rates[index]+'×';
@@ -83,32 +83,32 @@ export function setupReplay({showPose,onClose}){
   };
   function display(){
     seek.value=String(time);
-    byId('replay-time').textContent=time.toFixed(2)+' / '+run.duration.toFixed(2)+' s';
+    byId('replay-time').textContent=time.toFixed(2)+' / '+endTime.toFixed(2)+' s';
     if(!analysis.hidden)for(const cursor of cursors){
       cursor.style.display=time>windowSeconds?'none':'';
       cursor.setAttribute('transform','translate('+x(time)+' 0)');
     }
-    showPose(poseAt(run,time));
-    play.dataset.state=playing?'pause':time>=run.duration?'restart':'play';
-    play.title=playing?'一時停止':time>=run.duration?'最初から再生':'再生';
+    showPose(poseAt(run,Math.min(run.duration,time)), Math.max(0,time-run.duration));
+    play.dataset.state=playing?'pause':time>=endTime?'restart':'play';
+    play.title=playing?'一時停止':time>=endTime?'最初から再生':'再生';
     play.setAttribute('aria-label',play.title);
   }
   function tick(now){
     if(!playing || now<=last)return;
-    if(!document.hidden)time=Math.min(run.duration,time+(now-last)*rates[rateIndex]/1000);
+    if(!document.hidden)time=Math.min(endTime,time+(now-last)*rates[rateIndex]/1000);
     last=now;
-    if(time>=run.duration)playing=false;
+    if(time>=endTime)playing=false;
     display();
   }
   document.addEventListener('visibilitychange',()=>{last=performance.now();});
   play.onclick=()=>{
     if(playing){tick(performance.now());playing=false;}
-    else{if(time>=run.duration)time=0;last=performance.now();playing=true;}
+    else{if(time>=endTime)time=0;last=performance.now();playing=true;}
     display();
   };
   seek.oninput=()=>{
     const selected=Number(seek.value);
-    time=run.duration-selected<0.01 ? run.duration : selected;
+    time=endTime-selected<0.01 ? endTime : selected;
     playing=false;
     display();
   };
@@ -124,9 +124,10 @@ export function setupReplay({showPose,onClose}){
       reference=baseline;
       cursors=[];
       run=record.run;
+      endTime=run.duration+WATER_RUNOUT_SECONDS;
       time=0;last=performance.now();playing=true;
       setRate(0);
-      seek.max=String(run.duration);
+      seek.max=String(endTime);
       showComparison(false);
       byId('replay-log').open=false;
       byId('replay-title').textContent=record.label;

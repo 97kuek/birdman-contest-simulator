@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import {setupCaptions,launchCue} from './captions.js';
 import {setupReplay} from './replay.js';
 import {windAt} from './weather.js';
-import { BASE_DESIGN, CG_HEIGHT, LAUNCH, RAMP_LENGTH, launchProfile, rampAt, FLIGHT_LIMIT_SECONDS, SAMPLES_PER_SECOND, createFlight, hull2D, simulateFlight } from './flight.js';
+import { BASE_DESIGN, CG_HEIGHT, LAUNCH, RAMP_LENGTH, launchProfile, rampAt, FLIGHT_LIMIT_SECONDS, SAMPLES_PER_SECOND, createFlight, hull2D, simulateFlight, WATER_RUNOUT_SECONDS, waterRunoutPose } from './flight.js';
 
 const $ = id => document.getElementById(id);
 const colors = ['#b7441c','#65489b','#217547','#bd3468','#0567a5'];
@@ -241,10 +241,15 @@ export function setupTrials({facility,crew,modelBase,aircraft,setView,view,moveC
     $('bank-value').textContent=tilt(s.bank??0,'右','左');
     $('pitch-horizon').style.transform='rotate('+(-(s.bank??0)/radians)+'deg) translateY('+Math.max(-14,Math.min(14,s.pitch/radians))+'px)';
   }
+  function waterPose(run, seconds){
+    const contact=run.samples.at(-1);
+    return waterRunoutPose(contact,seconds,hull,windAt(run.weather,contact.pathLength,contact.t));
+  }
   const replay=setupReplay({
-    showPose(s){
-      pose(s);
+    showPose(s, afterContact){
       const {record}=review;
+      if(afterContact>0)s=waterPose(record.run,afterContact);
+      pose(s);
       record.line.geometry.setDrawRange(0,s.t>=record.run.duration ? record.run.samples.length : Math.floor(s.t*SAMPLES_PER_SECOND)+1);
       record.marker.visible=s.t>=record.run.duration;
       instruments(s,record.marker.visible?'着水・リプレイ':'リプレイ');
@@ -301,7 +306,7 @@ export function setupTrials({facility,crew,modelBase,aircraft,setView,view,moveC
       facility.add(previous.group);
       records.set('latest',previous);
     }
-    pose(previous.run.samples.at(-1));
+    pose(waterPose(previous.run,WATER_RUNOUT_SECONDS));
     atWater=true;
     for(const r of records.values())r.group.visible=true;
     crew.update(launch,Infinity);
@@ -369,7 +374,7 @@ export function setupTrials({facility,crew,modelBase,aircraft,setView,view,moveC
     instruments(last,'着水');
     stage('landing');
     captions.clear();
-    landing={record,until:performance.now()+(matchMedia('(prefers-reduced-motion: reduce)').matches?350:2400)};
+    landing={record,start:performance.now()};
   }
   function tick(now){
     if(review){replay.tick(now);return;}
@@ -387,8 +392,14 @@ export function setupTrials({facility,crew,modelBase,aircraft,setView,view,moveC
       }
       return;
     }
-    if(landing && now>=landing.until){
-      const {record}=landing;landing=null;
+    if(landing){
+      const {record}=landing;
+      const seconds=(now-landing.start)/1000;
+      const floating=waterPose(record.run,seconds);
+      pose(floating);
+      instruments(floating,'着水');
+      if(seconds<WATER_RUNOUT_SECONDS)return;
+      landing=null;
       for(const r of records.values())r.group.visible=true;
       showResult(record);return;
     }

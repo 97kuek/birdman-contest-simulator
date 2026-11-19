@@ -73,6 +73,28 @@ function geometryAt(pitch,hull,bank=0) {
   return {bottom,aft,contactAft,contactSide,tailSide};
 }
 
+// Visual runout after the scored first contact. The drag and flotation response
+// are approximations; the logged flight samples end at contact.
+export const WATER_RUNOUT_SECONDS = 4;
+
+export function waterRunoutPose(contact, seconds, hull, wind) {
+  if (seconds <= 0) return contact;
+  const t = Math.min(seconds, WATER_RUNOUT_SECONDS);
+  const remaining = 1 - t / WATER_RUNOUT_SECONDS;
+  const travel = contact.groundSpeed * WATER_RUNOUT_SECONDS / 4 * (1 - remaining ** 4);
+  const groundSpeed = contact.groundSpeed * remaining ** 3;
+  const along = Math.cos(contact.track), across = Math.sin(contact.track);
+  const pitch = contact.pitch * remaining ** 2 - .045 * Math.sin(t * 3) * remaining ** 3;
+  const bank = contact.bank * remaining ** 2;
+  const bottom = geometryAt(pitch, hull, bank).bottom;
+  const immersion = .12 * (1 - remaining ** 2);
+  const heave = Math.max(-.18, Math.min(0, contact.verticalSpeed * .17)) * Math.sin(4 * t) * remaining ** 3;
+  return {...contact, forward: contact.forward + along * travel, right: contact.right + across * travel,
+    groundSpeed, speed: Math.hypot(along * groundSpeed + wind.headwind, across * groundSpeed + (wind.crosswind ?? 0)),
+    height: -bottom - immersion + heave, bottomHeight: 0, verticalSpeed: 0, pitch, bank,
+    rudderDeg: contact.rudderDeg * remaining, shift: contact.shift * remaining};
+}
+
 // A bounded, post-stall section approximation. The coefficient and stall
 // envelope are assumptions, not tunnel measurements of Kamuy or Kimera.
 function liftCoefficient(angle, slope, maximum) {
