@@ -1,9 +1,13 @@
 # node analysis/elastic-pullup.js --csv | Rscript analysis/plot-elastic-pullup.R
 d <- read.csv(file("stdin"))
 observed <- subset(d, series == "log")
-before <- subset(d, series == "elastic-previous")
-after <- subset(d, series == "elastic-revised")
-png("docs/elastic-pullup.png", width=1440, height=990, res=150, bg="white")
+args <- commandArgs(trailingOnly=TRUE)
+if (!length(args)) args <- c("elastic-previous", "elastic-revised", "docs/elastic-pullup.png")
+stopifnot(length(args) == 3)
+before <- subset(d, series == args[1])
+after <- subset(d, series == args[2])
+stopifnot(nrow(before) > 0, nrow(after) == nrow(before))
+png(args[3], width=1440, height=990, res=150, bg="white")
 par(family=if (Sys.info()[["sysname"]] == "Darwin") "Hiragino Sans" else "sans",
     mfrow=c(2,2), mar=c(3.5,4.6,2,1), oma=c(0,0,3,0), mgp=c(2.5,.7,0), las=1)
 for (key in c("height","speed","pitchDeg","body")) {
