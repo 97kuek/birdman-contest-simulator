@@ -18,18 +18,16 @@ export function createPlatformFlag() {
   const points = geometry.getAttribute('position');
   points.setUsage(THREE.DynamicDrawUsage);
   const colors = [];
-  const gold = new THREE.Color('#ffcf22'), vermilion = new THREE.Color('#e83934');
+  const stripColors = Array.from({ length: strips + 1 }, (_, i) =>
+    i / strips < .47 || i / strips > .74 ? '#ffcf22' : '#e83934');
+  const tint = new THREE.Color();
   for (let i = 0; i < points.count; i++) {
-    const stripe = (i % (strips + 1)) / strips;
-    (stripe < .47 || stripe > .74 ? gold : vermilion).toArray(colors, i * 3);
+    tint.set(stripColors[i % (strips + 1)]).toArray(colors, i * 3);
   }
   geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, poleHeight - .5, 0), length + depth);
   const cloth = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({vertexColors: true, side: THREE.DoubleSide}));
   group.add(cloth);
-  const focus = new THREE.Object3D();
-  focus.position.y = poleHeight - depth / 2;
-  group.add(focus);
 
   function update(weather, gustOffset, windTime, fabricTime) {
     const wind = windAt(weather, {right: group.position.x, forward: -group.position.z, height: group.position.y + poleHeight, gustOffset}, windTime);
@@ -46,6 +44,7 @@ export function createPlatformFlag() {
     }
     points.needsUpdate = true;
     geometry.computeVertexNormals();
+    return wind;
   }
-  return { group, focus, update };
+  return { group, points, strips, stripColors, poleHeight, update };
 }

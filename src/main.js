@@ -20,6 +20,7 @@ import { createFlightTrail } from './rendering/flight-trail.js';
 import { addLakeAndSky, lakeReflectionLayer, sunDirection } from './rendering/lake.js';
 import { addLandscape } from './rendering/landscape.js';
 import { deckHeight } from './rendering/launch-deck.js';
+import { createFlagInset } from './presentation/flag-inset.js';
 import { createPlatformFlag } from './rendering/platform-flag.js';
 import { createPlatform } from './rendering/platform.js';
 
@@ -78,6 +79,7 @@ async function start() {
   scene.add(facility);
   const platform = createPlatform({ shoreDistance: 168 });
   const flag = createPlatformFlag();
+  const flagInset = createFlagInset(byId('flag-inset'));
   platform.add(flag.group);
   facility.add(platform);
   enableReflection(platform);
@@ -105,7 +107,7 @@ async function start() {
   enableReflection(boat.group);
   boat.update(null, 0, 0);
   const cameraRig = createFlightCamera({
-    canvas: renderer.domElement, facility, modelBase, aircraft, boat, reduceMotion, flagFocus: flag.focus,
+    canvas: renderer.domElement, facility, modelBase, aircraft, boat, reduceMotion,
     trackBounds: () => trials.trackBounds, visibleTrackFraction: () => trackViewportFraction(host), onViewChange: showCameraMode,
   });
   bindViewerControls(host, renderer, cameraRig, atWater);
@@ -135,7 +137,8 @@ async function start() {
     setNight?.(period === 'night');
     const sample = trials ? display.sample : null;
     const windTime = sample?.windTime ?? sample?.t ?? 0;
-    flag.update(weatherMode, sample?.gustOffset ?? 0, windTime, visualTime);
+    const airflow = flag.update(weatherMode, sample?.gustOffset ?? 0, windTime, visualTime);
+    flagInset(trials?.showFlag, flag, airflow, sample?.heading ?? 0);
     const age = reduceMotion.matches ? -1 : trials?.contactAge(now) ?? -1;
     const run = trials?.contactRun;
     if (age >= 0 && run && run !== lastImpactRun) {
@@ -161,12 +164,11 @@ async function start() {
   const { view, setView, startLandingCamera, moveCamera } = cameraRig;
   const session = new FlightSession(modelHull(aircraft), selectedWeather(), drawWindOffset, firstLand);
   const display = createCockpitDisplay(aircraft, {
-    weather: () => trials?.weather ?? session.weather,
     describe: text => renderer.domElement.setAttribute('aria-description', text),
   });
   const aircraftPose = createAircraftPose({ modelBase, aircraft, crew, view, moveCamera, display });
   trials = setupTrials({
-    session, aircraftPose, setView, view, startLandingCamera, lookAtFlag: cameraRig.lookAtFlag,
+    session, aircraftPose, setView, view, startLandingCamera,
     crewAnswer: crew.answer,
     crewTime: time => crew.update(session.launch, time, (side, contact) => sound.step(side, contact, view())),
     playSplash: sample => sound.splash(sample),

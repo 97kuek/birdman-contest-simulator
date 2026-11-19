@@ -6,7 +6,7 @@ const blendSeconds = 1.6;
 const overviewScale = aspect => Math.max(1, 1.38 / aspect);
 
 export function createFlightCamera({
-  canvas, facility, modelBase, aircraft, boat, flagFocus, trackBounds, visibleTrackFraction, reduceMotion, onViewChange,
+  canvas, facility, modelBase, aircraft, boat, trackBounds, visibleTrackFraction, reduceMotion, onViewChange,
 }) {
   const camera = new THREE.PerspectiveCamera(38, 1, 0.18, 56000);
   const controls = new OrbitControls(camera, canvas);
@@ -24,7 +24,6 @@ export function createFlightCamera({
   const orientation = new THREE.Quaternion();
   const world = (x, y, z) => facility.localToWorld(new THREE.Vector3(x, y, z));
   let mode = 'aircraft', hasView = false, transition = null;
-  let watchingFlag = false;
   let attachedZoom = 1, baseLens = 76;
   let viewportAspect = camera.aspect;
 
@@ -39,20 +38,6 @@ export function createFlightCamera({
   }
 
   function followPilot() {
-    if (watchingFlag) {
-      // A deck-side sightline keeps the cloth clear of the high wing and pilot's helmet.
-      flagFocus.getWorldPosition(controls.target);
-      facility.worldToLocal(eye.copy(controls.target));
-      eye.x += 7;
-      eye.y -= 1.7;
-      eye.z += 1.8;
-      camera.position.copy(facility.localToWorld(eye));
-      setAttachedLens(48);
-      camera.up.set(0, 1, 0);
-      camera.lookAt(controls.target);
-      camera.updateMatrixWorld();
-      return;
-    }
     // Keep the lens just ahead of the face and move it with the prone pilot.
     modelBase.worldToLocal(pilotEye.getWorldPosition(eye));
     focus.copy(eye);
@@ -132,7 +117,6 @@ export function createFlightCamera({
     const from = changingBoat && !reduceMotion.matches ? captureView() : null;
     transition = null;
     hasView = true;
-    watchingFlag = false;
     mode = nextMode;
     const attached = attachedModes.has(mode);
     controls.enabled = !attached;
@@ -214,11 +198,5 @@ export function createFlightCamera({
     return Math.atan2((north.x - center.x) * camera.aspect, north.y - center.y);
   }
 
-  function lookAtFlag(value) {
-    watchingFlag = value;
-    transition = null;
-    update();
-  }
-
-  return { camera, lookAtFlag, view: () => mode, setView, setAspect, update, zoom, startLandingCamera, moveCamera, compassBearing };
+  return { camera, view: () => mode, setView, setAspect, update, zoom, startLandingCamera, moveCamera, compassBearing };
 }

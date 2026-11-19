@@ -27,6 +27,7 @@
         <button data-view="boat" aria-pressed="false">ボート</button>
         <button data-view="aircraft" aria-pressed="true">俯瞰</button>
       </nav>
+      <canvas id="flag-inset" width="192" height="192" role="img" aria-label="風見旗（上が機首方向）" hidden></canvas>
       <div class="compass" aria-label="画面上の北方向"><span>N</span><svg viewBox="0 0 28 28" aria-hidden="true"><path fill="#e6f5ed" d="m14 1 4.5 17-4.5-3-4.5 3z"/><path fill="#789493" d="m14 27-4.5-13 4.5 2 4.5-2z"/></svg></div>
       <section id="wind-meter" aria-label="機首を上にした風の流れ" hidden>
         <svg class="wind-dial" viewBox="0 0 48 48" aria-hidden="true">
@@ -38,7 +39,7 @@
       </section>
       <div id="align-panel" hidden><div class="direction-field" role="group" aria-label="発進方向">
         <button id="direction-left" aria-label="機首を左へ">←</button><span aria-hidden="true">発進方向</span><button id="direction-right" aria-label="機首を右へ">→</button>
-        </div><button id="look-flag" type="button" aria-pressed="false" title="風見旗を見る">風見旗</button><button id="confirm-heading" class="primary" aria-keyshortcuts="Space"><kbd>Space</kbd> 発進</button></div>
+        </div><button id="confirm-heading" class="primary" aria-keyshortcuts="Space"><kbd>Space</kbd> 発進</button></div>
       <div id="touch-controls">
         <div class="touch-axis weight-axis" role="group" aria-label="体重移動">
           <span>体重移動</span>
@@ -107,7 +108,7 @@
     </aside>
   </main>
   <dialog id="source-dialog" aria-labelledby="source-title"><div class="dialog-top"><h2 id="source-title">資料・出典</h2><button id="close-sources" aria-label="閉じる"><i data-icon="close"></i></button></div>
-    <h3>機体</h3><p>鳥科の2025年機「竜海」の三面図をもとに再構成。主翼の桁とリブ、透明機首のフレーム、伏臥姿勢のパイロットと操縦グリップ、胴体の塗り分け、風向ベーンも造形しています。操縦席の液晶はピトー管の向きを考慮した対気速度と、気圧・低空の超音波測距を組み合わせた推定高度を表示します。電子音の音程と間隔は鳥科の25代引継ぎ資料に基づき、速度の切替値は飛行ログから近似しました。鳥科の資料で確認できる操縦者への通知は電子音です。速度・高さを数字でも読める液晶と、台上の風表示はゲーム用です。追走艇の形状・航路もシミュレーター用に設定しました。断面・外装・内部構造はいずれも写真と図面をもとにした近似を含みます。</p><a href="https://torica-tus.com/2025/11/14/2025/" target="_blank" rel="noreferrer">鳥科の実機資料と三面図 ↗</a>
+    <h3>機体</h3><p>鳥科の2025年機「竜海」の三面図をもとに再構成。主翼の桁とリブ、透明機首のフレーム、伏臥姿勢のパイロットと操縦グリップ、胴体の塗り分け、風向ベーンも造形しています。操縦席の液晶はピトー管の向きを考慮した対気速度と、気圧・低空の超音波測距を組み合わせた推定高度を表示します。電子音の音程と間隔は鳥科の25代引継ぎ資料に基づき、速度の切替値は飛行ログから近似しました。鳥科の資料で確認できる操縦者への通知は電子音です。速度・高さを数字で読める液晶と、発進時の風見旗の丸窓はゲーム用です。追走艇の形状・航路もシミュレーター用に設定しました。断面・外装・内部構造はいずれも写真と図面をもとにした近似を含みます。</p><a href="https://torica-tus.com/2025/11/14/2025/" target="_blank" rel="noreferrer">鳥科の実機資料と三面図 ↗</a>
     <p><a href="https://github.com/torica-org/26th_Electronics/tree/1c47e73979fb83a245cf1c0f7e0d85b7a62a73d7/25th電装の解説" target="_blank" rel="noreferrer">鳥科の25代電装資料 ↗</a></p>
     <h3>音</h3><p>波音は琵琶湖で収録された環境音です。助走と着水には別収録の効果音を用い、風切り音は対気速度に応じて合成しています。追走艇にはロワール川で収録された船外機の音を用いています。</p>
     <p>録音素材（CC0）　<a href="https://freesound.org/people/nomadas/sounds/690161/" target="_blank" rel="noreferrer">船外機 · nomadas ↗</a>　<a href="https://freesound.org/people/pflanigan/sounds/390287/" target="_blank" rel="noreferrer">湖岸 · pflanigan ↗</a>　<a href="https://freesound.org/people/sillygrizzlies/sounds/635059/" target="_blank" rel="noreferrer">木の階段を走る靴音 · sillygrizzlies ↗</a>　<a href="https://freesound.org/people/timgormly/sounds/148317/" target="_blank" rel="noreferrer">着水音 · timgormly ↗</a></p>

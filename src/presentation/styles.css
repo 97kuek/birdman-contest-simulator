@@ -592,16 +592,25 @@ dialog a {
   white-space: nowrap;
 }
 
-#look-flag {
-  min-height: 42px;
-  padding: 0 8px;
-  border: 1px solid #a6bdcb;
-  border-radius: 5px;
-  background: #f6fafc;
-  color: #142a4f;
-  white-space: nowrap;
+#flag-inset {
+  position: absolute;
+  top: calc(var(--edge-top) + 54px);
+  right: var(--edge-right);
+  width: clamp(70px, 10vmin, 88px);
+  aspect-ratio: 1;
+  height: auto;
+  border: 2px solid #dcecf0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 30%, #284d63, #10293e);
+  box-shadow: 0 2px 9px #102e4350;
+  pointer-events: none;
+  z-index: 2;
 }
-#look-flag[aria-pressed=true] { color: white; background: #142a4f; }
+
+#flag-inset:not([hidden]) ~ :is(.compass, #wind-meter) { display: none; }
+@media (orientation: landscape) and (max-height: 500px) {
+  #flag-inset { top: calc(var(--edge-top) + 102px); }
+}
 
 #align-panel kbd {
   font: 600 11px ui-monospace, monospace;
