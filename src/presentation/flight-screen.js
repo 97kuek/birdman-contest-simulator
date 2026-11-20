@@ -6,6 +6,7 @@ import { showRecordBoard } from './record-board.js';
 import { byId as $ } from './dom.js';
 import { setupCaptions } from './captions.js';
 import { setupReplay } from './replay.js';
+import { bindPedalControls } from './pedal-controls.js';
 import { bindPilotControls } from './pilot-controls.js';
 import { aircraftCards, bindAircraftPicker } from './aircraft-picker.js';
 import { updateWindMeter } from './wind-meter.js';
@@ -47,6 +48,8 @@ export function setupTrials({
     atWater = false,
     review = null;
   const captions = setupCaptions();
+  const advanceToInputTime = () => tick(performance.now());
+  const pedals = bindPedalControls(advanceToInputTime);
   let countdown = null;
   let resultRecord = null;
   let landing = null, ruling = null;
@@ -55,6 +58,7 @@ export function setupTrials({
     stopHeading();
     if (name !== 'flight' && name !== 'countdown') tilt.end();
     screen = name;
+    if (name !== 'flight') pedals.setActive(false);
     document.body.dataset.stage = screen;
     $('flight-settings').hidden = name !== 'setup';
     $('comparison').hidden = name !== 'result';
@@ -73,7 +77,7 @@ export function setupTrials({
     readHeading: () => session.launch.direction,
     setHeading,
     confirmHeading,
-    advanceToInputTime: () => tick(performance.now()),
+    advanceToInputTime,
   });
   function setHeading(value) {
     const angle = Math.max(-MAX_LAUNCH_HEADING_DEGREES, Math.min(MAX_LAUNCH_HEADING_DEGREES, value));
@@ -316,7 +320,7 @@ export function setupTrials({
     crewTime(active.clock);
     const { record, attempt } = active;
     $('launch-call').hidden = active.clock >= GO_CAPTION_SECONDS;
-    const frame = attempt.advance(active.clock, pilotInput(), pilotInput(2));
+    const frame = attempt.advance(active.clock, pilotInput(), pilotInput(2), pedals.watts);
     if (frame.phase === 'disqualified' || frame.phase === 'structural-failure') {
       stopAttempt(frame.sample, now, frame.phase);
       return;
@@ -328,6 +332,7 @@ export function setupTrials({
     const s = frame.sample;
     if (frame.phase === 'release' || frame.phase === 'glide') {
       record.trail.extend(attempt.samples);
+      if (!active.airborne && session.aircraftId === 'ren') pedals.setActive(true);
       active.airborne = true;
       if (s.t >= active.nextShoreCheck) {
         active.shoreAhead = session.shoreAhead(s);

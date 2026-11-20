@@ -1,4 +1,4 @@
-import { CG_HEIGHT } from '../domain/flight.js';
+import { BASE_DESIGN, CG_HEIGHT } from '../domain/flight.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
@@ -19,16 +19,19 @@ export function createFlightCamera({
   controls.zoomSpeed = 0.9;
   controls.panSpeed = 0.7;
 
-  let pilotEye, displayMount;
+  let mode = 'aircraft', hasView = false, transition = null;
+  let framingSpan = BASE_DESIGN.span, pilotEye, displayMount;
   function setAircraft(model) {
     pilotEye = model.getObjectByName('pilot-eye');
     displayMount = model.getObjectByName('cockpit-display-mount');
+    const span = model.userData.wingSpan ?? BASE_DESIGN.span;
+    if (hasView && mode === 'aircraft' && span !== framingSpan) zoom(span / framingSpan);
+    framingSpan = span;
   }
   setAircraft(aircraft);
   const eye = new THREE.Vector3(), focus = new THREE.Vector3(), panelBottom = new THREE.Vector3();
   const orientation = new THREE.Quaternion();
   const world = (x, y, z) => facility.localToWorld(new THREE.Vector3(x, y, z));
-  let mode = 'aircraft', hasView = false, transition = null;
   let attachedZoom = 1, baseLens = 76;
   let viewportAspect = camera.aspect;
 
@@ -144,7 +147,7 @@ export function createFlightCamera({
         controls.target.copy(world(right, 4, -forward));
         camera.position.copy(world(bounds.right + distance, 4 + distance * 0.3, -forward + distance * 0.08));
       } else {
-        const ratio = overviewScale(viewportAspect);
+        const ratio = overviewScale(viewportAspect) * framingSpan / BASE_DESIGN.span;
         const { x, y, z } = modelBase.position;
         controls.target.copy(world(x - 0.65, y + 0.7, z - 0.2));
         camera.position.copy(world(x + 13 * ratio, y + 0.7 + 6.3 * ratio, z - 32 * ratio));

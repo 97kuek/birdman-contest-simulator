@@ -8,6 +8,7 @@ import { setupFlightSound } from './presentation/flight-sound.js';
 import { selectedWeather, setupTrials } from './presentation/flight-screen.js';
 import { bindViewerControls, setupViewerShell, showCameraMode, trackViewportFraction } from './presentation/viewer-shell.js';
 import { createAircraft } from './rendering/aircraft.js';
+import { createRenAircraft } from './rendering/aircraft/ren.js';
 import { createQx25Aircraft } from './rendering/aircraft/qx25.js';
 import { createAircraftPose } from './rendering/aircraft-pose.js';
 import { createCockpitDisplay } from './rendering/aircraft/display.js';
@@ -51,7 +52,7 @@ async function start() {
     antialias: true, alpha: false, logarithmicDepthBuffer: true, powerPreference: 'high-performance',
   });
   host.append(renderer.domElement);
-  renderer.domElement.setAttribute('aria-label', '滑空機と松原湖岸の3Dモデル。ドラッグで回転、ホイールで拡大縮小');
+  renderer.domElement.setAttribute('aria-label', '機体と松原湖岸の3Dモデル。ドラッグで回転、ホイールで拡大縮小');
   const compact = matchMedia('(pointer:coarse) and (max-width:1000px)').matches;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, compact ? 1.5 : 2));
   renderer.shadowMap.enabled = true;
@@ -165,10 +166,11 @@ async function start() {
   firstLand = createShoreline(landscape.userData.shoreRings, facility.rotation.y);
   const { view, setView, startLandingCamera, moveCamera } = cameraRig;
   const fleet = new Map();
+  const aircraftFactories = { ryukai: () => ryukai, qx25: createQx25Aircraft, ren: createRenAircraft };
   function selectAircraft(id) {
     let entry = fleet.get(id);
     if (!entry) {
-      const model = id === 'ryukai' ? ryukai : createQx25Aircraft();
+      const model = aircraftFactories[id]();
       if (model !== ryukai) enableReflection(model);
       const teamCrew = id === 'ryukai' ? toricaCrew : createLaunchCrew(id);
       if (teamCrew !== toricaCrew) enableReflection(teamCrew.group);

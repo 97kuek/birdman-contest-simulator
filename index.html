@@ -11,7 +11,7 @@
 </head>
 <body class="flight-lab" data-stage="setup">
   <header class="topbar">
-    <div class="brand"><div><h1>鳥人間コンテストシミュレーター</h1><span class="broadcast-class">滑空機部門 <b>／</b> <span id="broadcast-team">東京理科大学・鳥科</span></span></div></div>
+    <div class="brand"><div><h1>鳥人間コンテストシミュレーター</h1><span class="broadcast-class"><span id="broadcast-division">滑空機部門</span> <b>／</b> <span id="broadcast-team">東京理科大学・鳥科</span></span></div></div>
     <div class="lab-actions"><button id="flight-action" hidden></button><button id="sound-settings" popovertarget="sound-options" title="設定" aria-label="設定"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h4l5-4v14l-5-4H3z"/><path class="waves" d="M16 8q4 4 0 8m3-11q7 7 0 14"/><path class="mute" d="m16 9 5 6m0-6-5 6"/></svg><span class="settings-label">設定</span></button><button id="sources" class="text-button" title="資料・出典"><i data-icon="book"></i>資料・出典</button></div>
   </header>
   <div id="sound-options" popover aria-label="設定">
@@ -29,7 +29,7 @@
   </dialog>
   <main class="workspace">
     <div class="scene-column">
-    <section id="viewer" tabindex="-1" aria-label="松原湖岸と滑空機の3Dビュー">
+    <section id="viewer" tabindex="-1" aria-label="松原湖岸と機体の3Dビュー">
       <div id="canvas-host"></div>
       <div class="camera-hud"><button id="camera-hud-toggle" type="button" aria-expanded="false" aria-controls="camera-hud-panel"><i data-icon="camera"></i>視点</button><div id="camera-hud-panel">
       <nav class="view-switch" aria-label="カメラ視点">
@@ -68,6 +68,14 @@
           </div>
         </div>
       </div>
+      <div id="pedal-controls" role="group" aria-labelledby="pedal-label" hidden>
+        <div class="pedal-readout"><span id="pedal-label">ペダル出力</span><output id="pedal-watts">203 W</output></div>
+        <div class="pedal-options">
+          <button type="button" data-watts="0" aria-keyshortcuts="1" aria-pressed="false"><kbd>1</kbd>停止</button>
+          <button type="button" data-watts="203" aria-keyshortcuts="2" aria-pressed="true"><kbd>2</kbd>巡航</button>
+          <button type="button" data-watts="300" aria-keyshortcuts="3" aria-pressed="false"><kbd>3</kbd>強め</button>
+        </div>
+      </div>
       <div id="launch-call" role="status" hidden><small id="call-speaker" hidden></small><strong id="call-text"></strong></div>
       <div id="commentary" role="status" hidden><b>実況</b><span id="commentary-text"></span></div>
       <div id="loading" role="status">3Dシーンを読み込み中…</div>
@@ -102,7 +110,7 @@
         <div class="identity" role="group" aria-label="使用する機体">
           <button type="button" class="aircraft-arrow" id="aircraft-prev" aria-label="前の機体" aria-keyshortcuts="ArrowLeft" disabled>‹</button>
           <div class="aircraft-card" aria-live="polite" aria-atomic="true">
-            <div class="model-title"><h3 id="aircraft-name">竜海</h3><span>2025年 滑空機</span></div>
+            <div class="model-title"><h3 id="aircraft-name">竜海</h3><span id="aircraft-class">2025年 滑空機</span></div>
             <div class="model-year"><span id="aircraft-university">東京理科大学</span> <span id="aircraft-team">鳥人間サークル鳥科</span></div>
           </div>
           <button type="button" class="aircraft-arrow" id="aircraft-next" aria-label="次の機体" aria-keyshortcuts="ArrowRight" disabled>›</button>
@@ -126,13 +134,15 @@
     <p><a href="https://github.com/torica-org/26th_Electronics/tree/1c47e73979fb83a245cf1c0f7e0d85b7a62a73d7/25th電装の解説" target="_blank" rel="noreferrer">鳥科の25代電装資料 ↗</a></p>
     <h3>QX-25 · 九州大学</h3><p>2025年機の三面図に沿って主翼、胴体、格納式補助脚、水平尾翼とラダーを造形しました。実機はエレベーターと前後の体重移動を使い分けます。ゲームでは同じ前後入力で両方を操作します。図面のエレベーターは上下10°、ラダーは左右17°。空力係数と舵の効きは推定です。液晶には計算した対気速度と湖面からの高さを表示し、電子音でも伝えます。補助員はパイロットの記述に合わせて胴体付近に配置し、シャツの配色は大学が公開した集合写真を参考にしました。</p>
     <p><a href="https://www.q-birdman.jp/history/images/qx-25.pdf" target="_blank" rel="noreferrer">九州大学の三面図・主要諸元 ↗</a>　<a href="https://www.youtube.com/watch?v=SFUEIepMicU" target="_blank" rel="noreferrer">QX-25の大会公式映像 ↗</a>　<a href="https://kikin.kyushu-u.ac.jp/outline/pamphlet_view.php?cId=161&amp;year=2025" target="_blank" rel="noreferrer">九大チームの写真 ↗</a></p>
+    <h3>聯 · 東北大学 Windnauts</h3><p>2023年の人力プロペラ機「聯」は、翼幅32.2 m、設計巡航速度7.2 m/s、必要出力203 W。ゲームでは上下キーで水平尾翼、左右キーでラダーを操縦します。数字キーか画面のボタンでペダル出力を選べます。練習飛行の距離は、離台後に機体がたどった水平経路の長さです。</p>
+    <p><a href="https://www.ifs.tohoku.ac.jp/~Boeing/ppt/20231214/5_Windnauts_2022-23.pdf#page=20" target="_blank" rel="noreferrer">Windnautsの三面図と巡航設計値 ↗</a></p>
     <h3>音</h3><p>波音は琵琶湖で収録された環境音です。助走と着水には別収録の効果音を用い、風切り音は対気速度に応じて合成しています。追走艇にはロワール川で収録された船外機の音を用いています。</p>
     <p>録音素材（CC0）　<a href="https://freesound.org/people/nomadas/sounds/690161/" target="_blank" rel="noreferrer">船外機 · nomadas ↗</a>　<a href="https://freesound.org/people/pflanigan/sounds/390287/" target="_blank" rel="noreferrer">湖岸 · pflanigan ↗</a>　<a href="https://freesound.org/people/sillygrizzlies/sounds/635059/" target="_blank" rel="noreferrer">木の階段を走る靴音 · sillygrizzlies ↗</a>　<a href="https://freesound.org/people/timgormly/sounds/148317/" target="_blank" rel="noreferrer">着水音 · timgormly ↗</a></p>
     <h3>人力プロペラ機の巡航試験</h3><a href="./cruise.html">聯とSkyronでペダル出力を変えてみる →</a>
     <h3>松原湖岸・湖面</h3><p>飛行地点は滋賀県彦根市の松原湖岸です。地形・航空写真には国土地理院、水域には国土数値情報のデータを使用しています。プラットフォーム近くの湖岸と河口には水域の輪郭を使った地形メッシュと高解像度の航空写真を重ねています。樹木の位置・形は推定です。湖面は風向に沿う波、空と湖岸の反射、浅瀬の色と着水の波紋を描きます。波高は仮定し、飛距離は平均湖面で計測します。</p><a href="https://maps.gsi.go.jp/#16/35.294222/136.254333/" target="_blank" rel="noreferrer">松原湖岸の地理院地図 ↗</a>　<a href="./terrain/source.md" target="_blank">使用データの詳細 ↗</a>
-    <h3>主翼の構造</h3><p>引き起こしや突風を受けると、左右の主翼が荷重に応じてしなり、ねじれが揚力に影響します。定常時の翼端たわみは両チームの三面図に合わせました。九大が公表した荷重試験は1.5 Gです。ゲームでは翼根の曲げモーメントが定常時の3倍に達すると破断と判定します。実機の破断荷重は確認されていません。</p>
+    <h3>主翼の構造</h3><p>引き起こしや突風を受けると、左右の主翼が荷重に応じてしなり、ねじれが揚力に影響します。竜海とQX-25の定常時の翼端たわみは、それぞれの三面図に合わせました。九大が公表した荷重試験は1.5 Gです。ゲームでは翼根の曲げモーメントが定常時の3倍に達すると破断と判定します。実機の破断荷重は確認されていません。</p>
     <p><a href="https://github.com/97kuek/birdman-contest-simulator/blob/main/docs/wing-structure.md" target="_blank" rel="noreferrer">荷重試験・たわみの比較・計算条件 ↗</a> · <a href="https://github.com/97kuek/birdman-contest-simulator/blob/main/docs/tatsumi-release.md" target="_blank" rel="noreferrer">竜海の離台姿勢・体重移動と実機ログ ↗</a> · <a href="./opening.html" target="_blank" rel="noopener">大会映像と離台後3秒を見比べる ↗</a></p>
-    <h3>飛行モデル</h3><p>竜海は全備質量100 kg、QX-25は117 kg。台の正面へ標準の力で台端まで押すと、離台時の対地速度は8 m/sです。竜海では鳥科の訓練用モデルの空力係数を使い、主翼・尾翼の空気力とピッチ運動を計算します。昼は湖から岸へ吹く湖風、夜は岸から湖へ吹く陸風を想定しています。難易度を上げると背景風も突風も強まります。風の分布は試技ごとに変わり、基準機とリプレイはその試技と同じ風を使います。対地速度から風速を引いた対気速度で揚力・抗力を計算します。主翼が水面に近づくと誘導抗力が減り、尾翼への吹き下ろしも変わります。竜海では左右キーがラダーを左右10°動かし、離すと中立になります。鳥科の訓練モデルの係数で、ラダー・横滑り・機体の回転による横力とモーメントを計算します。三面図の設計舵角は左右20°です。サーボの遅れは未計測のため、舵角は指令に即応させています。竜海の比較用の基準機はGPS由来のコースと推定体重移動を使います。記録は離台点から最初の接水時の機体最後尾までの水平距離です。</p>
+    <h3>飛行モデル</h3><p>竜海は全備質量100 kg、QX-25は117 kg。台の正面へ標準の力で台端まで押すと、離台時の対地速度は8 m/sです。竜海では鳥科の訓練用モデルの空力係数を使い、主翼・尾翼の空気力とピッチ運動を計算します。昼は湖から岸へ吹く湖風、夜は岸から湖へ吹く陸風を想定しています。難易度を上げると背景風も突風も強まります。風の分布は試技ごとに変わり、基準機とリプレイはその試技と同じ風を使います。対地速度から風速を引いた対気速度で揚力・抗力を計算します。主翼が水面に近づくと誘導抗力が減り、尾翼への吹き下ろしも変わります。竜海では左右キーがラダーを左右10°動かし、離すと中立になります。鳥科の訓練モデルの係数で、ラダー・横滑り・機体の回転による横力とモーメントを計算します。三面図の設計舵角は左右20°です。サーボの遅れは未計測のため、舵角は指令に即応させています。竜海の比較用の基準機はGPS由来のコースと推定体重移動を使います。滑空機部門の記録は離台点から最初の接水時の機体最後尾までの水平距離です。</p>
     <p>竜海の映像では2:03〜2:04に離台し、2:58〜2:59に着水。ログでは離台後約33秒に、実機は約290 m先を高度約2.6 mで飛んでいました。</p>
     <a href="https://www.youtube.com/watch?v=brdhsnknoKs&amp;t=123s" target="_blank" rel="noreferrer">大会公式映像 ↗</a>　<a href="https://github.com/torica-org/25th_Analysis/blob/115723c24ce9e64c07c79215770acc7559518d42/flightDataPlot/src/2025_Tatsumi.csv" target="_blank" rel="noreferrer">鳥科の飛行ログ ↗</a>　<a href="https://github.com/Kimama-2005/torica-sim2025-unity/blob/3bddd0106db223ed864c4938ef3194a9af173682/TORICA%20sim%20Develop/Assets/Tatsumi.csv" target="_blank" rel="noreferrer">訓練用モデルの係数 ↗</a>
     <h3>ゲーム内の飛行区域</h3><p>松原湖岸の水域データをもとに、陸地上空を飛行禁止区域としています。機体が区域に入ると、その試技は失格です。</p>

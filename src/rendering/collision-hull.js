@@ -15,7 +15,7 @@ export function modelHull(model) {
     elevator = [];
   const left = [], right = [], referenceWing = [], bodyPlanar = [];
   function collect(part, transform, vertices = fixed) {
-    if (part.name === 'pilot') return; // Interior pose cannot affect first water contact.
+    if (part.name === 'pilot' || part.userData.excludeFromHull) return;
     if (part.isMesh) {
       const attr = part.geometry.attributes.position;
       for (let i = 0; i < attr.count; i++) {

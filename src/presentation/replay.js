@@ -1,5 +1,6 @@
 import { poseAt, WATER_RUNOUT_SECONDS } from '../domain/flight.js';
 
+import { aircraftCards } from './aircraft-picker.js';
 import { byId } from './dom.js';
 
 export function setupReplay({ showPose, onClose, playSplash }) {
@@ -81,7 +82,7 @@ export function setupReplay({ showPose, onClose, playSplash }) {
       playing = true;
       setRate(0);
       seek.max = String(endTime);
-      byId('replay-title').textContent = record.label;
+      byId('replay-title').textContent = aircraftCards[run.aircraftId ?? 'ryukai'].name + ' ／ ' + record.label;
       panel.hidden = false;
       display();
       play.focus({ preventScroll: true });

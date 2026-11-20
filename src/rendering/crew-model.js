@@ -4,6 +4,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 const navy = '#252d36';
 const uniforms = {
   ryukai: { cloth: '#4eacb6', hem: '#42949f', cuff: '#4598a4', trim: '#dbefeb' },
+  ren: { cloth: '#db3e32', hem: '#bc362e', cuff: '#cd3b31', trim: '#f1e3cb' },
   qx25: { cloth: '#efa522', hem: '#d58b23', cuff: '#de941c', trim: '#b6761c' },
 };
 const finish=new THREE.MeshStandardMaterial({vertexColors:true,roughness:.88});
@@ -77,6 +78,10 @@ function person(profile, team){
       for(const s of [-1,1])oval('#267d8c',s*.037,.317,.123,.048,.012,.004,s*.34);
       oval('#237886',0,.282,.124,.009,.038,.005,-.24);
       oval(trim,-.085,.385,-.108,.029,.024,.007);
+    } else if (team === 'ren') {
+      // The team's 2023 group photograph shows a light print on red shirts.
+      oval('#62323a',0,.333,-.119,.102,.026,.006);
+      oval(trim,0,.337,-.124,.072,.007,.003,-.10);
     } else {
       // Small chest print on the gold team shirts in the university's 2025 group photo.
       oval('#4b3a2e',-.085,.385,-.108,.022,.014,.006);

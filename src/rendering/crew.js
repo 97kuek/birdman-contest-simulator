@@ -57,14 +57,14 @@ export function createLaunchCrew(team = 'ryukai') {
   let previousTime = -1, previousLaunch = null;
   const start = new THREE.Vector3(), target = new THREE.Vector3(), pole = new THREE.Vector3();
 
-  // QX-25's pilot describes helpers at the fuselage. Torica has two wing runners.
-  const fuselageCrew = team === 'qx25';
-  const sideStation = fuselageCrew
-    ? { lateral: .58, aft: 1.31, y: .38, z: .93 }
-    : { lateral: 3.12, aft: 1.15, y: .535, z: .565 };
-  const rearStation = fuselageCrew
-    ? { lateral: .18, aft: 1.96, y: .43, z: 1.43 }
-    : { lateral: .29, aft: 1.79, y: .34, z: 1.32 };
+  // Use lateral body grips for the two enclosed aircraft and wing grips for Torica.
+  const fuselageCrew = team === 'qx25' || team === 'ren';
+  const stations = {
+    ryukai: [{ lateral: 3.12, aft: 1.15, y: .535, z: .565 }, { lateral: .29, aft: 1.79, y: .34, z: 1.32 }],
+    qx25: [{ lateral: .58, aft: 1.31, y: .38, z: .93, grip: .23 }, { lateral: .18, aft: 1.96, y: .43, z: 1.43 }],
+    ren: [{ lateral: .61, aft: .91, y: .63, z: .48, grip: .285 }, { lateral: .21, aft: 1.85, y: .62, z: 1.31 }],
+  };
+  const [sideStation, rearStation] = stations[team];
 
   function update(launch, elapsed, onFootfall) {
     const time = Math.min(elapsed, launch.duration + 1.1);
@@ -120,7 +120,7 @@ export function createLaunchCrew(team = 'ryukai') {
         const { sign } = arm;
         start.set(sign * 0.186, 0.45, 0).applyMatrix4(member.torso.matrix);
         const gripX = member.side
-          ? (fuselageCrew ? member.side * .23 - lateral + sign * .065 : sign * .174)
+          ? (fuselageCrew ? member.side * station.grip - lateral + sign * .065 : sign * .174)
           : sign * .08 - lateral;
         target.set(gripX, gripY, station.z - aft + 0.056).divideScalar(member.scale);
         target.lerp(segment.set(sign * 0.22, 0.61, -0.16), relax);

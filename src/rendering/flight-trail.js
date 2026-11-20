@@ -57,10 +57,21 @@ export function createFlightTrail(run, color, { facility, release }) {
 }
 
 function extendTrail(line, samples) {
-  const geometry = line.geometry,
-    positions = geometry.attributes.position;
+  let geometry = line.geometry;
+  let positions = geometry.attributes.position;
   const start = geometry.drawRange.count;
   if (start === samples.length) return;
+  // Powered flights can outlast the initial buffer sized for a glider.
+  if (samples.length > positions.count) {
+    const capacity = Math.max(positions.count * 2, samples.length);
+    const array = new Float32Array(3 * capacity);
+    array.set(positions.array);
+    positions = new THREE.BufferAttribute(array, 3).setUsage(THREE.DynamicDrawUsage);
+    geometry.dispose();
+    geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', positions);
+    line.geometry = geometry;
+  }
   for (let i = start; i < samples.length; i++) {
     const s = samples[i];
     positions.setXYZ(i, s.right, s.height, -s.forward);

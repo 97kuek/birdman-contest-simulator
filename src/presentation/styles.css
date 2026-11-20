@@ -754,6 +754,57 @@ dialog a {
   display: none;
 }
 
+#pedal-controls {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  bottom: calc(var(--edge-bottom) + 20px);
+  transform: translateX(-50%);
+  padding: 5px;
+  border: 1px solid #afccca;
+  border-radius: 8px;
+  background: var(--lake-panel);
+  color: #fff;
+}
+
+.pedal-readout, .pedal-options {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.pedal-readout {
+  justify-content: space-between;
+  padding: 0 4px 3px;
+  font-size: 12px;
+}
+
+#pedal-watts { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.pedal-options button {
+  min-width: 54px;
+  min-height: 32px;
+  padding: 0 6px;
+  gap: 4px;
+  border-radius: 4px;
+  background: #ffffff16;
+  color: #fff;
+  font-size: 13px;
+  white-space: nowrap;
+  touch-action: manipulation;
+}
+
+.pedal-options button[aria-pressed=true] { background: var(--rally-gold); color: #193c43; }
+.pedal-options kbd { font: 600 10px/1.2 system-ui; border: 1px solid currentColor; padding: 1px 3px; border-radius: 3px; }
+
+@media (any-pointer: coarse) {
+  .pedal-options button { min-height: 44px; }
+}
+
+@media (any-pointer: coarse) and (max-width: 460px) {
+  body:not([data-tilt=active]) #pedal-controls { bottom: calc(var(--edge-bottom) + 140px); }
+}
+
 /* Result board */
 
 .result-actions {

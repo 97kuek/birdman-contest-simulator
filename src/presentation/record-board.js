@@ -4,6 +4,8 @@ import { WEATHER } from '../domain/weather.js';
 import { byId as $ } from './dom.js';
 
 function scoredBoard(run, score) {
+  const aircraft = aircraftCards[run.aircraftId ?? 'ryukai'];
+  const practice = run.aircraftId === 'ren';
   const official = score.official;
   const updated = score.personal === 'improved';
   const personal = {
@@ -14,9 +16,9 @@ function scoredBoard(run, score) {
   };
   return {
     title: official === 'allTime' ? '歴代最高記録超え！' :
-      official === 'winner2026' ? '優勝記録超え！' : updated ? '自己ベスト更新！' : 'ただ今の記録',
+      official === 'winner2026' ? '優勝記録超え！' : updated ? '自己ベスト更新！' : practice ? '練習飛行の距離' : 'ただ今の記録',
     value: score.metres,
-    detail: [WEATHER[run.weather].label, personal[score.personal]].filter(Boolean).join(' ／ '),
+    detail: [practice && aircraft.name + '・累積水平距離', WEATHER[run.weather].label, personal[score.personal]].filter(Boolean).join(' ／ '),
     award: official ? (official === 'allTime' ? '滑空機部門 歴代最高' : '2026年 滑空機部門優勝') +
       ' ' + (GLIDER_RECORDS[official] / 100).toFixed(2) + ' m を突破' : '',
     highlight: official || (updated ? 'personal' : ''),

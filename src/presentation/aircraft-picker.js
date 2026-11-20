@@ -3,20 +3,26 @@ import { byId } from './dom.js';
 export const aircraftCards = {
   ryukai: {
     name: '竜海', university: '東京理科大学', team: '鳥人間サークル鳥科', shortTeam: '東京理科大学・鳥科',
-    pitchLabel: '体重移動',
+    year: 2025, category: '滑空機', pitchLabel: '体重移動',
   },
   qx25: {
     name: 'QX-25', university: '九州大学', team: '鳥人間チーム', shortTeam: '九州大学',
-    pitchLabel: '前後操縦',
+    year: 2025, category: '滑空機', pitchLabel: '前後操縦',
+  },
+  ren: {
+    name: '聯', university: '東北大学', team: 'Windnauts', shortTeam: '東北大学 Windnauts',
+    year: 2023, category: '人力プロペラ機', pitchLabel: '水平尾翼',
   },
 };
 
 function showAircraft(id) {
-  const { name, university, team, shortTeam, pitchLabel } = aircraftCards[id];
+  const { name, university, team, shortTeam, year, category, pitchLabel } = aircraftCards[id];
   document.title = name + ' | 鳥人間コンテストシミュレーター';
   byId('aircraft-name').textContent = name;
   byId('aircraft-university').textContent = university;
   byId('aircraft-team').textContent = team;
+  byId('aircraft-class').textContent = year + '年 ' + category;
+  byId('broadcast-division').textContent = category + '部門';
   byId('broadcast-team').textContent = shortTeam;
   byId('pitch-label').textContent = pitchLabel;
 }
