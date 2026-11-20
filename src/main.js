@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { FlightSession } from './application/flight-session.js';
+import { isOnPavement } from './domain/runway-support.js';
 import { createShoreline } from './domain/shoreline.js';
 import { WIND_GRID_SIZE } from './domain/lake-breeze.js';
 import { WEATHER, windAt } from './domain/weather.js';
@@ -13,6 +14,7 @@ import { createQx25Aircraft } from './rendering/aircraft/qx25.js';
 import { createAircraftPose } from './rendering/aircraft-pose.js';
 import { createCockpitDisplay } from './rendering/aircraft/display.js';
 import { createDaylight } from './rendering/daylight.js';
+import { createPracticeBuoys } from './rendering/practice-buoys.js';
 import { createChaseBoat } from './rendering/chase-boat.js';
 import { modelHull } from './rendering/collision-hull.js';
 import { createLaunchCrew } from './rendering/crew.js';
@@ -102,20 +104,21 @@ async function start() {
   enableReflection(aircraft);
   modelBase.add(aircraft);
 
-  let trials, setNight, firstLand, current;
+  let trials, setNight, firstLand, current, field, fieldPromise;
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
-  const atWater = () => trials?.atWater;
+  const marks = createPracticeBuoys();
+  facility.add(marks);
+  enableReflection(marks);
   const boat = createChaseBoat();
   facility.add(boat.group);
   enableReflection(boat.group);
   boat.update(null, 0, 0);
   const cameraRig = createFlightCamera({
-    canvas: renderer.domElement, facility, modelBase, aircraft, boat, reduceMotion,
-    trackBounds: () => trials.trackBounds, visibleTrackFraction: () => trackViewportFraction(host), onViewChange: showCameraMode,
+    canvas: renderer.domElement, facility, modelBase, aircraft, boat, reduceMotion, waterContact: () => trials?.cameraAtWater,
+    trackBounds: () => trials.trackBounds, preparing: () => !byId('flight-settings').hidden, visibleTrackFraction: () => trackViewportFraction(host), onViewChange: showCameraMode,
   });
-  bindViewerControls(host, renderer, cameraRig, atWater);
-  const compass = document.querySelector('.compass svg');
-  const motorPosition = new THREE.Vector3();
+  bindViewerControls(host, renderer, cameraRig);
+  const motorPosition = new THREE.Vector3(), wheelPosition = new THREE.Vector3();
   let last = 0, sceneTime = 0, lastImpactRun;
   const impactDirection = new THREE.Vector3(), impactPoint = new THREE.Vector3();
   renderer.setAnimationLoop(now => {
@@ -123,6 +126,24 @@ async function start() {
     if (last && !document.hidden) sceneTime += (now - last) / 1000;
     last = now;
     trials?.tick(now);
+    if (field) {
+      field.update(now);
+      cameraRig.update();
+      const { sample, instruments } = field.display;
+      const camera = cameraRig.camera;
+      field.supportCar.getWorldPosition(motorPosition);
+      camera.worldToLocal(motorPosition);
+      field.modelBase.getWorldPosition(wheelPosition);
+      sound.update(trials.soundPhase, sample, instruments, cameraRig.view(), Infinity, 0, {
+        wheelSpeed: trials.soundPhase === 'run' ? sample.groundSpeed : 0,
+        wheelRange: camera.position.distanceTo(wheelPosition),
+        wheelLoad: isOnPavement(sample.right, sample.forward) ? sample.wheelLoad ?? 0 : 0,
+        carOnPavement: isOnPavement(field.supportCar.position.x, -field.supportCar.position.z),
+        carPosition: motorPosition, carSpeed: field.supportCarSpeed,
+      }, camera.position.distanceTo(wheelPosition));
+      renderer.render(field.scene, cameraRig.camera);
+      return;
+    }
     const visualTime = reduceMotion.matches ? 0 : trials?.waveTime() ?? sceneTime;
     const route = trials?.boatRoute(now) ?? {};
     const boatSpeed = boat.update(route.samples, route.time, visualTime, firstLand, route.stopTime);
@@ -131,7 +152,8 @@ async function start() {
     if (trials) {
       boat.group.localToWorld(motorPosition.set(0, .45, 2.7));
       const range = cameraRig.camera.position.distanceTo(motorPosition);
-      sound.update(trials.soundPhase, current.display.sample, current.display.instruments, cameraRig.view(), range, boatSpeed);
+      sound.update(trials.soundPhase, current.display.sample, current.display.instruments, cameraRig.view(), range, boatSpeed, null,
+        cameraRig.camera.position.distanceTo(modelBase.getWorldPosition(wheelPosition)));
     }
     const weatherMode = trials?.weather ?? selectedWeather();
     const weather = WEATHER[weatherMode];
@@ -155,7 +177,6 @@ async function start() {
     const angle = Math.atan2(weather.field?.cross ?? weather.crosswind ?? 0, weather.field?.head ?? weather.headwind ?? 1);
     lake.update(cameraRig.camera, visualTime, weather.lakeWindSpeed, fluctuation, angle, weather.field, windTime, facility.rotation.y,
       sample?.gustOffset ?? 0, age);
-    compass.style.transform = 'rotate(' + cameraRig.compassBearing() + 'rad)';
     renderer.render(scene, cameraRig.camera);
   });
 
@@ -168,15 +189,17 @@ async function start() {
   const fleet = new Map();
   const aircraftFactories = { ryukai: () => ryukai, qx25: createQx25Aircraft, ren: createRenAircraft };
   function selectAircraft(id) {
+    marks.visible = id === 'ren';
     let entry = fleet.get(id);
     if (!entry) {
       const model = aircraftFactories[id]();
       if (model !== ryukai) enableReflection(model);
       const teamCrew = id === 'ryukai' ? toricaCrew : createLaunchCrew(id);
       if (teamCrew !== toricaCrew) enableReflection(teamCrew.group);
-      const session = new FlightSession(modelHull(model), selectedWeather(), drawWindOffset, firstLand, id);
+      const hull = modelHull(model);
+      const session = new FlightSession(hull, selectedWeather(), drawWindOffset, firstLand, id, platform.userData.contact(hull));
       const display = createCockpitDisplay(model, {
-        aircraftId: id,
+        aircraftId: id, northInCourse: facility.rotation.y,
         describe: text => renderer.domElement.setAttribute('aria-description', text),
       });
       const aircraftPose = createAircraftPose({ modelBase, aircraft: model, crew: teamCrew, view, moveCamera, display });
@@ -193,13 +216,34 @@ async function start() {
       facility.add(crew.group);
     }
     current = entry;
+    entry.display.invalidate();
     return entry;
   }
   trials = setupTrials({
-    ...selectAircraft('ryukai'), selectAircraft, setView, view, startLandingCamera,
+    ...selectAircraft('ryukai'), selectAircraft, setView, view, startLandingCamera, drawWindOffset,
+    loadField() {
+      fieldPromise ??= Promise.all([import('./rendering/fujikawa-field.js'), import('./application/runway-trial.js')])
+        .then(async ([{ createFujikawaField }, { createRunwayTrial }]) => {
+          const site = await createFujikawaField(cameraRig, text => renderer.domElement.setAttribute('aria-description', text));
+          return Object.assign(site, { trial: (weather, offset) => createRunwayTrial(site.hull, weather, offset, { preSpin: true }) });
+        })
+        .catch(error => { fieldPromise = null; throw error; });
+      return fieldPromise;
+    },
+    useField(next) {
+      field = next;
+      (field ?? current).display.invalidate();
+      cameraRig.setSite(field ?? { facility, modelBase, aircraft });
+      const label = field ? '富士川滑空場と機体の3Dビュー' : '松原湖岸と機体の3Dビュー';
+      byId('viewer').setAttribute('aria-label', label);
+      renderer.domElement.setAttribute('aria-label', label + '。俯瞰視点ではドラッグで回転、ホイールで拡大縮小');
+      if (field) byId('flag-inset').hidden = true;
+    },
+    distanceToBoat: s => Math.hypot(s.right - boat.group.position.x, s.forward + boat.group.position.z),
     crewAnswer: (side, time) => crew.answer(side, time),
     crewTime: time => crew.update(current.session.launch, time, (side, contact) => sound.step(side, contact, view())),
     playSplash: sample => sound.splash(sample),
+    soundHorn: () => sound.horn(),
     makeTrail: (run, color) => createFlightTrail(run, color, { facility, release }),
     sceneSeconds: () => sceneTime,
   });

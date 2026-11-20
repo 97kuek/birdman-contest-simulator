@@ -163,7 +163,6 @@ button:disabled {
 }
 
 .view-switch,
-.compass,
 .camera-tools,
 .scene-foot,
 #loading {
@@ -196,29 +195,8 @@ button:disabled {
   box-shadow: inset 0 -3px var(--rally-sky);
 }
 
-.compass {
-  width: 39px;
-  height: 57px;
-  border-radius: 22px;
-  position: absolute;
-  right: 20px;
-  top: 62px;
-  background: var(--lake-panel);
-  color: white;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 3px 0;
-}
 
-.compass span {
-  font: 600 10px/16px system-ui;
-}
 
-.compass svg {
-  width: 25px;
-  height: 27px;
-}
 
 #loading {
   position: absolute;
@@ -272,6 +250,10 @@ button:disabled {
 }
 
 .map-credit {
+  pointer-events: auto;
+  background: transparent;
+  padding: 0;
+  border: 0;
   margin: 6px 0 0 24px;
   font-size: 9px;
   color: #fff;
@@ -628,7 +610,7 @@ dialog a {
   z-index: 2;
 }
 
-#flag-inset:not([hidden]) ~ :is(.compass, #wind-meter) { display: none; }
+#flag-inset:not([hidden]) ~ #wind-meter { display: none; }
 @media (orientation: landscape) and (max-height: 500px) {
   #flag-inset { top: calc(var(--edge-top) + 102px); }
 }
@@ -716,7 +698,6 @@ dialog a {
   color: #172e46;
 }
 
-[data-camera=pilot] .compass,
 [data-camera=pilot] #wind-meter {
   display: none;
 }
@@ -754,6 +735,7 @@ dialog a {
   display: none;
 }
 
+
 #pedal-controls {
   position: absolute;
   z-index: 2;
@@ -767,19 +749,11 @@ dialog a {
   color: #fff;
 }
 
-.pedal-readout, .pedal-options {
+.pedal-options {
   display: flex;
   align-items: center;
   gap: 3px;
 }
-
-.pedal-readout {
-  justify-content: space-between;
-  padding: 0 4px 3px;
-  font-size: 12px;
-}
-
-#pedal-watts { font-weight: 700; font-variant-numeric: tabular-nums; }
 
 .pedal-options button {
   min-width: 54px;
@@ -799,6 +773,7 @@ dialog a {
 
 @media (any-pointer: coarse) {
   .pedal-options button { min-height: 44px; }
+  .pedal-options kbd { display: none; }
 }
 
 @media (any-pointer: coarse) and (max-width: 460px) {
@@ -919,25 +894,26 @@ dialog a {
 }
 
 /* The same LED board carries the ruling, with the striped surround used for disqualification. */
-.record-board:is([data-outcome=disqualified], [data-outcome=structural-failure]) {
+.record-board:is([data-outcome=disqualified], [data-outcome=structural-failure], [data-outcome=platform-contact]) {
   background: repeating-linear-gradient(0deg, transparent 0 7px, #141346cc 8px 11px),
     linear-gradient(170deg, #3542e6, #1593df 62%, #946ccd);
 }
-.record-board:is([data-outcome=disqualified], [data-outcome=structural-failure])::before {
+.record-board:is([data-outcome=disqualified], [data-outcome=structural-failure], [data-outcome=platform-contact])::before {
   inset: 2px 5px;
   clip-path: polygon(8% 0,92% 0, 100% 50%,92% 100%,8% 100%,0 50%);
   background: radial-gradient(ellipse at center, #242064, #101044 80%);
 }
-#comparison :is([data-outcome=disqualified], [data-outcome=structural-failure]) #result-heading {
+#comparison :is([data-outcome=disqualified], [data-outcome=structural-failure], [data-outcome=platform-contact]) #result-heading {
   color: white;
   background: linear-gradient(105deg,#006e95,#3e48bc 68%,#5842ae);
   box-shadow: inset 0 0 0 1px #accfff;
 }
-#comparison :is([data-outcome=disqualified], [data-outcome=structural-failure]) .flight-score {
-  font-size: clamp(48px, min(24vw, 17dvh), 128px);
+#comparison :is([data-outcome=disqualified], [data-outcome=structural-failure], [data-outcome=platform-contact]) .flight-score {
+  font-size: clamp(36px, min(13vw, 10dvh), 74px);
+  white-space: nowrap;
   line-height: 1.08;
 }
-:is([data-outcome=disqualified], [data-outcome=structural-failure]) #result-value {
+:is([data-outcome=disqualified], [data-outcome=structural-failure], [data-outcome=platform-contact]) #result-value {
   letter-spacing: .12em;
   padding-inline-start: .12em;
   font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", system-ui, sans-serif;
@@ -1064,7 +1040,11 @@ dialog a {
   .model-title h3 { font-size: 34px; }
   .setup-launch { padding: 8px 17px; }
   .view-switch button { padding: 5px 8px; }
-  .map-credit { margin-left: 0; font-size: 8px; }
+  .map-credit {
+  pointer-events: auto;
+  background: transparent;
+  padding: 0;
+  border: 0; margin-left: 0; font-size: 8px; }
   .replay-transport { gap: 1px; padding: 4px; }
   .replay-position > div { font-size: 11px; }
   #replay-time { font-size: 10px; }
@@ -1076,13 +1056,6 @@ dialog a {
     white-space: nowrap;
   }
 
-  .lab-actions #sources {
-    font-size: 0;
-    gap: 0;
-    width: 36px;
-    height: 34px;
-    padding: 0;
-  }
 
   .broadcast-class {
     font-size: 9px;
@@ -1240,7 +1213,7 @@ dialog a {
     padding-inline: var(--edge-left) var(--edge-right);
   }
 
-  .flight-lab :is(.view-switch, .compass) {
+  .flight-lab .view-switch {
     top: calc(var(--edge-top) + 50px);
   }
 
@@ -1248,7 +1221,7 @@ dialog a {
     left: var(--edge-left);
   }
 
-  .flight-lab .compass, .flight-lab .camera-tools, .flight-lab #wind-meter {
+  .flight-lab .camera-tools, .flight-lab #wind-meter {
     right: var(--edge-right);
   }
 
@@ -1330,7 +1303,7 @@ dialog a {
   .brand h1 { font-size: 15px; }
   .broadcast-class { font-size: 10px; }
 
-  .flight-lab .view-switch, .flight-lab .compass,
+  .flight-lab .view-switch,
   .flight-lab .camera-tools {
     top: calc(var(--edge-top) + 49px);
     bottom: auto;
@@ -1339,13 +1312,7 @@ dialog a {
   .view-switch { left: var(--edge-left); }
   .view-switch button { padding: 4px 8px; }
   .flight-lab .camera-tools { right: var(--edge-right); }
-  .flight-lab .compass {
-    left: calc(var(--edge-left) + 190px);
-    right: auto;
-    width: 32px;
-    height: 45px;
-    padding-block: 1px;
-  }
+
 
   .flight-lab #wind-meter {
     top: calc(var(--edge-top) + 104px);
@@ -1359,7 +1326,11 @@ dialog a {
     top: auto;
     bottom: var(--edge-bottom);
   }
-  .map-credit { margin-left: 0; font-size: 8px; }
+  .map-credit {
+  pointer-events: auto;
+  background: transparent;
+  padding: 0;
+  border: 0; margin-left: 0; font-size: 8px; }
 
   .flight-lab[data-stage=setup] .camera-tools {
     top: auto;
@@ -1525,3 +1496,13 @@ dialog a {
   }
 }
 body[data-stage=flight][data-tilt=active] #touch-controls { display: none; }
+
+@media (any-pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+  #pedal-controls {
+    left: auto;
+    right: var(--edge-right, 12px);
+    bottom: calc(var(--edge-bottom) + 88px);
+    transform: none;
+  }
+  body[data-tilt=active] #pedal-controls { bottom: var(--edge-bottom); }
+}

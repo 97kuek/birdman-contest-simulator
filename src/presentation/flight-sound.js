@@ -1,3 +1,5 @@
+import { createRunwaySound } from './runway-sound.js';
+import { createPedalSound } from './pedal-sound.js';
 import { byId } from './dom.js';
 
 const PREFS_KEY = 'ryukai.sound.v1';
@@ -20,7 +22,7 @@ function mixer(context) {
     pan.connect(footsteps);
     return pan;
   });
-  let outboard, lastRate;
+  let outboard, lastRate, runwaySound, pedalSound;
   const parameters = new Map();
   function level(node, value) {
     if (parameters.get(node) === value) return;
@@ -49,6 +51,7 @@ function mixer(context) {
       return response.arrayBuffer();
     }).then(bytes => context.decodeAudioData(bytes)).then(buffer => {
       recordings.set(name, buffer);
+      if (name === 'runway-tyres') runwaySound?.setTyreBuffer(buffer);
       if (name === 'outboard') outboard = play(buffer, motor, true);
       if (name === 'shore') play(buffer, shore, true);
     }).catch(() => { /* A missing recording must not interrupt piloting. */ })
@@ -77,20 +80,30 @@ function mixer(context) {
       level(ambience, environment ? 1 : 0);
       level(instruments, electronic ? 1 : 0);
     },
-    surroundings(height, distance, speed, cockpit, boatRange, boatSpeed) {
+    surroundings(height, distance, speed, cockpit, boatRange, boatSpeed, field) {
+      if (field && !runwaySound) {
+        runwaySound = createRunwaySound(context, ambience);
+        load('runway-tyres');
+      }
+      runwaySound?.update(field);
       const throttle = clamp(boatSpeed / 8, 0, 1);
       // Follow the moving listener so boarding the chase boat swells into its close engine sound.
       const proximity = 1 / (1 + boatRange / 12);
       const engineGain = (0.72 + 0.28 * throttle) * proximity;
-      level(motor, engineGain * (1.35 + 1.05 * proximity));
+      level(motor, field ? 0 : engineGain * (1.35 + 1.05 * proximity));
       const rate = Math.round(88 + 14 * throttle) / 100;
       if (outboard && rate !== lastRate) {
         outboard.playbackRate.setTargetAtTime(rate, context.currentTime, .16);
         lastRate = rate;
       }
-      level(shore, 0.30 / (1 + height / 7 + distance / 85));
+      level(shore, field ? 0 : 0.30 / (1 + height / 7 + distance / 85));
       level(wind, Math.round(clamp(speed / 13, 0, 1) ** 2 * (cockpit ? 36 : 16)) / 100);
     },
+    drive(sample, range, moving) {
+      if (sample.rpm > 0 && moving) pedalSound ??= createPedalSound(context, ambience);
+      pedalSound?.(moving ? sample.rpm ?? 0 : 0, moving ? sample.watts ?? 0 : 0, range);
+    },
+    horn() { runwaySound?.horn(); },
     footfall(side, contact, view) {
       const buffer = recordings.get('deck-run');
       if (!buffer) return;
@@ -121,9 +134,9 @@ function mixer(context) {
 
 export function setupFlightSound() {
   const instrument = byId('instrument-audio'), environment = byId('environment-audio');
-  const settings = byId('sound-settings'), dialog = byId('source-dialog');
+  const dialog = byId('source-dialog');
   const Audio = window.AudioContext ?? window.webkitAudioContext;
-  if (!Audio) settings.hidden = true;
+  if (!Audio) instrument.disabled = environment.disabled = true;
   try {
     const saved = JSON.parse(localStorage.getItem(PREFS_KEY));
     instrument.checked = saved?.instrument ?? true;
@@ -149,25 +162,20 @@ export function setupFlightSound() {
   for (const id of ['previous-result', 'launch', 'retry', 'result-replay', 'confirm-heading', 'replay-play']) {
     byId(id).addEventListener('click', unlock);
   }
-  function reflectPreferences() {
-    settings.dataset.muted = String(!instrument.checked && !environment.checked);
-  }
   for (const control of [instrument, environment]) control.onchange = () => {
-    reflectPreferences();
     try {
       localStorage.setItem(PREFS_KEY, JSON.stringify({ instrument: instrument.checked, environment: environment.checked }));
     } catch { /* Settings still apply for this visit. */ }
     unlock();
     gates(document.body.dataset.camera === 'pilot');
   };
-  reflectPreferences();
   const silence = () => { mix?.enable(false, false); lastPulse = -Infinity; };
   document.addEventListener('visibilitychange', silence);
   window.addEventListener('pagehide', silence);
   new MutationObserver(() => { if (dialog.open) silence(); }).observe(dialog, { attributes: true, attributeFilter: ['open'] });
 
   return {
-    update(nextPhase, sample, reading, view, boatRange, boatSpeed) {
+    update(nextPhase, sample, reading, view, boatRange, boatSpeed, field = null, aircraftRange = 0) {
       const cockpit = view === 'pilot';
       if (nextPhase === 'setup' && view === 'boat') nextPhase = 'align';
       if (phase !== nextPhase) lastPulse = -Infinity;
@@ -176,7 +184,8 @@ export function setupFlightSound() {
       gates(cockpit);
       if (!available() || !AUDIBLE_PHASES.has(phase) || context.state !== 'running') return;
       if (environment.checked) {
-        mix.surroundings(sample.bottomHeight, sample.distance ?? 0, reading.airspeed, cockpit, boatRange, boatSpeed);
+        mix.drive(sample, aircraftRange, phase === 'run' || phase === 'glide' || phase === 'countdown');
+        mix.surroundings(sample.bottomHeight, sample.distance ?? 0, reading.airspeed, cockpit, boatRange, boatSpeed, field);
       }
       if (phase === 'glide' && cockpit && instrument.checked && reading.toneHz) {
         if (sample.t < lastPulse || sample.t - lastPulse >= reading.intervalSeconds) {
@@ -188,6 +197,9 @@ export function setupFlightSound() {
     step(side, contact, view) {
       if (phase === 'run' && available() && environment.checked && context?.state === 'running')
         mix.footfall(side, contact, view);
+    },
+    horn() {
+      if (available() && environment.checked && context?.state === 'running') mix.horn();
     },
     splash(sample) {
       if (available() && environment.checked && context?.state === 'running')

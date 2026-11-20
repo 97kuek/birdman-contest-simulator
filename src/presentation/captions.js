@@ -7,9 +7,10 @@ export function setupCaptions() {
     clearTimeout(timer);
     panel.hidden = true;
   }
-  function show(line, duration = 3000) {
+  function show(line, duration = 3000, speaker = '実況') {
     clear();
     if (document.hidden || dialog.open) return;
+    panel.querySelector('b').textContent = speaker;
     text.textContent = line;
     panel.hidden = false;
     timer = setTimeout(clear, duration);

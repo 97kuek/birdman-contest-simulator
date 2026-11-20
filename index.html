@@ -12,11 +12,11 @@
 <body class="flight-lab" data-stage="setup">
   <header class="topbar">
     <div class="brand"><div><h1>鳥人間コンテストシミュレーター</h1><span class="broadcast-class"><span id="broadcast-division">滑空機部門</span> <b>／</b> <span id="broadcast-team">東京理科大学・鳥科</span></span></div></div>
-    <div class="lab-actions"><button id="flight-action" hidden></button><button id="sound-settings" popovertarget="sound-options" title="設定" aria-label="設定"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h4l5-4v14l-5-4H3z"/><path class="waves" d="M16 8q4 4 0 8m3-11q7 7 0 14"/><path class="mute" d="m16 9 5 6m0-6-5 6"/></svg><span class="settings-label">設定</span></button><button id="sources" class="text-button" title="資料・出典"><i data-icon="book"></i>資料・出典</button></div>
+    <div class="lab-actions"><button id="flight-action" hidden></button><button id="sound-settings" popovertarget="sound-options" title="設定" aria-label="設定"><i data-icon="settings"></i></button></div>
   </header>
   <div id="sound-options" popover aria-label="設定">
     <label><input id="instrument-audio" type="checkbox" checked><span>計器の電子音<small>音の高さは対気速度、低空での間隔は高度</small></span></label>
-    <label><input id="environment-audio" type="checkbox" checked><span>環境音・効果音<small>波、風切り音、助走、着水、追走艇</small></span></label>
+    <label><input id="environment-audio" type="checkbox" checked><span>環境音・効果音<small><span id="ambient-description">波、風切り音、助走、着水、追走艇</span></small></span></label>
     <div id="mobile-input-settings" hidden>
       <label for="input-mode">操縦方法 <select id="input-mode"><option value="tilt">傾き</option><option value="touch">タッチ</option></select></label>
       <small id="sensor-status" role="status"></small>
@@ -34,13 +34,12 @@
       <div class="camera-hud"><button id="camera-hud-toggle" type="button" aria-expanded="false" aria-controls="camera-hud-panel"><i data-icon="camera"></i>視点</button><div id="camera-hud-panel">
       <nav class="view-switch" aria-label="カメラ視点">
         <button data-view="pilot" aria-pressed="false">パイロット</button>
-        <button data-view="boat" aria-pressed="false">ボート</button>
+        <button id="observer-camera" data-view="boat" aria-pressed="false">ボート</button>
         <button data-view="aircraft" aria-pressed="true">俯瞰</button>
       </nav>
       <div class="camera-tools" aria-label="視点の操作"><button id="zoom-in" aria-label="拡大"><i data-icon="plus"></i></button><button id="zoom-out" aria-label="縮小"><i data-icon="minus"></i></button><button id="camera-reset" aria-label="現在の視点に戻す"><i data-icon="undo"></i></button><button id="fullscreen" aria-label="全画面表示" title="全画面表示"><i data-icon="frame"></i></button></div>
       </div></div>
       <canvas id="flag-inset" width="192" height="192" role="img" aria-label="風見旗（上が機首方向）" hidden></canvas>
-      <div class="compass" aria-label="画面上の北方向"><span>N</span><svg viewBox="0 0 28 28" aria-hidden="true"><path fill="#e6f5ed" d="m14 1 4.5 17-4.5-3-4.5 3z"/><path fill="#789493" d="m14 27-4.5-13 4.5 2 4.5-2z"/></svg></div>
       <section id="wind-meter" aria-label="機首を上にした風の流れ" hidden>
         <svg class="wind-dial" viewBox="0 0 48 48" aria-hidden="true">
           <circle cx="24" cy="24" r="21" fill="none" stroke="#789d9e"/>
@@ -68,8 +67,7 @@
           </div>
         </div>
       </div>
-      <div id="pedal-controls" role="group" aria-labelledby="pedal-label" hidden>
-        <div class="pedal-readout"><span id="pedal-label">ペダル出力</span><output id="pedal-watts">203 W</output></div>
+      <div id="pedal-controls" role="group" aria-label="漕ぐ強さ" hidden>
         <div class="pedal-options">
           <button type="button" data-watts="0" aria-keyshortcuts="1" aria-pressed="false"><kbd>1</kbd>停止</button>
           <button type="button" data-watts="203" aria-keyshortcuts="2" aria-pressed="true"><kbd>2</kbd>巡航</button>
@@ -79,7 +77,7 @@
       <div id="launch-call" role="status" hidden><small id="call-speaker" hidden></small><strong id="call-text"></strong></div>
       <div id="commentary" role="status" hidden><b>実況</b><span id="commentary-text"></span></div>
       <div id="loading" role="status">3Dシーンを読み込み中…</div>
-      <div class="scene-foot"><div class="place"><i data-icon="pin"></i><span>彦根・松原湖岸</span></div><div class="map-credit">地形・写真・水域：国土地理院／国土数値情報</div></div>
+      <div class="scene-foot"><div class="place"><i data-icon="pin"></i><span id="venue-caption">彦根・松原湖岸</span></div><button type="button" id="map-credit" class="map-credit" aria-haspopup="dialog">地形・写真・水域：国土地理院／国土数値情報</button></div>
 
     </section>
     <section id="comparison" role="dialog" aria-labelledby="result-heading" hidden>
@@ -115,6 +113,10 @@
           </div>
           <button type="button" class="aircraft-arrow" id="aircraft-next" aria-label="次の機体" aria-keyshortcuts="ArrowRight" disabled>›</button>
         </div>
+        <fieldset id="venue-choices" class="weather-choices period-choices" hidden><legend>飛行場所</legend>
+          <label><input type="radio" name="venue" value="biwa" checked><span>琵琶湖</span></label>
+          <label><input type="radio" name="venue" value="fujikawa"><span>富士川滑空場</span></label>
+        </fieldset>
         <fieldset class="weather-choices period-choices"><legend>時間帯</legend>
           <label><input type="radio" name="period" value="day" checked><span>昼</span></label>
           <label><input type="radio" name="period" value="night"><span>夜</span></label>
@@ -126,7 +128,8 @@
         </fieldset>
         <small id="input-notice" role="status" hidden></small>
       </div>
-      <div class="setup-launch"><button class="primary" id="launch" disabled>開始する</button><button id="previous-result" hidden>この条件の飛行記録</button></div>
+      <div class="setup-launch">
+        <button class="primary" id="launch" disabled lang="en">Take off</button><button id="previous-result" hidden>この条件の飛行記録</button></div>
     </aside>
   </main>
   <dialog id="source-dialog" aria-labelledby="source-title"><div class="dialog-top"><h2 id="source-title">資料・出典</h2><button id="close-sources" aria-label="閉じる"><i data-icon="close"></i></button></div>
@@ -134,11 +137,12 @@
     <p><a href="https://github.com/torica-org/26th_Electronics/tree/1c47e73979fb83a245cf1c0f7e0d85b7a62a73d7/25th電装の解説" target="_blank" rel="noreferrer">鳥科の25代電装資料 ↗</a></p>
     <h3>QX-25 · 九州大学</h3><p>2025年機の三面図に沿って主翼、胴体、格納式補助脚、水平尾翼とラダーを造形しました。実機はエレベーターと前後の体重移動を使い分けます。ゲームでは同じ前後入力で両方を操作します。図面のエレベーターは上下10°、ラダーは左右17°。空力係数と舵の効きは推定です。液晶には計算した対気速度と湖面からの高さを表示し、電子音でも伝えます。補助員はパイロットの記述に合わせて胴体付近に配置し、シャツの配色は大学が公開した集合写真を参考にしました。</p>
     <p><a href="https://www.q-birdman.jp/history/images/qx-25.pdf" target="_blank" rel="noreferrer">九州大学の三面図・主要諸元 ↗</a>　<a href="https://www.youtube.com/watch?v=SFUEIepMicU" target="_blank" rel="noreferrer">QX-25の大会公式映像 ↗</a>　<a href="https://kikin.kyushu-u.ac.jp/outline/pamphlet_view.php?cId=161&amp;year=2025" target="_blank" rel="noreferrer">九大チームの写真 ↗</a></p>
-    <h3>聯 · 東北大学 Windnauts</h3><p>2023年の人力プロペラ機「聯」は、翼幅32.2 m、設計巡航速度7.2 m/s、必要出力203 W。ゲームでは上下キーで水平尾翼、左右キーでラダーを操縦します。数字キーか画面のボタンでペダル出力を選べます。練習飛行の距離は、離台後に機体がたどった水平経路の長さです。</p>
+    <h3>聯 · 東北大学 Windnauts</h3><p>2023年の人力プロペラ機「聯」は、翼幅32.2 m、設計巡航速度7.2 m/s、必要出力203 W。ゲームでは上下キーで水平尾翼、左右キーでラダーを操縦します。数字キーか画面のボタンでペースを選べます。操縦席の端末はチームの公開資料を参考に造形しました。3つの練習ブイ、GPSの画面表示、脚の余力と伴走艇の助言はゲーム用です。練習飛行の距離は、離台後に機体がたどった水平経路の長さです。</p>
     <p><a href="https://www.ifs.tohoku.ac.jp/~Boeing/ppt/20231214/5_Windnauts_2022-23.pdf#page=20" target="_blank" rel="noreferrer">Windnautsの三面図と巡航設計値 ↗</a></p>
     <h3>音</h3><p>波音は琵琶湖で収録された環境音です。助走と着水には別収録の効果音を用い、風切り音は対気速度に応じて合成しています。追走艇にはロワール川で収録された船外機の音を用いています。</p>
     <p>録音素材（CC0）　<a href="https://freesound.org/people/nomadas/sounds/690161/" target="_blank" rel="noreferrer">船外機 · nomadas ↗</a>　<a href="https://freesound.org/people/pflanigan/sounds/390287/" target="_blank" rel="noreferrer">湖岸 · pflanigan ↗</a>　<a href="https://freesound.org/people/sillygrizzlies/sounds/635059/" target="_blank" rel="noreferrer">木の階段を走る靴音 · sillygrizzlies ↗</a>　<a href="https://freesound.org/people/timgormly/sounds/148317/" target="_blank" rel="noreferrer">着水音 · timgormly ↗</a></p>
     <h3>人力プロペラ機の巡航試験</h3><a href="./cruise.html">聯とSkyronでペダル出力を変えてみる →</a>
+    <section id="fujikawa-sources"><h3>富士川滑空場</h3><p>国土地理院の航空写真と標高データを加工し、滑走路、富士川の河川敷、周辺の山地を表示しています。地上試験では南端から北へ滑走します。左右の翼持ち、フレーム、テールのスターターが機体を押し、翼フォロワーが両翼に並走します。追走車のハイエースは機体後方を走ります。着陸時は近くのキャッチャーが左右の翼、フレーム、テールを支えます。人数、配置、追走車の経路、補助者の力はゲーム用の設定です。風と照明も近似しています。</p><a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noreferrer">国土地理院の写真・標高データ ↗</a><p><a href="https://www.youtube.com/watch?v=DN8DRc79oKc" target="_blank" rel="noreferrer">Team ’F’ 富士川試験飛行・地上クルーの動き ↗</a>　<a href="https://www.youtube.com/watch?v=rTwyE2zN3hc" target="_blank" rel="noreferrer">静岡大学の富士川試験・追走車からの映像 ↗</a>　<a href="https://toyota.jp/pages/contents/request/webcatalog/hiacevan/hiace_main_202601.pdf" target="_blank" rel="noreferrer">トヨタ ハイエース バン主要諸元 ↗</a></p><p>Landsat8画像（GSI,TSIC,GEO Grid/AIST）, Landsat8画像（courtesy of the U.S. Geological Survey）, 海底地形（GEBCO）</p></section>
     <h3>松原湖岸・湖面</h3><p>飛行地点は滋賀県彦根市の松原湖岸です。地形・航空写真には国土地理院、水域には国土数値情報のデータを使用しています。プラットフォーム近くの湖岸と河口には水域の輪郭を使った地形メッシュと高解像度の航空写真を重ねています。樹木の位置・形は推定です。湖面は風向に沿う波、空と湖岸の反射、浅瀬の色と着水の波紋を描きます。波高は仮定し、飛距離は平均湖面で計測します。</p><a href="https://maps.gsi.go.jp/#16/35.294222/136.254333/" target="_blank" rel="noreferrer">松原湖岸の地理院地図 ↗</a>　<a href="./terrain/source.md" target="_blank">使用データの詳細 ↗</a>
     <h3>主翼の構造</h3><p>引き起こしや突風を受けると、左右の主翼が荷重に応じてしなり、ねじれが揚力に影響します。竜海とQX-25の定常時の翼端たわみは、それぞれの三面図に合わせました。九大が公表した荷重試験は1.5 Gです。ゲームでは翼根の曲げモーメントが定常時の3倍に達すると破断と判定します。実機の破断荷重は確認されていません。</p>
     <p><a href="https://github.com/97kuek/birdman-contest-simulator/blob/main/docs/wing-structure.md" target="_blank" rel="noreferrer">荷重試験・たわみの比較・計算条件 ↗</a> · <a href="https://github.com/97kuek/birdman-contest-simulator/blob/main/docs/tatsumi-release.md" target="_blank" rel="noreferrer">竜海の離台姿勢・体重移動と実機ログ ↗</a> · <a href="./opening.html" target="_blank" rel="noopener">大会映像と離台後3秒を見比べる ↗</a></p>

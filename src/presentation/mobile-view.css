@@ -82,9 +82,3 @@
     touch-action: manipulation;
   }
 }
-
-@media (max-height: 540px) and (orientation: landscape) {
-  .flight-lab .compass {
-    left: calc(var(--edge-left) + 78px);
-  }
-}

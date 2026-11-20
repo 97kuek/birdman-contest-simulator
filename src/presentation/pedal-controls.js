@@ -9,7 +9,6 @@ export function bindPedalControls(advanceToInputTime) {
   function display(button) {
     selected = button;
     for (const option of buttons) option.setAttribute('aria-pressed', String(option === selected));
-    byId('pedal-watts').textContent = button.dataset.watts + ' W';
   }
 
   function select(button) {
@@ -29,9 +28,9 @@ export function bindPedalControls(advanceToInputTime) {
   });
 
   return {
-    setActive(active) {
+    setActive(active, initialWatts) {
       panel.hidden = !active;
-      if (active) display(cruise);
+      if (active) display(buttons.find(button => Number(button.dataset.watts) === initialWatts) ?? cruise);
     },
     get watts() { return panel.hidden ? undefined : Number(selected.dataset.watts); },
   };

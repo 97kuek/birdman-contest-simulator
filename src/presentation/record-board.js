@@ -18,7 +18,7 @@ function scoredBoard(run, score) {
     title: official === 'allTime' ? '歴代最高記録超え！' :
       official === 'winner2026' ? '優勝記録超え！' : updated ? '自己ベスト更新！' : practice ? '練習飛行の距離' : 'ただ今の記録',
     value: score.metres,
-    detail: [practice && aircraft.name + '・累積水平距離', WEATHER[run.weather].label, personal[score.personal]].filter(Boolean).join(' ／ '),
+    detail: [practice && (run.samples.at(-1).courseTime != null ? '練習コース完走 ' + run.samples.at(-1).courseTime.toFixed(1) + ' 秒' : aircraft.name + '・累積水平距離'), WEATHER[run.weather].label, personal[score.personal]].filter(Boolean).join(' ／ '),
     award: official ? (official === 'allTime' ? '滑空機部門 歴代最高' : '2026年 滑空機部門優勝') +
       ' ' + (GLIDER_RECORDS[official] / 100).toFixed(2) + ' m を突破' : '',
     highlight: official || (updated ? 'personal' : ''),
@@ -28,8 +28,8 @@ function scoredBoard(run, score) {
 export function showRecordBoard(outcome) {
   const scored = outcome.kind === 'scored';
   const board = scored ? scoredBoard(outcome.run, outcome.score) : {
-    title: 'ただ今の記録', value: outcome.kind === 'structural-failure' ? '記録なし' : '失格',
-    detail: outcome.kind === 'structural-failure' ? ({ left: '左主翼', right: '右主翼', both: '両翼' }[outcome.side] + 'の桁が破断（推定）') : '飛行禁止区域侵入', award: '', highlight: '',
+    title: 'ただ今の記録', value: outcome.kind === 'disqualified' ? '失格' : '記録なし',
+    detail: outcome.kind === 'structural-failure' ? ({ left: '左主翼', right: '右主翼', both: '両翼' }[outcome.side] + 'の桁が破断（推定）') : outcome.kind === 'platform-contact' ? 'プラットフォームに接触' : '飛行禁止区域侵入', award: '', highlight: '',
   };
   $('record-board').dataset.outcome = outcome.kind;
   $('record-board').dataset.highlight = board.highlight;

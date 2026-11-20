@@ -7,8 +7,6 @@
   flex: none;
 }
 #sound-settings svg { width: 21px; height: 21px; }
-#sound-settings .mute, #sound-settings[data-muted=true] .waves { display: none; }
-#sound-settings[data-muted=true] .mute { display: inline; }
 #sound-options {
   position: fixed;
   inset: max(54px, calc(env(safe-area-inset-top) + 50px)) max(12px, env(safe-area-inset-right)) auto auto;
@@ -25,12 +23,5 @@
 #sound-options input { width: 18px; height: 18px; accent-color: #155e69; }
 #sound-options small { display: block; font-size: 11px; color: #49656b; }
 @media (max-width: 740px), (max-height: 480px) {
-  #sound-settings { width: 36px; min-height: 36px; }
-}
-
-#sound-settings .settings-label { display: none; }
-@media (any-pointer: coarse) and (max-width: 1000px) {
-  #sound-settings { width: auto; min-width: 44px; min-height: 44px; }
-  #sound-settings svg { display: none; }
-  #sound-settings .settings-label { display: inline; font-size: 12px; font-weight: 700; }
+  #sound-settings { width: 44px; min-height: 44px; }
 }
