@@ -207,3 +207,21 @@ test('翼端で接地すると接地側へ首を振り、水平の両輪接地�
   assert.equal(level.yaw, 0);
   assert.equal(level.maxFriction, 0);
 });
+
+test('発進中の車輪の浮き沈みで出力を切らず、中立舵のまま浮上を続ける', () => {
+  for (const [weather, seed, seconds] of [['day-normal', 0, 22], ['day-normal', 8, 22], ['day-hard', 1.5, 13], ['day-hard', 11.5, 12], ['night-hard', 2, 22]]) {
+    const trial = createRunwayTrial(hull, weather, seed, { preSpin: true });
+    let confirmed = false;
+    for (let tick = 1; tick <= seconds * 30; tick++) {
+      const { phase, sample } = trial.advance(tick / 30, 0, 0, 300);
+      assert.ok(['roll', 'flight'].includes(phase), weather + ' ' + seed + ' ' + phase);
+      assert.ok(sample.watts > 295);
+      assert.ok(sample.bottomHeight >= -1e-8);
+      assert.equal(sample.liftOffAt !== null, phase === 'flight');
+      if (phase === 'flight') confirmed = true;
+      if (confirmed) assert.equal(phase, 'flight');
+    }
+    assert.ok(confirmed);
+    assert.ok(trial.advance(seconds).sample.bottomHeight > .1);
+  }
+});

@@ -44,7 +44,7 @@ test('地上班は機体を押し、手放した後は翼端を追い、着地�
     const held = follower.getObjectByName('翼の保持索').visible;
     assert.equal(held, !crew.wingFollowersReleased);
     if (frame.phase === 'roll' && !frame.sample.starterAttached) assert.equal(held, true);
-    if (frame.phase === 'flight' && t < trial.duration + 1) {
+    if (frame.phase === 'flight' && t < frame.sample.liftOffAt + 1) {
       assert.equal(held, true);
       heldAfterLift = true;
     }

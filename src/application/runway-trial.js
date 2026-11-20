@@ -4,6 +4,7 @@ import { poweredGroundRoll, SPINUP_SECONDS } from '../domain/powered-launch.js';
 import { propTurnsPerCrank, reserveCapacityJ } from '../domain/ren-practice.js';
 import { GRAVITY, RAD_PER_RPM } from '../domain/units.js';
 import { isOnPavement, runwayLength as length, runwayHalfWidth as halfWidth } from '../domain/runway-support.js';
+import { createRunwayDeparture } from '../domain/runway-departure.js';
 import { createLandingRoll } from '../domain/runway-rollout.js';
 import { rampSample } from './flight-session.js';
 
@@ -52,11 +53,13 @@ export function createRunwayTrial(hull, weather = 'calm', gustOffset = 0, { preS
   let rolling = poweredGroundRoll(profile, track, weather, gustOffset);
   let state = { t: 0, speed: 0, travel: 0, omega: 0, angle: 0, reserve: reserveCapacityJ, watts: 0 };
   let phase = 'roll', reason, duration = null, flight, touchdown, landingRoll, crankAngle = 0, takeoffTravel;
+  const departure = createRunwayDeparture(profile, wheelStations);
   let starterReleasedAt = null, starterReleaseForward = null;
   function starterStatus() {
     const starterAttached = starterReleasedAt === null;
     return { starterAttached, starterReleasedAt, starterReleaseForward,
-      liftOffAt: duration, liftOffForward: duration === null ? null : startForward + takeoffTravel,
+      liftOffAt: departure.liftOff ? duration + departure.liftOff.seconds : null,
+      liftOffForward: departure.liftOff ? startForward + takeoffTravel + departure.liftOff.forwardTravel : null,
       starterForceN: starterAttached ? starterForce(state) : 0 };
   }
   function releaseStarters() {
@@ -136,7 +139,7 @@ export function createRunwayTrial(hull, weather = 'calm', gustOffset = 0, { preS
     duration = state.t;
     takeoffTravel = state.travel;
     const launch = { ...levelTrack(sample.right, sample.forward, 0), speed: state.speed, windTimeOffset: duration };
-    flight = createFlight(profile.design, hull, { weather, gustOffset, launch, releaseDrive: sample, runway: { exitFraction } });
+    flight = createFlight(profile.design, hull, { weather, gustOffset, launch, releaseDrive: sample, runway: { exitFraction, departure } });
     phase = 'flight';
   }
 
@@ -185,7 +188,8 @@ export function createRunwayTrial(hull, weather = 'calm', gustOffset = 0, { preS
         else if (flight.result) beginRollout();
       }
       while (phase === 'rollout' && state.t + stepSeconds <= elapsed + 1e-9) rolloutStep();
-      return { phase, sample, ...(phase === 'landed' && { onPavement: isOnPavement(sample.right, sample.forward) }), ...(reason && { reason }) };
+      const visiblePhase = phase === 'flight' && !departure.liftOff ? 'roll' : phase;
+      return { phase: visiblePhase, sample, ...(phase === 'landed' && { onPavement: isOnPavement(sample.right, sample.forward) }), ...(reason && { reason }) };
     },
   };
 }

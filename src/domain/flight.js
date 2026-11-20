@@ -78,7 +78,7 @@ export function createFlight(design, hull, {
     contestOpening: contestOpening && pilot && aircraftId === 'ryukai' });
   let state = releaseState(launch, release, pilot, profile, releaseAttitude);
   const climate = powered && riderClimate(weather, gustOffset);
-  let demand = powered?.power, watts = demand, courseLeg = 0, courseTime = null;
+  let demand = powered?.power, watts = (runway && releaseDrive?.watts) ?? demand, courseLeg = 0, courseTime = null;
   if (powered) Object.assign(state, { omega: (releaseDrive?.rpm ?? powered.rpm) * RAD_PER_RPM, propellerAngle: releaseDrive?.propellerAngle ?? 0, crankAngle: releaseDrive?.crankAngle ?? 0, reserve: releaseDrive?.reserve ?? reserveCapacityJ });
   const rampWing = rigidWing || powered ? null : rampWingMotion(launch, state, loadsAt, DT);
   if (rampWing) Object.assign(state, rampWing.release);
@@ -144,9 +144,13 @@ export function createFlight(design, hull, {
       next.crankAngle = state.crankAngle + (watts > 0 ? (next.propellerAngle - state.propellerAngle) / propTurnsPerCrank : 0);
     }
     step++;
-    const nextLoads = loadsAt(next, origin + step * DT);
+    let nextLoads = loadsAt(next, origin + step * DT);
     const nextShape = contactShape(next, nextLoads);
-    const nextClearance = next.height + nextShape.bottom;
+    let nextClearance = next.height + nextShape.bottom;
+    if (runway?.departure?.supportWheel(next, nextShape, nextClearance, watts, step * DT)) {
+      nextLoads = loadsAt(next, origin + step * DT);
+      nextClearance = next.height + nextShape.bottom;
+    }
     // A runway launch starts with wheels exactly on the surface and moving away.
     const touching = runway ? nextClearance < -1e-8 : nextClearance <= 0 || clearance <= 0;
     const surfaceFraction = touching ? (clearance <= 0 ? 0 : clearance / (clearance - nextClearance)) : 1;
