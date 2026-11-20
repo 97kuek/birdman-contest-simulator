@@ -4,7 +4,7 @@ import { GRAVITY, RAD_PER_RPM } from './units.js';
 // Design points, not telemetry. Sources and off-design assumptions are in docs/powered-cruise.md.
 export const CRUISE_AIRCRAFT = Object.freeze({
   ren: Object.freeze({ name: '聯', mass: 87.7, span: 32.2, area: 28.25, speed: 7.2,
-    power: 203, rpm: 144, thrust: 22, radius: 1.55 }),
+    power: 203, rpm: 144, thrust: 22, radius: 1.55, windmillDragArea: 0.32 }),
   skyron: Object.freeze({ name: 'Skyron', mass: 100.6, span: 34, area: 29.01, speed: 7.4,
     power: 216, rpm: 135, thrust: 24, radius: 1.5 }),
 });
@@ -50,15 +50,21 @@ export function propellerModel(plane) {
   const inducedAtTrim = (Math.sqrt(plane.speed ** 2 + 2 * plane.thrust / (DENSITY * diskArea)) - plane.speed) / 2;
   const trimDiskPower = plane.thrust * (plane.speed + inducedAtTrim);
   const trimOmega = plane.rpm * RAD_PER_RPM;
+  const advancePerRadian = plane.speed / trimOmega;
+  const windmillFactor = 0.5 * DENSITY * (plane.windmillDragArea ?? 0);
 
   return (omega, axialSpeed, watts) => {
     const spin = omega / trimOmega;
     // Effective crank-to-rotor model: shaft demand scales with rpm³; losses are lumped.
     const loadTorque = plane.power / trimOmega * spin ** 2;
     const driveTorque = watts / Math.max(omega, trimOmega / 2);
+    // When axial flow overruns the rotor, it both slows the plane and drives the shaft.
+    // Recovered shaft power is drag * advancePerRadian * omega, bounded by drag * axialSpeed.
+    const overrun = Math.max(0, axialSpeed - advancePerRadian * omega);
+    const windmillDrag = windmillFactor * overrun ** 2;
     return {
-      acceleration: (driveTorque - loadTorque) / EFFECTIVE_ROTOR_INERTIA,
-      thrust: propellerThrust(diskArea, Math.max(0, axialSpeed), trimDiskPower * spin ** 3),
+      acceleration: (driveTorque + windmillDrag * advancePerRadian - loadTorque) / EFFECTIVE_ROTOR_INERTIA,
+      thrust: propellerThrust(diskArea, Math.max(0, axialSpeed), trimDiskPower * spin ** 3) - windmillDrag,
     };
   };
 }

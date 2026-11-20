@@ -69,7 +69,8 @@ test('聯はペダル出力の変更と漕ぎ止めを記録し、回転の惰�
   assert.ok(f.current().rpm < boosted.rpm && f.current().rpm > 144);
   f.advanceTo(38, 0, 0, 0);
   const coast = f.current();
-  assert.ok(coast.verticalSpeed < 0 && coast.rpm > 0 && coast.rpm < 40);
+  assert.ok(coast.verticalSpeed < 0 && coast.rpm > 0 && coast.rpm < plane.rpm);
+  assert.ok(propellerModel(plane)(coast.rpm * RAD_PER_RPM, coast.speed, 0).thrust < 0);
   f.advanceTo(200, 0, 0, 0);
   const run = f.result;
   assert.ok(run.duration > 38 && run.duration < 200);
@@ -87,4 +88,40 @@ test('聯はペダル出力の変更と漕ぎ止めを記録し、回転の惰�
   assert.ok(settled.propellerAngle > contact.propellerAngle);
   assert.equal(settled.rpm, 0);
   assert.equal(settled.watts, 0);
+});
+
+test('聯の低回転プロペラは前進気流で回され、機体に抵抗を返す', () => {
+  const rotor = propellerModel(plane);
+  const stopped = rotor(0, plane.speed, 0);
+  assert.ok(stopped.thrust < 0);
+  assert.ok(stopped.acceleration > 0);
+  const still = rotor(0, 0, 0);
+  near(still.thrust, 0, 1e-9);
+  near(still.acceleration, 0, 1e-9);
+});
+
+test('聯の巡航から10秒間、旋回で高度を使い、漕ぎ増すとその損失を補える', () => {
+  for (const watts of [0, 203, 300]) {
+    const straight = create(), turn = create();
+    straight.advanceTo(90);
+    turn.advanceTo(90);
+    const initial = straight.current();
+    for (let t = 91; t <= 100; t++) {
+      straight.advanceTo(t, 0, 0, watts);
+      turn.advanceTo(t, 0, 1, watts);
+      const a = straight.current(), b = turn.current();
+      assert.equal(b.t, t);
+      assert.ok(b.height < a.height && b.track > a.track);
+      if (watts === 203) {
+        near(a.speed, plane.speed, 1e-6);
+        near(a.height, initial.height, 1e-6);
+      } else {
+        const direction = Math.sign(watts - plane.power);
+        for (const sample of [a, b]) {
+          assert.ok(direction * (sample.speed - initial.speed) > 0);
+          assert.ok(direction * (sample.height - initial.height) > 0);
+        }
+      }
+    }
+  }
 });

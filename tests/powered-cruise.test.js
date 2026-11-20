@@ -24,10 +24,11 @@ for (const [id, plane] of Object.entries(CRUISE_AIRCRAFT)) {
     const energy = ({ speed, height }) => plane.mass * (0.5 * speed ** 2 + GRAVITY * height);
     for (let i = 31; i <= 60; i++) {
       assert.ok(samples[i].rpm < samples[i - 1].rpm);
-      assert.ok(samples[i].thrust >= 0);
+      if (!plane.windmillDragArea) assert.ok(samples[i].thrust >= 0);
       assert.ok(energy(samples[i]) < energy(samples[i - 1]));
     }
     assert.ok(samples[60].height < 0);
+    if (plane.windmillDragArea) assert.ok(samples[60].thrust < 0);
     const powered = runCruiseTrial(id, plane.power * 1.25).at(-1);
     assert.ok(powered.height > 0 && powered.rpm > plane.rpm);
   });
