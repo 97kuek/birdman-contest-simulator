@@ -1,5 +1,5 @@
 import { liftCoefficient } from './aerodynamic-lift.js';
-import { GRAVITY } from './units.js';
+import { GRAVITY, RAD_PER_RPM } from './units.js';
 
 // Design points, not telemetry. Sources and off-design assumptions are in docs/powered-cruise.md.
 export const CRUISE_AIRCRAFT = Object.freeze({
@@ -13,7 +13,6 @@ const DENSITY = 1.225;
 const SPAN_EFFICIENCY = 0.85;
 const MAX_LIFT_COEFFICIENT = 1.45;
 const EFFECTIVE_ROTOR_INERTIA = 0.8; // kg m², reflected to the propeller shaft
-const RAD_PER_RPM = 2 * Math.PI / 60;
 const HZ = 120;
 
 // Ideal actuator disk in axial forward flow: P = 2ρA vi (V + vi)².
@@ -31,7 +30,7 @@ function propellerThrust(diskArea, speed, power) {
   return massFactor * induced * (speed + induced);
 }
 
-function cruiseForces(plane) {
+export function wingPolar(plane) {
   const weight = plane.mass * GRAVITY;
   const pressureArea = 0.5 * DENSITY * plane.speed ** 2 * plane.area;
   const trimLift = weight / pressureArea;
@@ -39,28 +38,45 @@ function cruiseForces(plane) {
   const inducedDragFactor = 1 / (Math.PI * SPAN_EFFICIENCY * aspectRatio);
   const parasiteDrag = plane.thrust / pressureArea - inducedDragFactor * trimLift ** 2;
   const liftSlope = 2 * Math.PI / (1 + 2 / (SPAN_EFFICIENCY * aspectRatio));
+  return (airspeed, alpha) => {
+    const cl = liftCoefficient(trimLift / liftSlope + alpha, liftSlope, MAX_LIFT_COEFFICIENT);
+    const qS = 0.5 * DENSITY * airspeed ** 2 * plane.area;
+    return { lift: qS * cl, drag: qS * (parasiteDrag + inducedDragFactor * cl ** 2) };
+  };
+}
+
+export function propellerModel(plane) {
   const diskArea = Math.PI * plane.radius ** 2;
   const inducedAtTrim = (Math.sqrt(plane.speed ** 2 + 2 * plane.thrust / (DENSITY * diskArea)) - plane.speed) / 2;
   const trimDiskPower = plane.thrust * (plane.speed + inducedAtTrim);
   const trimOmega = plane.rpm * RAD_PER_RPM;
 
-  return (state, watts) => {
-    const { forward, up, omega } = state;
-    const airspeed = Math.hypot(forward, up);
-    const pathAngle = Math.atan2(up, forward);
-    const cl = liftCoefficient(trimLift / liftSlope - pathAngle, liftSlope, MAX_LIFT_COEFFICIENT);
-    const qS = 0.5 * DENSITY * airspeed ** 2 * plane.area;
-    const lift = qS * cl, drag = qS * (parasiteDrag + inducedDragFactor * cl ** 2);
+  return (omega, axialSpeed, watts) => {
     const spin = omega / trimOmega;
     // Effective crank-to-rotor model: shaft demand scales with rpm³; losses are lumped.
     const loadTorque = plane.power / trimOmega * spin ** 2;
     const driveTorque = watts / Math.max(omega, trimOmega / 2);
-    const thrust = propellerThrust(diskArea, Math.max(0, forward), trimDiskPower * spin ** 3);
+    return {
+      acceleration: (driveTorque - loadTorque) / EFFECTIVE_ROTOR_INERTIA,
+      thrust: propellerThrust(diskArea, Math.max(0, axialSpeed), trimDiskPower * spin ** 3),
+    };
+  };
+}
+
+function cruiseForces(plane) {
+  const polar = wingPolar(plane);
+  const rotor = propellerModel(plane);
+  return (state, watts) => {
+    const { forward, up, omega } = state;
+    const airspeed = Math.hypot(forward, up);
+    const pathAngle = Math.atan2(up, forward);
+    const { lift, drag } = polar(airspeed, -pathAngle);
+    const { thrust, acceleration } = rotor(omega, forward, watts);
     const sin = Math.sin(pathAngle), cos = Math.cos(pathAngle);
     return { thrust, lift, drag, airspeed, rates: {
       forward: (thrust - lift * sin - drag * cos) / plane.mass,
-      up: (lift * cos - drag * sin - weight) / plane.mass,
-      omega: (driveTorque - loadTorque) / EFFECTIVE_ROTOR_INERTIA,
+      up: (lift * cos - drag * sin) / plane.mass - GRAVITY,
+      omega: acceleration,
       distance: forward, height: up,
     } };
   };

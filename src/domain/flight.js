@@ -1,4 +1,6 @@
 import { aircraftDynamics, releaseState } from './aircraft-dynamics.js';
+import { poweredFlightDynamics } from './powered-flight.js';
+import { RAD_PER_RPM } from './units.js';
 import { aircraftProfile } from './aircraft-profiles.js';
 import { advanceElevator, replayElevator } from './elevator.js';
 import { aircraftShoreContact } from './shoreline.js';
@@ -7,7 +9,7 @@ import { rampWingMotion } from './ramp-wing.js';
 import { launchProfile } from './launch.js';
 import { geometryAt, hullAtControls, landingMeasurement } from './water-contact.js';
 
-export { BASE_DESIGN, QX25_DESIGN, RUDDER_LIMIT_DEG } from './aircraft-profiles.js';
+export { BASE_DESIGN, QX25_DESIGN, REN_DESIGN, RUDDER_LIMIT_DEG } from './aircraft-profiles.js';
 export { referenceTiming } from './pilot-shift.js';
 export { CG_HEIGHT } from './aircraft-dynamics.js';
 export { LAUNCH, launchProfile, MAX_LAUNCH_HEADING_DEGREES, rampAt, RAMP_LENGTH } from './launch.js';
@@ -26,6 +28,10 @@ export const previousFactors = Object.freeze({ release: false, pilot: false, win
 
 function advanceState(state, rates, seconds, elevatorDeg) {
   return {
+    ...(state.omega === undefined ? {} : {
+      omega: Math.max(0, state.omega + seconds * rates.omega),
+      propellerAngle: state.propellerAngle + seconds * rates.propellerAngle,
+    }),
     pathLength: state.pathLength + seconds * rates.pathLength, height: state.height + seconds * rates.height,
     u: state.u + seconds * rates.u, w: state.w + seconds * rates.w,
     leftTip: state.leftTip + seconds * rates.leftTip, rightTip: state.rightTip + seconds * rates.rightTip,
@@ -60,10 +66,15 @@ export function createFlight(design, hull, {
   }
   design = { ...design };
   const launch = launchProfile(push, coast, direction, profile.deckClearance);
-  const { loadsAt, rates, location, prescribedCourse } = aircraftDynamics(design, launch, { aircraftId, opening: resolveOpening(opening), releaseExperiment, rigidWing, pilot, wind, weather, gustOffset, referenceControl, returnSeconds, onsetMetres,
+  const powered = profile.propulsion;
+  const { loadsAt, rates, location, prescribedCourse } = powered
+    ? poweredFlightDynamics(profile, launch, weather, gustOffset)
+    : aircraftDynamics(design, launch, { aircraftId, opening: resolveOpening(opening), releaseExperiment, rigidWing, pilot, wind, weather, gustOffset, referenceControl, returnSeconds, onsetMetres,
     contestOpening: contestOpening && pilot && aircraftId === 'ryukai' });
   let state = releaseState(launch, release, pilot, profile, releaseAttitude);
-  const rampWing = rigidWing ? null : rampWingMotion(launch, state, loadsAt, DT);
+  let watts = powered?.power;
+  if (powered) Object.assign(state, { omega: powered.rpm * RAD_PER_RPM, propellerAngle: 0 });
+  const rampWing = rigidWing || powered ? null : rampWingMotion(launch, state, loadsAt, DT);
   if (rampWing) Object.assign(state, rampWing.release);
   if (releaseExperiment?.freeLateral) {
     const { bank = 0, rollRate = 0, lateralVelocity = 0, yawRate = 0 } = releaseExperiment;
@@ -78,7 +89,7 @@ export function createFlight(design, hull, {
   let failure = null;
   const shoreContact = aircraftShoreContact(hull, firstLand);
   let step = 0, result = null, disqualified = null;
-  const inputs = [], turnInputs = [];
+  const inputs = [], turnInputs = [], powerInputs = [];
 
   function wingPose(state, loads) {
     if (!loads.structure) return undefined;
@@ -100,7 +111,8 @@ export function createFlight(design, hull, {
     const track = prescribedCourse ? heading : heading + Math.atan2(v, u);
     return {
       t, pathLength, right, forward, gustOffset, heading, track, bank,
-      distance: Math.hypot(right - launch.edgeRight, forward - launch.edgeForward), height, bottomHeight: state.height + shape.bottom,
+      ...(powered && { watts, rpm: state.omega / RAD_PER_RPM, propellerAngle: state.propellerAngle }),
+      distance: powered ? pathLength : Math.hypot(right - launch.edgeRight, forward - launch.edgeForward), height, bottomHeight: state.height + shape.bottom,
       pitch, speed, groundSpeed: Math.hypot(u, v), verticalSpeed: w, pitchRate: q, bodyShift, shift: cgShiftFromBody(bodyShift, profile), headwind, updraft,
       wing: wingPose(state, loads), rudderDeg, elevatorDeg, sideslipDeg: beta, rollRate: p, yawRate: r,
     };
@@ -113,9 +125,9 @@ export function createFlight(design, hull, {
     // Fixed-step midpoint integration keeps the trajectory independent of display cadence.
     const t = step * DT;
     const halfAngle = advanceElevator(state.elevatorDeg, pilotInput, DT / 2, profile);
-    const midpoint = advanceState(state, rates(state, t, pilotInput, turnInput, loads), DT / 2, halfAngle);
+    const midpoint = advanceState(state, rates(state, t, pilotInput, turnInput, loads, watts), DT / 2, halfAngle);
     const endAngle = advanceElevator(state.elevatorDeg, pilotInput, DT, profile);
-    const next = advanceState(state, rates(midpoint, t + DT / 2, pilotInput, turnInput), DT, endAngle);
+    const next = advanceState(state, rates(midpoint, t + DT / 2, pilotInput, turnInput, undefined, watts), DT, endAngle);
     step++;
     const nextLoads = loadsAt(next, step * DT);
     const nextShape = contactShape(next, nextLoads);
@@ -174,7 +186,8 @@ export function createFlight(design, hull, {
         return;
       }
       samples.push(last);
-      result = { ...positions, aircraftId, weather, gustOffset, launch, design, samples, inputs, turnInputs, duration: last.t, distance };
+      result = { ...positions, aircraftId, weather, gustOffset, launch, design, samples, inputs, turnInputs, duration: last.t, distance: powered ? last.pathLength : distance,
+        ...(powered && { powerInputs }) };
       return;
     }
     state = next;
@@ -189,10 +202,14 @@ export function createFlight(design, hull, {
     get disqualified() { return disqualified; },
     get time() { return failure?.t ?? disqualified?.t ?? result?.duration ?? step * DT; },
     current() { return failure ?? disqualified ?? result?.samples.at(-1) ?? sample(step * DT, state, loads); },
-    advanceTo(seconds, pilotInput = 0, turnInput = 0) {
-      const target = Math.floor(Math.min(seconds, FLIGHT_LIMIT_SECONDS) * STEPS_PER_SECOND + STEP_ROUNDING_TOLERANCE);
+    advanceTo(seconds, pilotInput = 0, turnInput = 0, pedalWatts = powered?.power) {
+      if (powered && (!Number.isFinite(seconds) || !Number.isFinite(pedalWatts) || pedalWatts < 0 || pedalWatts > powered.power * 2)) {
+        throw new RangeError('Powered flight requires finite time and zero to twice design power.');
+      }
+      const target = Math.floor((powered ? seconds : Math.min(seconds, FLIGHT_LIMIT_SECONDS)) * STEPS_PER_SECOND + STEP_ROUNDING_TOLERANCE);
       if (target <= step || result || disqualified || failure) return;
       const start = step * DT;
+      watts = pedalWatts;
       turnInput = Math.max(-1, Math.min(1, turnInput));
       pilotInput = Math.max(-1, Math.min(1, pilotInput));
       const turnDegrees = turnInput * profile.rudderLimitDeg;
@@ -204,7 +221,12 @@ export function createFlight(design, hull, {
       const end = failure?.t ?? disqualified?.t ?? result?.duration ?? step * DT;
       recordCommand(inputs, pilotInput, start, end);
       recordCommand(turnInputs, turnInput, start, end);
-      if (!result && !disqualified && !failure && step >= FLIGHT_LIMIT_SECONDS * STEPS_PER_SECOND) {
+      if (powered) {
+        const last = powerInputs.at(-1);
+        if (last?.watts === watts) last.end = end;
+        else powerInputs.push({ start, end, watts });
+      }
+      if (!powered && !result && !disqualified && !failure && step >= FLIGHT_LIMIT_SECONDS * STEPS_PER_SECOND) {
         throw new Error('Flight did not reach the water within the simulation window.');
       }
     },
@@ -224,13 +246,17 @@ export function poseAt(run, t) {
   const time = Math.max(0, t);
   const held = inputs => inputs?.find(input => input.start <= time && time < input.end)?.direction ?? 0;
   const rudderDeg = held(run.turnInputs) * profile.rudderLimitDeg;
-  if (t <= 0) return { ...run.samples[0], rudderDeg };
+  // Power is a held command. Rotor phase stays unwrapped between samples.
+  const power = profile.propulsion && (run.powerInputs?.find(input => input.start <= time && time < input.end)?.watts
+    ?? profile.propulsion.power);
+  if (t <= 0) return { ...run.samples[0], rudderDeg, ...(profile.propulsion && { watts: power }) };
   const i = Math.min(Math.floor(t * SAMPLES_PER_SECOND), run.samples.length - 2);
   const a = run.samples[i], b = run.samples[i + 1], fraction = (t - a.t) / (b.t - a.t);
   const elevatorDeg = replayElevator(a, t, run.inputs ?? [], profile);
   const lerp = key => a[key] + fraction * (b[key] - a[key]);
   return {
     t, gustOffset: run.gustOffset ?? 0, right: lerp('right'), forward: lerp('forward'), heading: lerp('heading'), bank: lerp('bank'), track: lerp('track'),
+    ...(profile.propulsion && { watts: power, rpm: lerp('rpm'), propellerAngle: lerp('propellerAngle') }),
     wing: interpolateWing(a.wing, b.wing, fraction),
     rudderDeg, elevatorDeg, sideslipDeg: lerp('sideslipDeg'), rollRate: lerp('rollRate'), pitchRate: lerp('pitchRate'), yawRate: lerp('yawRate'),
     distance: lerp('distance'), pathLength: lerp('pathLength'), height: lerp('height'), bottomHeight: lerp('bottomHeight'),

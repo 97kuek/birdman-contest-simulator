@@ -14,8 +14,8 @@ function movingMassFraction(profile) {
 }
 
 // Metres along the aircraft, aft positive. Replay samples store the combined CG.
-export const cgShiftFromBody = (bodyShift, profile = ryukai) => bodyShift * movingMassFraction(profile);
-export const bodyShiftFromCg = (cgShift, profile = ryukai) => cgShift / movingMassFraction(profile);
+export const cgShiftFromBody = (bodyShift, profile = ryukai) => profile.fixedPilot ? 0 : bodyShift * movingMassFraction(profile);
+export const bodyShiftFromCg = (cgShift, profile = ryukai) => profile.fixedPilot ? 0 : cgShift / movingMassFraction(profile);
 export const limitBodyShift = metres => Math.max(-PILOT_SHIFT.maxBodyTravel, Math.min(PILOT_SHIFT.maxBodyTravel, metres));
 
 // Inferred input for the 2025 reference flight. Times are seconds from release.

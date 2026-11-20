@@ -1,6 +1,6 @@
 import { projectHalfWing, wingFoldDirection } from './wing-contact.js';
 import { windAt } from './weather.js';
-import { RADIANS_PER_DEGREE } from './units.js';
+import { RADIANS_PER_DEGREE, RAD_PER_RPM } from './units.js';
 
 // A convex hull of (aft, up) vertices is sufficient for straight, wings-level flight.
 export function hull2D(points) {
@@ -131,6 +131,12 @@ export function waterRunoutPose(contact, seconds, hull, wind) {
   const headwind = wind.headwind * Math.cos(contact.heading) + crosswind * Math.sin(contact.heading);
   return {
     ...contact, ...(wing && { wing }), forward, right, windTime,
+    // Assume the pilot unloads the pedals at contact. The rotor coasts down
+    // with the visual runout, integrating its remaining turns for replay.
+    ...(contact.rpm === undefined ? {} : {
+      watts: 0, rpm: contact.rpm * remaining ** 3,
+      propellerAngle: contact.propellerAngle + contact.rpm * RAD_PER_RPM * WATER_RUNOUT_SECONDS / 4 * (1 - remaining ** 4),
+    }),
     groundSpeed, speed: Math.hypot(along * groundSpeed + wind.headwind, across * groundSpeed + crosswind, updraft),
     headwind, updraft, pitchRate: pitchDerivative * Math.cos(bank),
     rollRate: -2 * contact.bank * remaining / WATER_RUNOUT_SECONDS, yawRate: -pitchDerivative * Math.sin(bank),

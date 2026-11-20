@@ -13,8 +13,16 @@ import {
 import { aircraftShoreContact } from '../domain/shoreline.js';
 import { aircraftProfile } from '../domain/aircraft-profiles.js';
 import { bodyShiftFromCg } from '../domain/pilot-shift.js';
-import { RADIANS_PER_DEGREE } from '../domain/units.js';
+import { RADIANS_PER_DEGREE, RAD_PER_RPM } from '../domain/units.js';
 import { WEATHER, windAt } from '../domain/weather.js';
+
+// Seated pilot spins up during the crew's run. The flight clock sets phase zero at release.
+function rampPropeller(plane, elapsed, duration) {
+  const progress = Math.max(0, Math.min(1, elapsed / duration));
+  const rpm = plane.rpm * progress;
+  const angle = 0.5 * plane.rpm * RAD_PER_RPM * duration * (progress ** 2 - 1);
+  return { rpm, propellerAngle: angle, watts: plane.power * progress };
+}
 
 function rampSample(launch, weather, elapsed, gustOffset, profile) {
   const ramp = rampAt(launch, elapsed);
@@ -26,6 +34,7 @@ function rampSample(launch, weather, elapsed, gustOffset, profile) {
   const height = bottomHeight + CG_HEIGHT;
   const wind = windAt(weather, { right, forward, height, gustOffset }, windTime);
   return {
+    ...(profile.propulsion && rampPropeller(profile.propulsion, elapsed, launch.duration)),
     wing: { leftTip: 0, rightTip: 0, leftTwist: 0, rightTwist: 0 },
     bottomHeight, height,
     right, forward, windTime, gustOffset,
@@ -96,10 +105,12 @@ export class FlightSession {
   }
 
   get reference() {
+    if (this.#profile.propulsion) return null; // A powered trim flight need not land.
     return (this.#baseline ??= simulateFlight(this.#profile.design, this.hull, this.options));
   }
 
   referenceFor(run) {
+    if (aircraftProfile(run.aircraftId).propulsion) return null;
     if (!this.#runReferences.has(run)) {
       const { push, coast, direction } = run.launch;
       const reference = simulateFlight(run.design, this.hull, { aircraftId: run.aircraftId, weather: run.weather, gustOffset: run.gustOffset ?? 0,
@@ -137,15 +148,15 @@ export class FlightSession {
       number,
       samples: flight.samples,
       // Time starts with the GO cue. The solver and recorded inputs start at release.
-      advance(elapsed, weightShift, rudder) {
+      advance(elapsed, pitchInput, rudder, watts) {
         const airTime = elapsed - launch.duration;
         if (airTime < 0) {
           return {
             phase: elapsed < launch.handoffTime ? 'push' : 'handoff',
-            sample: { ...rampSample(launch, weather, elapsed, options.gustOffset, profile), wing: flight.rampWingAt(elapsed) },
+            sample: { ...rampSample(launch, weather, elapsed, options.gustOffset, profile), wing: flight.rampWingAt?.(elapsed) },
           };
         }
-        flight.advanceTo(airTime, weightShift, rudder);
+        flight.advanceTo(airTime, pitchInput, rudder, watts);
         if (flight.failure) return { phase: 'structural-failure', sample: flight.failure };
         if (flight.disqualified) return { phase: 'disqualified', sample: flight.disqualified };
         if (flight.result) {

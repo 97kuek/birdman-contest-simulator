@@ -1,7 +1,9 @@
+import { CRUISE_AIRCRAFT } from './powered-cruise.js';
 import { LAUNCH } from './launch.js';
 
 export const BASE_DESIGN = Object.freeze({ span: 25.1, incidence: 3.2 });
 export const QX25_DESIGN = Object.freeze({ aircraftId: 'qx25', span: 26.2, incidence: 4.2 });
+export const REN_DESIGN = Object.freeze({ aircraftId: 'ren', span: CRUISE_AIRCRAFT.ren.span, incidence: 0 });
 export const RUDDER_LIMIT_DEG = 10;
 
 // TORICA Tatsumi.csv and FlightModel/isoSim1.cs, revision 3bddd010.
@@ -46,8 +48,20 @@ const qx25 = Object.freeze({
   deckClearance: 0.635, releasePathDeg: null, releaseCgShift: 0, releasePitchRateDeg: 14,
 });
 
+// The design point fixes the polar. Tail limits come from the three-view. Stick rates, attitude response and
+// release conditions are estimates for a seated pilot operating the tail.
+const ren = Object.freeze({
+  design: REN_DESIGN, propulsion: CRUISE_AIRCRAFT.ren, fixedPilot: true,
+  mass: CRUISE_AIRCRAFT.ren.mass, area: CRUISE_AIRCRAFT.ren.area, span: REN_DESIGN.span,
+  cruiseSpeed: CRUISE_AIRCRAFT.ren.speed, deckClearance: 0.40,
+  releasePathDeg: null, releaseCgShift: 0, releasePitchRateDeg: 0,
+  rudderLimitDeg: 12.5, elevatorLimitDeg: 10,
+  elevatorControl: Object.freeze({ pressDegPerSecond: 18, returnDegPerSecond: 36 }),
+});
+
 export function aircraftProfile(aircraftId = 'ryukai') {
   if (aircraftId === 'ryukai') return ryukai;
   if (aircraftId === 'qx25') return qx25;
+  if (aircraftId === 'ren') return ren;
   throw new RangeError('Unknown aircraft: ' + aircraftId);
 }

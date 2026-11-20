@@ -39,7 +39,11 @@ export class FlightRecords {
       }
     }
     const personal = prior === null ? 'first' : cm > prior ? 'improved' : cm === prior ? 'tied' : 'below';
-    const official = cm > GLIDER_RECORDS.allTime ? 'allTime' : cm > GLIDER_RECORDS.winner2026 ? 'winner2026' : null;
+    let official = null;
+    if (run.aircraftId !== 'ren') {
+      if (cm > GLIDER_RECORDS.allTime) official = 'allTime';
+      else if (cm > GLIDER_RECORDS.winner2026) official = 'winner2026';
+    }
     const score = { metres, personal, best, official };
     this.#scores.set(run, score);
     return score;

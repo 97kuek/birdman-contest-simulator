@@ -59,8 +59,8 @@ function instrumentAudio(silent, airspeed, range) {
 export function readFlightInstruments(sample, aircraftId = 'ryukai') {
   const onDeck = sample.t === undefined;
   const silent = onDeck || sample.bottomHeight <= 1e-8;
-  if (aircraftId === 'qx25') {
-    // No published QX-25 sensor calibration. Show simulated airspeed and lake clearance.
+  if (aircraftId === 'qx25' || aircraftId === 'ren') {
+    // No measured sensor calibration for these aircraft. Show simulated airspeed and lake clearance.
     const altitude = Math.max(0, sample.bottomHeight);
     return { airspeed: sample.speed, altitude, source: 'simulation', ...instrumentAudio(silent, sample.speed, altitude) };
   }

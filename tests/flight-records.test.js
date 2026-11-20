@@ -106,3 +106,11 @@ test('再挑戦と履歴表示で、記録板の強調と公式記録の説明�
   assert.equal(elements['record-official'].hidden, false);
   assert.equal(elements['result-value'].textContent, '651.20');
 });
+
+test('人力プロペラ機の練習距離は機体別の自己ベストにのみ記録する', () => {
+  const records = new FlightRecords(savedRecords);
+  const score = records.record({ ...run(1200), aircraftId: 'ren' });
+  assert.equal(score.official, null);
+  assert.equal(score.best, 120000);
+  assert.equal(records.record(run(350)).personal, 'first');
+});

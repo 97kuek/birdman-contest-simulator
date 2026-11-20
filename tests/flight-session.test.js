@@ -37,3 +37,23 @@ test('同条件の基準機を共有し、接水後の演出を試技の記録�
   session.select('head', 0);
   assert.equal(session.latest.run, run);
 });
+
+test('聯の助走から離台に駆動位相を引き継ぎ、同じ発進から漕ぎ方で飛行が分かれる', () => {
+  const session = new FlightSession(hull, 'calm', () => 0, undefined, 'ren');
+  assert.equal(session.reference, null);
+  assert.equal(session.onDeck.rpm, 0);
+  const release = session.launch.duration;
+  const run = watts => {
+    const attempt = session.startAttempt();
+    const justBefore = attempt.advance(release - 0.001, 0, 0).sample;
+    const atRelease = attempt.advance(release, 0, 0).sample;
+    assert.ok(Math.abs(atRelease.propellerAngle - justBefore.propellerAngle) < 0.02);
+    assert.equal(atRelease.watts, 203);
+    return attempt.advance(release + 5, 0, 0, watts).sample;
+  };
+  const coast = run(0), pedal = run(300);
+  assert.equal(coast.watts, 0);
+  assert.equal(pedal.watts, 300);
+  assert.ok(pedal.rpm > coast.rpm);
+  assert.ok(pedal.pathLength > coast.pathLength);
+});
