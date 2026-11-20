@@ -9,7 +9,7 @@ export function inBounds(x, z, bounds) {
 
 // Sample the same two triangles that terrainMesh emits, including their diagonal.
 // This is also the height that finer data has to meet at the edge of a hole.
-function surfaceHeight(surface, x, z) {
+export function surfaceHeight(surface, x, z) {
   const { layer, heights } = surface;
   const { bounds, width, height } = layer;
   const u = THREE.MathUtils.clamp((x-bounds[0])/(bounds[2]-bounds[0])*(width-1),0,width-1);
@@ -21,7 +21,8 @@ function surfaceHeight(surface, x, z) {
 }
 
 export function terrainMesh(layer, elevations, texture, parent) {
-  const { width, height, bounds, hole } = layer;
+  const { width, height, bounds } = layer;
+  const holes = layer.holes ?? (layer.hole ? [layer.hole] : []);
   const [west, north, east, south] = bounds;
   const dx = (east - west) / (width - 1);
   const dz = (south - north) / (height - 1);
@@ -61,7 +62,7 @@ export function terrainMesh(layer, elevations, texture, parent) {
         tint[k * 3 + 2] = (0.183 - high * 0.026) * brightness;
       }
 
-      if (i === width - 1 || j === height - 1 || inBounds(x + dx / 2, z + dz / 2, hole)) continue;
+      if (i === width - 1 || j === height - 1 || holes.some(hole => inBounds(x + dx / 2, z + dz / 2, hole))) continue;
       const a = k, b = k + 1, c = k + width, d = c + 1;
       for (const [p, q, r] of [[a, c, b], [b, c, d]]) {
         const vp = elevations[p], vq = elevations[q], vr = elevations[r];

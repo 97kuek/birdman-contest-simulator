@@ -2,12 +2,14 @@ import { BASE_DESIGN, CG_HEIGHT } from '../domain/flight.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-const attachedModes = new Set(['pilot', 'boat']);
+const attachedModes = new Set(['pilot', 'boat', 'car']);
 const blendSeconds = 1.6;
+// In the Fujikawa cockpit film the far runway sits about 40% down the frame.
+const runwayGazeDepression = THREE.MathUtils.degToRad(8);
 const overviewScale = aspect => Math.max(1, 1.38 / aspect);
 
 export function createFlightCamera({
-  canvas, facility, modelBase, aircraft, boat, trackBounds, visibleTrackFraction, reduceMotion, onViewChange,
+  canvas, facility, modelBase, aircraft, boat, waterContact = () => false, trackBounds, preparing = () => true, visibleTrackFraction, reduceMotion, onViewChange,
 }) {
   const camera = new THREE.PerspectiveCamera(38, 1, 0.18, 56000);
   const controls = new OrbitControls(camera, canvas);
@@ -20,7 +22,7 @@ export function createFlightCamera({
   controls.panSpeed = 0.7;
 
   let mode = 'aircraft', hasView = false, transition = null;
-  let framingSpan = BASE_DESIGN.span, pilotEye, displayMount;
+  let framingSpan = BASE_DESIGN.span, runwayOverview = false, pilotEye, displayMount;
   function setAircraft(model) {
     pilotEye = model.getObjectByName('pilot-eye');
     displayMount = model.getObjectByName('cockpit-display-mount');
@@ -31,13 +33,14 @@ export function createFlightCamera({
   setAircraft(aircraft);
   const eye = new THREE.Vector3(), focus = new THREE.Vector3(), panelBottom = new THREE.Vector3();
   const orientation = new THREE.Quaternion();
+  const horizonUp = new THREE.Vector3(0, 1, 0);
   const world = (x, y, z) => facility.localToWorld(new THREE.Vector3(x, y, z));
   let attachedZoom = 1, baseLens = 76;
-  let viewportAspect = camera.aspect;
+  let viewportAspect = camera.aspect, carCameraMount;
 
   function setAttachedLens(degrees) {
     baseLens = degrees;
-    const fov = THREE.MathUtils.clamp(baseLens * attachedZoom, 25, 96);
+    const fov = THREE.MathUtils.clamp(baseLens * attachedZoom, (mode === 'car' || (mode === 'boat' && waterContact())) ? 5 : 25, 96);
     if (transition) transition.destinationFov = fov;
     else if (camera.fov !== fov) {
       camera.fov = fov;
@@ -53,6 +56,7 @@ export function createFlightCamera({
     const shortLandscape = canvas.clientHeight > 0 && canvas.clientHeight <= 500 && camera.aspect > 1;
     const narrowPortrait = camera.aspect <= 1 && canvas.clientWidth <= 600;
     setAttachedLens(shortLandscape ? 48 : 76);
+    let gazeDepression = runwayOverview ? runwayGazeDepression : 0;
     if (shortLandscape || narrowPortrait) {
       // Keep the lower edge of the physical LCD above touch controls and credits.
       // Only the gaze follows the panel. Its size still changes with eye distance.
@@ -60,12 +64,32 @@ export function createFlightCamera({
       const angleToPanel = Math.atan2(eye.y - panelBottom.y, eye.z - panelBottom.z);
       const screenLimit = shortLandscape ? .72 : .42;
       const halfFov = THREE.MathUtils.degToRad(camera.fov / 2);
-      const tilt = Math.max(0, angleToPanel - Math.atan(screenLimit * Math.tan(halfFov)));
-      focus.y -= (eye.z - focus.z) * Math.tan(tilt);
+      gazeDepression = Math.max(gazeDepression, angleToPanel - Math.atan(screenLimit * Math.tan(halfFov)));
     }
+    focus.y -= (eye.z - focus.z) * Math.tan(gazeDepression);
     camera.position.copy(modelBase.localToWorld(eye));
     controls.target.copy(modelBase.localToWorld(focus));
     camera.up.set(0, 1, 0).applyQuaternion(modelBase.getWorldQuaternion(orientation));
+    if (waterContact()) {
+      // A flooding cockpit can submerge or roll through vertical. Keep the
+      // observer above the ripples, looking over the nose until the boat takes over.
+      camera.position.y = Math.max(.65, camera.position.y);
+      const ahead = controls.target.sub(camera.position);
+      const horizontal = Math.hypot(ahead.x, ahead.z);
+      ahead.y = THREE.MathUtils.clamp(ahead.y, -.08 * horizontal, .20 * horizontal);
+      controls.target.add(camera.position);
+      camera.up.copy(horizonUp);
+    }
+    camera.lookAt(controls.target);
+    camera.updateMatrixWorld();
+  }
+
+  function followCar() {
+    carCameraMount.getWorldPosition(camera.position);
+    // Keep the horizon and dashboard steady. The lens turns with the vehicle.
+    controls.target.copy(carCameraMount.localToWorld(focus.set(0, -.55, -24)));
+    setAttachedLens(THREE.MathUtils.lerp(75, 54, THREE.MathUtils.smoothstep(camera.aspect, .55, 1.5)));
+    camera.up.copy(horizonUp);
     camera.lookAt(controls.target);
     camera.updateMatrixWorld();
   }
@@ -73,6 +97,21 @@ export function createFlightCamera({
   function followBoat() {
     boat.eye.getWorldPosition(camera.position);
     controls.target.copy(modelBase.localToWorld(focus.set(0, CG_HEIGHT, 0)));
+    if (waterContact()) {
+      // Frame the waterline and exposed wing from above the rail/helmsman,
+      // even when the flooded fuselage's CG is well below the surface.
+      camera.position.y = Math.max(camera.position.y, 1.85);
+      controls.target.y = Math.max(.45, controls.target.y);
+      const distance = camera.position.distanceTo(controls.target);
+      const subjectWidth = framingSpan / .60;
+      const fit = 2 * Math.atan(subjectWidth / (2 * Math.max(1, distance) * camera.aspect));
+      setAttachedLens(THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(fit), 5, 88));
+      controls.target.y -= distance * Math.tan(THREE.MathUtils.degToRad(baseLens / 2)) * .18;
+      camera.up.copy(horizonUp);
+      camera.lookAt(controls.target);
+      camera.updateMatrixWorld();
+      return;
+    }
     // Leave the glider above centre, with some of the gunwale and water in the foreground.
     const range = Math.hypot(camera.position.x - controls.target.x, camera.position.z - controls.target.z);
     // Hold the horizon through small height changes while keeping a climbing glider in shot.
@@ -103,6 +142,10 @@ export function createFlightCamera({
     const progress = THREE.MathUtils.smoothstep((performance.now() - start) / 1000, 0, blendSeconds);
     camera.position.lerp(from.eye, 1 - progress);
     camera.position.y += Math.sin(Math.PI * progress) * 1.4;
+    if (mode === 'boat' && waterContact()) {
+      camera.position.y = Math.max(.65, camera.position.y);
+      camera.lookAt(controls.target);
+    }
     camera.quaternion.slerp(from.rotation, 1 - progress);
     controls.target.lerp(from.focus, 1 - progress);
     camera.fov = THREE.MathUtils.lerp(from.fov, destinationFov, progress);
@@ -114,6 +157,7 @@ export function createFlightCamera({
   function update() {
     if (mode === 'pilot') followPilot();
     else if (mode === 'boat') followBoat();
+    else if (mode === 'car') followCar();
     else if (transition?.orbit) {
       // Rebuild the destination each frame before blending the outgoing boat view.
       camera.position.copy(transition.orbit.eye);
@@ -133,8 +177,9 @@ export function createFlightCamera({
     const attached = attachedModes.has(mode);
     controls.enabled = !attached;
     attachedZoom = 1;
-    camera.fov = mode === 'pilot' ? 76 : 38;
-    camera.near = mode === 'pilot' ? 0.02 : 0.18;
+    const wideRunway = runwayOverview && mode === 'aircraft' && viewportAspect < .85 && preparing();
+    camera.fov = mode === 'pilot' ? 76 : wideRunway ? 86 : 38;
+    camera.near = mode === 'pilot' || mode === 'car' ? 0.02 : 0.18;
     camera.updateProjectionMatrix();
     if (!attached) {
       camera.up.set(0, 1, 0);
@@ -146,6 +191,16 @@ export function createFlightCamera({
         const distance = Math.max(35, extent * 0.59 / (horizontal * Math.max(0.32, visibleTrackFraction())));
         controls.target.copy(world(right, 4, -forward));
         camera.position.copy(world(bounds.right + distance, 4 + distance * 0.3, -forward + distance * 0.08));
+      } else if (runwayOverview) {
+        // Look north over the departure crew, with the complete span and the
+        // support car in the part of the viewport left open by flight setup.
+        // During starts and catches, look across the boom so both handlers show.
+        const room = Math.max(.35, visibleTrackFraction());
+        const distance = 43 / (2 * Math.tan(camera.fov * Math.PI / 360) * camera.aspect * room);
+        const { x, y, z } = modelBase.position;
+        const side = preparing() ? -.26 : -.32, rise = preparing() ? .11 : .19;
+        controls.target.copy(world(x, y + .9, z));
+        camera.position.copy(world(x + side * distance, y + .9 + rise * distance, z + distance));
       } else {
         const ratio = overviewScale(viewportAspect) * framingSpan / BASE_DESIGN.span;
         const { x, y, z } = modelBase.position;
@@ -168,7 +223,7 @@ export function createFlightCamera({
   function zoom(factor) {
     transition = null;
     if (attachedModes.has(mode)) {
-      camera.fov = THREE.MathUtils.clamp(camera.fov * factor, 25, 96);
+      camera.fov = THREE.MathUtils.clamp(camera.fov * factor, (mode === 'car' || (mode === 'boat' && waterContact())) ? 5 : 25, 96);
       attachedZoom = camera.fov / baseLens;
       camera.updateProjectionMatrix();
       return;
@@ -185,6 +240,7 @@ export function createFlightCamera({
     camera.aspect = aspect;
     camera.updateProjectionMatrix();
     if (!hasView || mode !== 'aircraft' || factor === 1) return;
+    if (runwayOverview) return setView('aircraft');
     // Fit the wing span after rotation while retaining the user's orbit and zoom.
     if (transition?.orbit) {
       const { eye, focus } = transition.orbit;
@@ -201,14 +257,15 @@ export function createFlightCamera({
     }
   }
 
-  const north = new THREE.Vector3(), center = new THREE.Vector3();
-  function compassBearing() {
-    center.copy(controls.target).project(camera);
-    north.copy(controls.target);
-    north.z -= 1;
-    north.project(camera);
-    return Math.atan2((north.x - center.x) * camera.aspect, north.y - center.y);
+  function setSite(site) {
+    facility = site.facility;
+    modelBase = site.modelBase;
+    camera.far = site.far ?? 56000;
+    runwayOverview = Boolean(site.runwayOverview);
+    carCameraMount = site.supportCar?.getObjectByName('chase-car-camera');
+    setAircraft(site.aircraft);
+    setView('aircraft');
   }
 
-  return { camera, setAircraft, view: () => mode, setView, setAspect, update, zoom, startLandingCamera, moveCamera, compassBearing };
+  return { camera, setSite, setAircraft, view: () => mode, setView, setAspect, update, zoom, startLandingCamera, moveCamera };
 }
