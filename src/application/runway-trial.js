@@ -3,7 +3,7 @@ import { createFlight, STEPS_PER_SECOND } from '../domain/flight.js';
 import { poweredGroundRoll, SPINUP_SECONDS } from '../domain/powered-launch.js';
 import { propTurnsPerCrank, reserveCapacityJ } from '../domain/ren-practice.js';
 import { GRAVITY, RAD_PER_RPM } from '../domain/units.js';
-import { isOnPavement, runwayLength as length, runwayHalfWidth as halfWidth } from '../domain/runway-support.js';
+import { isOnPavement, runwayLength as length, runwayHalfWidth as halfWidth, runwayVerge as verge } from '../domain/runway-support.js';
 import { createRunwayDeparture } from '../domain/runway-departure.js';
 import { createLandingRoll } from '../domain/runway-rollout.js';
 import { rampSample } from './flight-session.js';
@@ -11,8 +11,6 @@ import { rampSample } from './flight-session.js';
 const profile = aircraftProfile('ren');
 const stepSeconds = 1 / STEPS_PER_SECOND;
 const startForward = 38;
-// Playable grass verge beyond the surveyed pavement, in metres.
-const verge = 8;
 // Nose and rear wheel stations, measured aft of the CG on the 聯 model.
 const wheelStations = [-1.04, profile.releaseWheelAft];
 // Combined push from the starters. The force and hand-off limits are

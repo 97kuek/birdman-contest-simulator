@@ -1,5 +1,6 @@
 export const runwayLength = 850;
 export const runwayHalfWidth = 15;
+export const runwayVerge = 8;
 export function isOnPavement(right, forward) {
   return Math.abs(right) <= runwayHalfWidth && forward >= 0 && forward <= runwayLength;
 }
@@ -21,8 +22,11 @@ export const rearCatchPoints = Object.freeze({
 });
 
 export function predictedCatcherStation(sample) {
-  const stoppingPoint = sample.forward + sample.groundSpeed ** 2 / .58;
-  return catcherStations.reduce((a, b) => Math.abs(a - stoppingPoint) < Math.abs(b - stoppingPoint) ? a : b);
+  // Select the crew nearest a short running intercept, while the plane
+  // is still rolling fast enough for their braking force to matter.
+  const interceptSeconds = 5;
+  const meetingPoint = sample.forward + sample.groundSpeed * Math.cos(sample.track) * interceptSeconds;
+  return catcherStations.reduce((a, b) => Math.abs(a - meetingPoint) < Math.abs(b - meetingPoint) ? a : b);
 }
 
 // Estimate the room needed for the pilot to react, descend with the propeller

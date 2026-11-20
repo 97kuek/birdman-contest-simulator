@@ -57,11 +57,12 @@ test('地上班は機体を押し、手放した後は翼端を追い、着地�
       assert.ok(Math.abs(pusher.position.x) > 15);
       assert.equal(follower.getObjectByName('翼の保持索').visible, false);
     }
-    assert.ok(Math.abs(car.position.x) < .001 && frame.sample.forward + car.position.z >= 35.29);
+    assert.ok(Math.abs(car.position.x) < .001 && frame.sample.forward + car.position.z >= (frame.phase === 'landed' ? 19.99 : 35.29));
   }
   assert.ok(heldAfterLift);
   assert.equal(frame.phase, 'landed');
   show(frame.sample, 'landed', 135);
+  assert.ok(frame.sample.forward + car.position.z < 21);
   const holding = crew.group.children.filter(person => person.name.includes('キャッチャー') && person.visible && person.getObjectByName('翼の保持索')?.visible);
   assert.equal(holding.length, 2);
   const receivers = crew.group.children.filter(person => person.isGroup && person.visible && person.name.includes('キャッチャー'));

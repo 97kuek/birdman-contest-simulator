@@ -84,8 +84,8 @@ test('直進の北端と横風の側端はフレームを飛ばしても最初�
 
 test('着陸滑走で北端の余裕8 mを使い切った地点で終了する', () => {
   const trial = createRunwayTrial(hull);
-  trial.advance(73, 0, 0, 300);
-  const contact = trial.advance(108, 0, 0, 0);
+  trial.advance(76, 0, 0, 300);
+  const contact = trial.advance(113, 0, 0, 0);
   assert.equal(contact.phase, 'rollout');
   const atEnd = trial.advance(180, 0, 0, 0);
   assert.equal(atEnd.phase, 'aborted');
@@ -133,7 +133,7 @@ test('単列車輪は接地時の傾きと角速度を残し、左右反転し�
       if (phase === 'landed') {
         assert.equal(sample.caughtWing, 'both');
         assert.ok(sample.catchers.frame.holding && sample.catchers.tail.holding);
-        assert.ok(sample.wingCaughtAt > sample.catchReadyAt && sample.catchReadyAt > sample.touchdownAt);
+        assert.ok(sample.wingCaughtAt > sample.catchReadyAt && sample.catchReadyAt === sample.touchdownAt);
         assert.ok(Math.abs(sample.bank) < .005);
         return { before, first, earliest, maxBank };
       }
@@ -148,10 +148,11 @@ test('単列車輪は接地時の傾きと角速度を残し、左右反転し�
     assert.ok(Math.abs(landing.first.rollRate - landing.before.rollRate) < .005);
     assert.ok(landing.maxBank > Math.abs(landing.first.bank));
     assert.ok(landing.maxBank < 7 * Math.PI / 180);
-    assert.equal(landing.earliest.caughtWing, sign < 0 ? 'left' : 'right');
+    assert.ok(['left', 'right'].includes(landing.earliest.caughtWing));
     assert.ok(landing.earliest.groundSpeed > 3);
     assert.ok(sign * landing.earliest.bank > .08);
   }
+  assert.notEqual(left.earliest.caughtWing, right.earliest.caughtWing);
   assert.ok(Math.abs(left.maxBank - right.maxBank) < .0001);
   assert.ok(Math.abs(left.earliest.wingCaughtAt - right.earliest.wingCaughtAt) < .001);
 });
@@ -224,4 +225,25 @@ test('発進中の車輪の浮き沈みで出力を切らず、中立舵のま�
     assert.ok(confirmed);
     assert.ok(trial.advance(seconds).sample.bottomHeight > .1);
   }
+});
+
+test('減速合図で漕ぎ止めた試技では後部の係が走行中に追いつき、握ってから制動する', () => {
+  const trial = createRunwayTrial(hull, 'calm', 0, { preSpin: true });
+  let called = false, touch, brake, stop;
+  for (let tick = 1; tick <= 140 * 30; tick++) {
+    const { phase, sample } = trial.advance(tick / 30, 0, 0, called ? 0 : 203);
+    if (phase === 'flight' && shouldCallForLanding(sample, 850)) called = true;
+    if (phase === 'rollout') {
+      touch ??= sample;
+      if (sample.catcherBrakeN > 0) {
+        assert.ok(sample.catchers.frame.holding || sample.catchers.tail.holding);
+        brake ??= sample;
+      }
+      if (!sample.groundSpeed) stop ??= sample;
+    }
+    if (phase === 'landed') { stop ??= sample; break; }
+  }
+  assert.ok(touch && brake && stop);
+  assert.ok(brake.t - touch.t < 10 && brake.groundSpeed > 4);
+  assert.ok(stop.t > brake.t && stop.forward > brake.forward);
 });

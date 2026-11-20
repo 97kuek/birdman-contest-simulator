@@ -214,10 +214,12 @@ export function createRunwayCrew() {
     }
   }
 
-  function followCar(sample, dt) {
+  function followCar(sample, phase, dt) {
+    if (dt <= 0) return;
     // Stay behind the tail on the aircraft's track. Keep the rear team and
     // the waiting catchers clear even if the aircraft stops just after launch.
-    const gap = initialForward - 2.7;
+    const collecting = phase === 'landed' && sample.catchers?.tail.holding && sample.catchers?.frame.holding;
+    const gap = collecting ? 20 : initialForward - 2.7;
     const desiredX = clamp(sample.right, -12.5, 12.5);
     let desiredForward = sample.forward - gap;
     for (const member of members) {
@@ -225,7 +227,12 @@ export function createRunwayCrew() {
       if (Math.abs(here.x - desiredX) < 2.4 && -here.z > -car.group.position.z)
         desiredForward = Math.min(desiredForward, -here.z - 4.5);
     }
-    const step = Math.min(Math.max(0, desiredForward + car.group.position.z), 11 * dt);
+    const room = Math.max(0, desiredForward + car.group.position.z);
+    // Match the aircraft on the runway. After the crew secure the stationary
+    // plane the driver can approach at walking speed, still behind the tail.
+    const targetSpeed = collecting ? Math.min(1.6, room / 1.2) : Math.min(11, sample.groundSpeed + room / 2);
+    const nextSpeed = carSpeed + clamp(targetSpeed - carSpeed, -2.4 * dt, 1.8 * dt);
+    const step = Math.min(room, (carSpeed + nextSpeed) * .5 * dt);
     // Steer towards a point ahead on the runway. Turning the aircraft's
     // rudder must not swivel a camera mounted in a separate vehicle.
     if (step > 0) {
@@ -251,7 +258,7 @@ export function createRunwayCrew() {
     depart(sample, elapsed, dt, modelBase);
     if (phase === 'flight') approach(sample, dt, modelBase);
     if (phase === 'landed' || phase === 'rollout') receive(sample, phase, dt, modelBase);
-    followCar(sample, dt);
+    followCar(sample, phase, dt);
   }
   function answer(wing, seconds) {
     const responding = wing === 'left' ? -1 : wing === 'right' ? 1 : 0;
