@@ -53,6 +53,8 @@ const qx25 = Object.freeze({
 const ren = Object.freeze({
   design: REN_DESIGN, propulsion: CRUISE_AIRCRAFT.ren, fixedPilot: true,
   mass: CRUISE_AIRCRAFT.ren.mass, area: CRUISE_AIRCRAFT.ren.area, span: REN_DESIGN.span,
+  // Estimate: 45% of the 33.2 kg empty mass uniformly spread along the span.
+  rollInertia: 0.45 * 33.2 * REN_DESIGN.span ** 2 / 12,
   cruiseSpeed: CRUISE_AIRCRAFT.ren.speed, deckClearance: 0.40,
   releasePathDeg: null, releaseCgShift: 0, releasePitchRateDeg: 0,
   rudderLimitDeg: 12.5, elevatorLimitDeg: 10,

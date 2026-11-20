@@ -26,11 +26,12 @@ const STEP_ROUNDING_TOLERANCE = 1e-9;
 // Switches used by the calibration experiments to isolate early-flight assumptions.
 export const previousFactors = Object.freeze({ release: false, pilot: false, wind: false });
 
-function advanceState(state, rates, seconds, elevatorDeg) {
+export function advanceState(state, rates, seconds, elevatorDeg) {
   return {
     ...(state.omega === undefined ? {} : {
       omega: Math.max(0, state.omega + seconds * rates.omega),
       propellerAngle: state.propellerAngle + seconds * rates.propellerAngle,
+      gustRollRate: state.gustRollRate + seconds * rates.gustRollRate,
     }),
     pathLength: state.pathLength + seconds * rates.pathLength, height: state.height + seconds * rates.height,
     u: state.u + seconds * rates.u, w: state.w + seconds * rates.w,
@@ -73,7 +74,7 @@ export function createFlight(design, hull, {
     contestOpening: contestOpening && pilot && aircraftId === 'ryukai' });
   let state = releaseState(launch, release, pilot, profile, releaseAttitude);
   let watts = powered?.power;
-  if (powered) Object.assign(state, { omega: powered.rpm * RAD_PER_RPM, propellerAngle: 0 });
+  if (powered) Object.assign(state, { omega: powered.rpm * RAD_PER_RPM, propellerAngle: 0, gustRollRate: 0 });
   const rampWing = rigidWing || powered ? null : rampWingMotion(launch, state, loadsAt, DT);
   if (rampWing) Object.assign(state, rampWing.release);
   if (releaseExperiment?.freeLateral) {

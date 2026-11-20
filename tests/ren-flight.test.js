@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { aircraftProfile } from '../src/domain/aircraft-profiles.js';
 import { readFlightInstruments } from '../src/domain/flight-instruments.js';
 import { createFlight, poseAt, REN_DESIGN, waterRunoutPose, WATER_RUNOUT_SECONDS } from '../src/domain/flight.js';
+import { poweredFlightDynamics } from '../src/domain/powered-flight.js';
 import { propellerModel, wingPolar } from '../src/domain/powered-cruise.js';
 import { GRAVITY, RAD_PER_RPM } from '../src/domain/units.js';
 
@@ -26,10 +27,10 @@ test('聯の巡航設計点でプロペラ軸、揚力、抵抗が釣り合い�
   const last = flight.current();
   assert.equal(flight.time, 240);
   assert.equal(flight.result, null);
-  near(last.speed, 7.2, 1e-5);
-  near(last.height, first.height, 1e-4);
-  near(last.propellerAngle - first.propellerAngle, 180 * 144 * RAD_PER_RPM, 1e-7);
-  near(last.pathLength - first.pathLength, 180 * 7.2, .001);
+  // At finite height 203 W exceeds the new level-flight requirement.
+  assert.ok(last.height > first.height && last.speed > plane.speed);
+  near(last.propellerAngle - first.propellerAngle, 180 * 144 * RAD_PER_RPM, .1);
+  assert.ok(last.pathLength - first.pathLength > 180 * plane.speed);
   assert.equal(readFlightInstruments(last, 'ren').altitude, last.bottomHeight);
 });
 
@@ -113,8 +114,8 @@ test('聯の巡航から10秒間、旋回で高度を使い、漕ぎ増すとそ
       assert.equal(b.t, t);
       assert.ok(b.height < a.height && b.track > a.track);
       if (watts === 203) {
-        near(a.speed, plane.speed, 1e-6);
-        near(a.height, initial.height, 1e-6);
+        assert.ok(a.speed > plane.speed);
+        assert.ok(a.height > initial.height);
       } else {
         const direction = Math.sign(watts - plane.power);
         for (const sample of [a, b]) {
@@ -124,4 +125,46 @@ test('聯の巡航から10秒間、旋回で高度を使い、漕ぎ増すとそ
       }
     }
   }
+});
+
+test('聯はピッチ・バンク・方位を反映した左右の位置で風と対水面高度を読む', () => {
+  const profile = aircraftProfile('ren');
+  const launch = { edgeRight: 7, edgeForward: 13 };
+  const calls = [];
+  const level = { right: 0, forward: 0, height: 8, pathLength: 0, pitch: 0, bank: 0,
+    u: plane.speed, v: 0, w: 0, heading: 0, gustRollRate: 0 };
+  const model = poweredFlightDynamics(profile, launch, 'calm', 17, (_weather, pos) => {
+    calls.push(pos);
+    return { headwind: 0, updraft: 0 };
+  });
+  const flat = model.loadsAt(level, 0);
+  near(flat.lift, plane.mass * GRAVITY, .001);
+  near(flat.rollMoment, 0, 1e-8);
+  near(flat.left.height, flat.right.height, 1e-9);
+  assert.ok(calls[1].right < launch.edgeRight && calls[2].right > launch.edgeRight);
+  calls.length = 0;
+  const banked = model.loadsAt({ ...level, pitch: .1, bank: .15, heading: Math.PI / 2 }, 0);
+  near(calls[1].height, banked.left.height, 1e-9);
+  near(calls[2].height, banked.right.height, 1e-9);
+  assert.ok(calls.every(p => p.gustOffset === 17));
+  assert.ok(calls[1].forward > calls[2].forward);
+  assert.ok(banked.left.height > banked.right.height && banked.left.drag > banked.right.drag);
+  const high = model.loadsAt({ ...level, height: 1e8 }, 0);
+  near(high.drag, plane.thrust, 1e-6);
+  assert.ok(flat.drag < high.drag);
+});
+
+test('聯は上昇風を受けた翼が上がり、上昇中の翼の追加荷重は小さくなる', () => {
+  const state = { right: 0, forward: 0, height: 8, pathLength: 0, pitch: 0, bank: 0,
+    u: plane.speed, v: 0, w: 0, heading: 0, gustRollRate: 0 };
+  function loads(side, rate = 0) {
+    const field = (_mode, pos) => ({ headwind: 0, updraft: side === 0 || side * pos.right > 2 ? .5 : 0 });
+    const model = poweredFlightDynamics(aircraftProfile('ren'), { edgeRight: 0, edgeForward: 0 }, 'calm', 0, field);
+    return model.loadsAt({ ...state, gustRollRate: rate }, 0);
+  }
+  const left = loads(-1), right = loads(1);
+  assert.ok(left.left.lift > left.right.lift && left.rollMoment > 0);
+  near(left.rollMoment, -right.rollMoment, 1e-9);
+  near(loads(0).rollMoment, 0, 1e-9);
+  assert.ok(loads(-1, .02).rollMoment < left.rollMoment);
 });

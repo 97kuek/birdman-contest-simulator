@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { addRigidAssembly, rod, surfacePatch } from './mesh-parts.js';
 
+import { renSparHeight } from '../../domain/ren-wing.js';
+
 const lerp = THREE.MathUtils.lerp;
 const radians = Math.PI / 180;
 
@@ -17,10 +19,9 @@ function wingPoint(x, t, upper, side) {
   const profile = .13 * 5 * (.2969 * Math.sqrt(t) - .126 * t - .3516 * t * t + .2843 * t ** 3 - .1036 * t ** 4);
   const depth = (.045 * 4 * t * (1 - t) + (upper ? profile : -profile)) * chord;
   const aft = (t - .38) * chord;
-  const rise = x * Math.tan(4 * radians) + 1.43 * (x / 16.1) ** 2.5;
   return [
     side * x,
-    1.535 + rise + depth * Math.cos(angle) - aft * Math.sin(angle),
+    renSparHeight(x) + depth * Math.cos(angle) - aft * Math.sin(angle),
     aft * Math.cos(angle) + depth * Math.sin(angle),
   ];
 }

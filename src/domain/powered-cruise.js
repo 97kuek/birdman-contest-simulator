@@ -41,7 +41,8 @@ export function wingPolar(plane) {
   return (airspeed, alpha) => {
     const cl = liftCoefficient(trimLift / liftSlope + alpha, liftSlope, MAX_LIFT_COEFFICIENT);
     const qS = 0.5 * DENSITY * airspeed ** 2 * plane.area;
-    return { lift: qS * cl, drag: qS * (parasiteDrag + inducedDragFactor * cl ** 2) };
+    const inducedDrag = qS * inducedDragFactor * cl ** 2;
+    return { lift: qS * cl, drag: qS * parasiteDrag + inducedDrag, inducedDrag, parasiteDrag: qS * parasiteDrag };
   };
 }
 
