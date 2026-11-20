@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Reflector } from 'three/addons/objects/Reflector.js';
 import { windGrid, WIND_GRID_SIZE } from '../domain/lake-breeze.js';
+import { createSkyDome } from './sky.js';
 import { atmosphere, waterField } from './lake-shaders.js';
 
 export const lakeReflectionLayer = 1;
@@ -29,15 +30,7 @@ function lakeGeometry(sectors) {
 
 export function addLakeAndSky(scene, compact = false) {
   const env={nightScene:{value:0},windAngle:{value:0},clockTime:{value:0},meanWind:{value:1.2},gust:{value:0},sunlight:{value:sunDirection}};
-  const sky=new THREE.Mesh(new THREE.SphereGeometry(48000,48,24),new THREE.ShaderMaterial({
-    side:THREE.BackSide,depthWrite:false,depthTest:false,uniforms:env,
-    vertexShader:`varying vec3 ray; void main(){ray=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
-    fragmentShader:`varying vec3 ray;
-    ${atmosphere}
-    void main(){gl_FragColor=vec4(skyColor(normalize(ray)),1.);
-      #include <colorspace_fragment>
-    }`
-  }));
+  const sky = createSkyDome(env);
   sky.layers.enable(lakeReflectionLayer);
   sky.renderOrder=-10;
   scene.add(sky);

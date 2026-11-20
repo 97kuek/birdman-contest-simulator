@@ -40,6 +40,7 @@ export function launchProfile(push = 1, coast = 0, direction = 0, deckClearance 
 }
 
 export function rampAt(profile, time) {
+  if (profile.rampSampleAt) return profile.rampSampleAt(time);
   const t = Math.min(profile.duration, Math.max(0, time));
   if (t <= profile.handoffTime) {
     return { travel: 0.5 * profile.acceleration * t * t, speed: profile.acceleration * t };

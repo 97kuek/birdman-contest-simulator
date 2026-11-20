@@ -20,6 +20,7 @@ const spanwiseBend = {
 
 export function wingBendShape(aircraftId, fraction) {
   const x = Math.max(0, Math.min(1, fraction));
+  if (aircraftId === 'ren') return x ** 2.5;
   const bend = spanwiseBend[aircraftId];
   // Cubic Hermite interpolation through the drawing, with a clamped root.
   const index = Math.min(Math.floor(x * 4), 3), t = x * 4 - index;

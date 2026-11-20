@@ -3,8 +3,10 @@ import { addRigidAssembly, ellipsoid, mesh, rod, shaded, surfacePatch } from './
 import { addRenWing, addRenTail } from './ren-surfaces.js';
 import { addRenCockpit } from './ren-cockpit.js';
 
-const radius = 1.55;
-const shaftY = 1.375;
+import { propTurnsPerCrank } from '../../domain/ren-practice.js';
+import { CRUISE_AIRCRAFT } from '../../domain/powered-cruise.js';
+
+const { radius, shaftHeight: shaftY } = CRUISE_AIRCRAFT.ren;
 const hubZ = -2.18;
 
 function addPropeller(root, m) {
@@ -65,14 +67,15 @@ export function createRenAircraft() {
     shorts: shaded('#242e3b'), skin: shaded('#c99c7d'), helmet: shaded('#e7e9e0'),
   };
   for (const [name, material] of Object.entries(m)) material.name = name;
-  addRenWing(root, m);
+  const poseWing = addRenWing(root, m);
   const { elevator, rudder } = addRenTail(root, m);
   const poseLegs = addRenCockpit(root, m);
   const rotor = addPropeller(root, m);
   root.userData.poseMechanisms = sample => {
+    poseWing(sample);
     const angle = sample.propellerAngle ?? 0;
     rotor.rotation.z = angle;
-    poseLegs(angle);
+    poseLegs(sample.crankAngle ?? angle / propTurnsPerCrank);
     elevator.rotation.x = -THREE.MathUtils.degToRad(sample.elevatorDeg ?? 0);
     rudder.rotation.y = THREE.MathUtils.degToRad(sample.rudderDeg ?? 0);
   };

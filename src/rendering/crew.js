@@ -1,33 +1,13 @@
 import * as THREE from 'three';
 import { LAUNCH, RAMP_LENGTH, rampAt } from '../domain/launch.js';
+import { aircraftProfile } from '../domain/aircraft-profiles.js';
+import { renSparHeight } from '../domain/ren-wing.js';
 import { createCrewMembers } from './crew-model.js';
 import { deckHeight, deckRun, deckSlope } from './launch-deck.js';
 
-// Scratch vectors keep bone animation allocation-free.
-const axis = new THREE.Vector3(), bend = new THREE.Vector3(), joint = new THREE.Vector3();
+import { placeBone, poseRunner, reach } from './crew-motion.js';
+
 const segment = new THREE.Vector3(), down = new THREE.Vector3(0, -1, 0);
-
-function placeBone(mesh, start, end, length) {
-  segment.subVectors(end, start);
-  mesh.position.copy(start);
-  mesh.scale.y = segment.length() / length;
-  mesh.quaternion.setFromUnitVectors(down, segment.normalize());
-}
-
-function reach(limb, from, to, pole) {
-  axis.subVectors(to, from);
-  const distance = Math.max(0.001, axis.length());
-  axis.divideScalar(distance);
-  const upper = limb.length, lower = limb.lowerLength;
-  const span = THREE.MathUtils.clamp(distance, Math.abs(upper - lower) + 0.001, upper + lower - 0.0001);
-  const along = (upper * upper - lower * lower + span * span) / (2 * span);
-  bend.copy(pole).addScaledVector(axis, -pole.dot(axis)).normalize();
-  joint.copy(from).addScaledVector(axis, along)
-    .addScaledVector(bend, Math.sqrt(Math.max(0, upper * upper - along * along)));
-  placeBone(limb.upper, from, joint, upper);
-  placeBone(limb.lower, joint, to, lower);
-  limb.end.position.copy(to);
-}
 
 // Stop the runner before the curved lip, including the shoe and stride clearance.
 function runnerReleaseTime(launch, startX, startZ) {
@@ -46,7 +26,7 @@ function runnerReleaseTime(launch, startX, startZ) {
     }
     stop = low;
   }
-  return Math.sqrt(2 * stop / launch.acceleration);
+  return launch.timeAtTravel?.(stop) ?? Math.sqrt(2 * stop / launch.acceleration);
 }
 
 export function createLaunchCrew(team = 'ryukai') {
@@ -57,12 +37,25 @@ export function createLaunchCrew(team = 'ryukai') {
   let previousTime = -1, previousLaunch = null;
   const start = new THREE.Vector3(), target = new THREE.Vector3(), pole = new THREE.Vector3();
 
-  // Use lateral body grips for the two enclosed aircraft and wing grips for Torica.
-  const fuselageCrew = team === 'qx25' || team === 'ren';
+  const releaseWheelAft = aircraftProfile(team).releaseWheelAft ?? 0;
+  const fuselageCrew = team === 'qx25';
+  if (team === 'ren') {
+    const geometry = new THREE.CylinderGeometry(.010, .010, 1, 6);
+    geometry.translate(0, -.5, 0);
+    const material = new THREE.MeshStandardMaterial({ color: '#b4402b', roughness: .9 });
+    for (const member of members.filter(m => m.side)) {
+      member.line = Array.from({ length: 3 }, () => {
+        const part = new THREE.Mesh(geometry, material);
+        part.name = 'wing-handling-line';
+        member.root.add(part);
+        return part;
+      });
+    }
+  }
   const stations = {
     ryukai: [{ lateral: 3.12, aft: 1.15, y: .535, z: .565 }, { lateral: .29, aft: 1.79, y: .34, z: 1.32 }],
     qx25: [{ lateral: .58, aft: 1.31, y: .38, z: .93, grip: .23 }, { lateral: .18, aft: 1.96, y: .43, z: 1.43 }],
-    ren: [{ lateral: .61, aft: .91, y: .63, z: .48, grip: .285 }, { lateral: .21, aft: 1.85, y: .62, z: 1.31 }],
+    ren: [{ lateral: 3.85, aft: .38, y: .84, z: .03 }, { lateral: .21, aft: 1.85, y: .62, z: 1.31 }],
   };
   const [sideStation, rearStation] = stations[team];
 
@@ -77,7 +70,7 @@ export function createLaunchCrew(team = 'ryukai') {
       const station = member.side ? sideStation : rearStation;
       const inboard = member.side && !fuselageCrew ? 1.65 * Math.abs(sin) : 0;
       const lateral = (member.side || 1) * (station.lateral - inboard);
-      const aft = station.aft;
+      const aft = station.aft - releaseWheelAft;
       const startX = cos * lateral - sin * aft;
       const startZ = deckRun + sin * lateral + cos * aft;
       const releasedAt = runnerReleaseTime(launch, startX, startZ);
@@ -97,22 +90,8 @@ export function createLaunchCrew(team = 'ryukai') {
         onFootfall?.(member.side, footfall);
       member.footfall = footfall;
       const run = Math.min(1, travel * 2) * (1 - relax);
-      const crouch = 0.12 * relax, bounce = 0.034 * Math.cos(2 * gait) * run;
-      member.torso.position.set(0, 0.785 + bounce - crouch, 0);
-      member.torso.rotation.x = -0.34 - 0.18 * run + 0.16 * relax;
-      member.torso.rotation.z = 0.025 * Math.sin(gait) * run;
-      member.torso.updateMatrix();
-      member.head.rotation.x = -member.torso.rotation.x * 0.65;
-
-      for (const leg of member.legs) {
-        const { sign } = leg;
-        const cycle = Math.sin(gait) * sign, swing = Math.cos(gait) * sign;
-        start.set(sign * 0.094, member.torso.position.y, 0);
-        target.set(sign * 0.105, 0.078 + Math.max(0, swing) * 0.21 * run, sign * 0.125 * (1 - run) + cycle * 0.39 * run);
-        target.y += (target.z * cos + target.x * sin) * deckSlope;
-        reach(leg, start, target, pole.set(sign * 0.035, 0, -1));
-        leg.end.rotation.x = -0.24 * run * Math.max(0, swing);
-      }
+      poseRunner(member, gait, run, .12 * relax, -.34 - .18 * run + .16 * relax,
+        cos * deckSlope, sin * deckSlope);
 
       const aircraftY = launch.edgeHeight + (RAMP_LENGTH - travel) * launch.dropStep + (launch.deckClearance ?? LAUNCH.deckClearance);
       const gripY = aircraftY + station.y - member.root.position.y;
@@ -122,9 +101,25 @@ export function createLaunchCrew(team = 'ryukai') {
         const gripX = member.side
           ? (fuselageCrew ? member.side * station.grip - lateral + sign * .065 : sign * .174)
           : sign * .08 - lateral;
-        target.set(gripX, gripY, station.z - aft + 0.056).divideScalar(member.scale);
+        target.set(gripX, gripY, station.z - station.aft + 0.056).divideScalar(member.scale);
+        if (member.line) {
+          target.x = .04 * sign;
+          target.y += sign * .075;
+        }
         target.lerp(segment.set(sign * 0.22, 0.61, -0.16), relax);
         reach(arm, start, target, pole.set(sign * 0.58, -0.24, 0.82));
+      }
+      if (member.line) {
+        // A removable handling line stays with the runner after release.
+        const upper = member.arms[1].end.position, lower = member.arms[0].end.position;
+        start.set((member.side * sideStation.lateral - lateral) / member.scale,
+          (aircraftY + renSparHeight(sideStation.lateral) - member.root.position.y) / member.scale, -station.aft / member.scale);
+        start.lerp(target.copy(upper).addScaledVector(down, .54), relax);
+        placeBone(member.line[0], start, upper, 1);
+        placeBone(member.line[1], upper, lower, 1);
+        target.copy(lower).addScaledVector(down, .25);
+        target.z += .06 * run;
+        placeBone(member.line[2], lower, target, 1);
       }
     }
   }

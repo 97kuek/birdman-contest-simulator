@@ -28,9 +28,21 @@ export function addRenCockpit(root, m) {
       if (glass) panel.castShadow = false;
     }
   }
+  // Narrow windscreen hoops and longitudinal battens follow the existing
+  // fairing loft. Their profile is most apparent from the pilot's eye.
+  const batten = new THREE.MeshStandardMaterial({ color: '#af9369', roughness: .86 });
+  for (const side of [-1, 1]) {
+    const rail = [];
+    for (let i = windshieldStart; i <= windshieldEnd; i++) {
+      const t = (i - windshieldStart) / (windshieldEnd - windshieldStart);
+      const angle = Math.PI / 2 + side * (.40 + .18 * t);
+      rail.push(shellPoint(i, angle));
+    }
+    bentTube(fixed, rail, .0035, batten, 'windscreen-batten');
+  }
   for (const i of [windshieldStart, 6, windshieldEnd]) {
     const arc = Array.from({ length: 17 }, (_, k) => shellPoint(i, seam + (Math.PI - 2 * seam) * k / 16));
-    bentTube(fixed, arc, .007, m.trim, 'glazing-frame');
+    bentTube(fixed, arc, .006, batten, 'glazing-frame');
   }
   for (const angle of [seam, Math.PI - seam]) {
     bentTube(fixed, pod.slice(windshieldStart, windshieldEnd + 1).map((_, k) => shellPoint(k + windshieldStart, angle)),
@@ -62,11 +74,24 @@ export function addRenCockpit(root, m) {
 
   const display = new THREE.Group();
   display.name = 'cockpit-display-mount';
-  display.position.set(.048, .59, -.46);
-  display.rotation.x = -.25;
+  display.position.set(.075, .62, -.40);
+  display.rotation.x = -.24;
   root.add(display);
-  box(display, [0, 0, -.012], [.165, .088, .021], m.rubber, 'instrument-case');
-  rod(fixed, [.16, .26, -.25], [.07, .56, -.46], .007, m.carbon, 'instrument-arm');
+  box(display, [0, 0, -.009], [.104, .182, .018], m.rubber, 'navigation-case');
+  for (const side of [-1, 1]) {
+    box(display, [side * .049, 0, .002], [.005, .074, .007], m.carbon, 'side-clamp');
+  }
+  box(display, [0, .079, .001], [.022, .003, .002], m.trim, 'earpiece');
+  rod(fixed, [.16, .26, -.25], [.075, .59, -.41], .009, m.carbon, 'instrument-arm');
+  bentTube(fixed, [[.075,.53,-.40],[.082,.48,-.41],[.14,.33,-.28],[.15,.25,-.25]], .003, m.rubber, 'instrument-cable');
+  box(fixed, [.146,.243,-.25], [.066,.025,.089], m.carbon, 'avionics-enclosure');
+  // Shaft bearings, fairing seams and the pilot's seat harness.
+  rod(fixed, [-.113,.095,-.92], [.113,.095,-.92], .023, m.metal, 'bottom-bracket');
+  for (const side of [-1, 1]) {
+    const edge = pod.slice(1,-1).map(([z,w,bottom,top]) => [side*w,(bottom+top)/2,z]);
+    bentTube(fixed, edge, .003, m.trim, 'shell-seam');
+    bentTube(fixed, [[side*.14,.51,.17],[side*.14,.47,.075],[side*.08,.24,-.03]], .012, m.rubber, 'harness');
+  }
 
   const pilot = new THREE.Group();
   pilot.name = 'pilot';
@@ -118,6 +143,11 @@ export function addRenCockpit(root, m) {
     }
     legs.push({ side, parts });
   }
+  // The shorts end above the knee. Keep the kneecap attached to the IK
+  // joint so its silhouette crosses the rim as each pedal comes up.
+  for (const leg of legs) {
+    leg.kneecap = ellipsoid(pilot, [0, 0, 0], [.070, .074, .069], m.skin, 'cycling-knee');
+  }
   const up = new THREE.Vector3(0, 1, 0), hip = new THREE.Vector3(), foot = new THREE.Vector3();
   const knee = new THREE.Vector3(), delta = new THREE.Vector3();
   function limb(part, a, b) {
@@ -126,10 +156,11 @@ export function addRenCockpit(root, m) {
     part.scale.y = delta.length() / 2 + .018;
     part.quaternion.setFromUnitVectors(up, delta.normalize());
   }
-  return propAngle => {
-    const angle = propAngle / 2;
+  return crankAngle => {
+    // +Z is aft. A rising crank at its top must travel toward the nose (-Z).
+    const angle = -crankAngle;
     crank.rotation.x = angle;
-    for (const { side, parts: [thigh, calf, shoe] } of legs) {
+    for (const { side, parts: [thigh, calf, shoe], kneecap } of legs) {
       hip.set(.112 * side, .169, -.08);
       foot.set(.112 * side, crank.position.y + side * .166 * Math.cos(angle),
         crank.position.z + side * .166 * Math.sin(angle) + .065);
@@ -141,6 +172,7 @@ export function addRenCockpit(root, m) {
       knee.copy(hip).lerp(foot, .5);
       knee.y -= bend * dz / span;
       knee.z += bend * dy / span;
+      kneecap.position.copy(knee);
       limb(thigh, hip, knee);
       limb(calf, knee, foot);
       shoe.position.copy(foot);

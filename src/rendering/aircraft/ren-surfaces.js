@@ -1,18 +1,15 @@
 import * as THREE from 'three';
 import { addRigidAssembly, rod, surfacePatch } from './mesh-parts.js';
 
-import { renSparHeight } from '../../domain/ren-wing.js';
+import { rigHalfWing } from './wing-flex.js';
+import { REN_TAIL } from '../../domain/ren-tail.js';
+import { renSparHeight, renWingChord, wingStations } from '../../domain/ren-wing.js';
 
 const lerp = THREE.MathUtils.lerp;
 const radians = Math.PI / 180;
 
-// Windnauts 2023 three-view, p.20. Chords at the spars' panel joints, in metres.
-const wingStations = [[0, 1.053], [4.6, 1.053], [8.7, .859], [12.7, .768], [16.1, .471]];
 function wingPoint(x, t, upper, side) {
-  const index = Math.max(1, wingStations.findIndex(([station]) => station >= x));
-  const [xa, ca] = wingStations[index - 1];
-  const [xb, cb] = wingStations[index];
-  const chord = lerp(ca, cb, (x - xa) / (xb - xa));
+  const chord = renWingChord(x);
   // Continuous cambered proxy for DAE21/31/modified 41. The free-flight
   // front elevation already includes both built-in dihedral and elastic bend.
   const angle = lerp(3.9, 1.8, x / 16.1) * radians;
@@ -27,10 +24,13 @@ function wingPoint(x, t, upper, side) {
 }
 
 export function addRenWing(root, m) {
-  const wing = new THREE.Group();
-  wing.name = 'main-wing';
-  root.add(wing);
+  const poses = [];
+  const assembly = new THREE.Group();
+  assembly.name = 'main-wing';
+  root.add(assembly);
   for (const side of [-1, 1]) {
+    const wing = new THREE.Group();
+    assembly.add(wing);
     const frame = new THREE.Group();
     frame.name = 'wing-frame-' + side;
     for (const [i, [xa]] of wingStations.slice(0, -1).entries()) {
@@ -71,8 +71,13 @@ export function addRenWing(root, m) {
     }
     addRigidAssembly(wing, frame);
     const anchor = wingPoint(8.4, .38, false, side);
-    rod(root, [side * .05, -.27, .1], anchor, .002, m.wire, 'flying-wire');
+    const wire = new THREE.Group();
+    rod(wire, [side * .05, -.27, .1], anchor, .002, m.wire, 'flying-wire');
+    addRigidAssembly(wing, wire);
+    poses.push(rigHalfWing(wing, side, 'ren', 16.1, 8.4,
+      station => [side * station, renSparHeight(station), 0]));
   }
+  return sample => poses.forEach(pose => pose(sample));
 }
 
 // Both NACA 0009 tailplanes rotate together with their spars, at quarter chord.
@@ -106,15 +111,16 @@ function tailSurface(parent, m, span, chordAt, vertical, centerHeight) {
 }
 
 export function addRenTail(root, m) {
+  const { horizontal, vertical } = REN_TAIL;
   const elevator = new THREE.Group();
   elevator.name = 'elevator-hinge';
-  elevator.position.set(0, 1.53, 5.30);
+  elevator.position.set(0, horizontal.height, horizontal.arm);
   root.add(elevator);
-  tailSurface(elevator, m, 3.38, u => lerp(.685, .452, u ** 1.6), false, 0);
+  tailSurface(elevator, m, horizontal.span, u => lerp(.685, .452, u ** 1.6), false, 0);
   const rudder = new THREE.Group();
   rudder.name = 'rudder-hinge';
-  rudder.position.z = 6.10;
+  rudder.position.z = vertical.arm;
   root.add(rudder);
-  tailSurface(rudder, m, 2.90, u => lerp(.81, .635, u ** 1.3), true, 2.29);
+  tailSurface(rudder, m, vertical.span, u => lerp(.81, .635, u ** 1.3), true, vertical.height);
   return { elevator, rudder };
 }

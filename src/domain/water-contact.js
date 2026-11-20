@@ -93,54 +93,27 @@ export function landingMeasurement(last, shape, launch) {
   };
 }
 
-// Visual runout after scored contact. Drag and flotation approximate the settling motion.
-export const WATER_RUNOUT_SECONDS = 4;
-const RUNOUT = Object.freeze({
-  pitchAmplitude: 0.045, pitchFrequency: 3, immersion: 0.12,
-  maxHeave: 0.18, heaveResponse: 0.17, heaveFrequency: 4,
-});
+export { WATER_RUNOUT_SECONDS } from './water-entry.js';
+import { waterEntry, WATER_RUNOUT_SECONDS } from './water-entry.js';
 
 export function waterRunoutPose(contact, seconds, hull, wind) {
   if (seconds <= 0) return contact;
-  const t = Math.min(seconds, WATER_RUNOUT_SECONDS);
-  const remaining = 1 - t / WATER_RUNOUT_SECONDS;
-  // Cubic speed decay and its integral in the horizontal track frame.
-  const travel = contact.groundSpeed * WATER_RUNOUT_SECONDS / 4 * (1 - remaining ** 4);
-  const groundSpeed = contact.groundSpeed * remaining ** 3;
-  const along = Math.cos(contact.track), across = Math.sin(contact.track);
-  const pitch = contact.pitch * remaining ** 2 - RUNOUT.pitchAmplitude * Math.sin(t * RUNOUT.pitchFrequency) * remaining ** 3;
-  const pitchDerivative = -2 * contact.pitch * remaining / WATER_RUNOUT_SECONDS
-    - RUNOUT.pitchAmplitude * RUNOUT.pitchFrequency * Math.cos(t * RUNOUT.pitchFrequency) * remaining ** 3
-    + 3 * RUNOUT.pitchAmplitude * Math.sin(t * RUNOUT.pitchFrequency) * remaining ** 2 / WATER_RUNOUT_SECONDS;
-  const bank = contact.bank * remaining ** 2;
-  const forward = contact.forward + along * travel, right = contact.right + across * travel;
-  const windTime = contact.t + t;
-  const rudderDeg = (contact.rudderDeg ?? 0) * remaining;
-  const elevatorDeg = (contact.elevatorDeg ?? 0) * remaining;
-  const wing = contact.wing && { ...contact.wing,
-    leftTip: contact.wing.leftTip * remaining, rightTip: contact.wing.rightTip * remaining,
-    leftTwist: contact.wing.leftTwist * remaining, rightTwist: contact.wing.rightTwist * remaining,
-  };
+  const t = Math.min(seconds, WATER_RUNOUT_SECONDS), remaining = 1 - t / WATER_RUNOUT_SECONDS;
+  const { failedSide, leftFold, rightFold, leftTip, rightTip, pitchVelocity, bankRate, yaw, ...motion } = waterEntry(contact, hull, t);
+  const { pitch, bank, right, forward, height, track, heading, groundSpeed, verticalSpeed } = motion;
+  const windTime = (contact.windTime ?? contact.t ?? 0) + t;
+  const wing = contact.wing && { ...contact.wing, leftTip, rightTip, leftFold, rightFold, failedSide,
+    leftTwist: contact.wing.leftTwist * remaining, rightTwist: contact.wing.rightTwist * remaining };
+  const rudderDeg = (contact.rudderDeg ?? 0) * remaining, elevatorDeg = (contact.elevatorDeg ?? 0) * remaining;
   const bottom = geometryAt(pitch, hullAtControls(hull, rudderDeg, elevatorDeg, wing), bank).bottom;
-  const immersion = RUNOUT.immersion * (1 - remaining ** 2);
-  const heave = Math.max(-RUNOUT.maxHeave, Math.min(0, contact.verticalSpeed * RUNOUT.heaveResponse))
-    * Math.sin(RUNOUT.heaveFrequency * t) * remaining ** 3;
-  const height = -bottom - immersion + heave;
   if (typeof wind === 'string') wind = windAt(wind, { right, forward, height, pathLength: contact.pathLength, gustOffset: contact.gustOffset }, windTime);
   const crosswind = wind.crosswind ?? 0, updraft = wind.updraft ?? 0;
-  const headwind = wind.headwind * Math.cos(contact.heading) + crosswind * Math.sin(contact.heading);
-  return {
-    ...contact, ...(wing && { wing }), forward, right, windTime,
-    // Assume the pilot unloads the pedals at contact. The rotor coasts down
-    // with the visual runout, integrating its remaining turns for replay.
-    ...(contact.rpm === undefined ? {} : {
-      watts: 0, rpm: contact.rpm * remaining ** 3,
-      propellerAngle: contact.propellerAngle + contact.rpm * RAD_PER_RPM * WATER_RUNOUT_SECONDS / 4 * (1 - remaining ** 4),
-    }),
-    groundSpeed, speed: Math.hypot(along * groundSpeed + wind.headwind, across * groundSpeed + crosswind, updraft),
-    headwind, updraft, pitchRate: pitchDerivative * Math.cos(bank),
-    rollRate: -2 * contact.bank * remaining / WATER_RUNOUT_SECONDS, yawRate: -pitchDerivative * Math.sin(bank),
-    height, bottomHeight: 0, verticalSpeed: 0, pitch, bank,
-    rudderDeg, elevatorDeg, bodyShift: contact.bodyShift === undefined ? undefined : contact.bodyShift * remaining, shift: contact.shift * remaining,
-  };
+  return { ...contact, ...motion, wing, windTime, rudderDeg, elevatorDeg, bottomHeight: height + bottom,
+    speed: Math.hypot(Math.cos(track)*groundSpeed + wind.headwind, Math.sin(track)*groundSpeed + crosswind, verticalSpeed-updraft),
+    headwind: wind.headwind * Math.cos(heading) + crosswind * Math.sin(heading), updraft,
+    rollRate: bankRate - yaw * Math.sin(pitch), pitchRate: pitchVelocity*Math.cos(bank) + yaw*Math.sin(bank)*Math.cos(pitch),
+    yawRate: yaw*Math.cos(bank)*Math.cos(pitch) - pitchVelocity*Math.sin(bank),
+    bodyShift: contact.bodyShift === undefined ? undefined : contact.bodyShift * remaining, shift: contact.shift * remaining,
+    ...(contact.rpm === undefined ? {} : { watts: 0, rpm: contact.rpm * remaining ** 3,
+      propellerAngle: contact.propellerAngle + contact.rpm * RAD_PER_RPM * WATER_RUNOUT_SECONDS / 4 * (1 - remaining ** 4) }) };
 }

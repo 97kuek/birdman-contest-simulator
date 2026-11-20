@@ -64,8 +64,8 @@ export function rigHalfWing(group, side, aircraftId, halfSpan, rootStation, spar
       const weights = part.morphTargetInfluences;
       weights[0] = tip;
       weights[1] = twist;
-      weights[2] = Number(fold > 0);
-      weights[3] = Number(fold < 0);
+      weights[2] = Math.max(0, fold);
+      weights[3] = Math.max(0, -fold);
     }
   };
 }

@@ -28,9 +28,10 @@ test('聯の巡航設計点でプロペラ軸、揚力、抵抗が釣り合い�
   assert.equal(flight.time, 240);
   assert.equal(flight.result, null);
   // At finite height 203 W exceeds the new level-flight requirement.
-  assert.ok(last.height > first.height && last.speed > plane.speed);
+  assert.ok(last.height > first.height);
+  near(last.speed, plane.speed, .001);
   near(last.propellerAngle - first.propellerAngle, 180 * 144 * RAD_PER_RPM, .1);
-  assert.ok(last.pathLength - first.pathLength > 180 * plane.speed);
+  near(last.pathLength - first.pathLength, 180 * plane.speed, .1);
   assert.equal(readFlightInstruments(last, 'ren').altitude, last.bottomHeight);
 });
 
@@ -54,9 +55,12 @@ test('聯は舵で昇降と左右旋回ができ、風が対地速度と航跡�
     assert.ok(sign * turned.heading > .2);
   }
   near(control(0, 0, 'tail').groundSpeed - control(0, 0, 'head').groundSpeed, 2.4, .01);
-  const cross = control(0, 0, 'cross');
-  assert.ok(Math.abs(cross.right) > 1);
-  assert.ok(Math.abs(cross.track - cross.heading) > .1);
+  const drift = create('cross');
+  drift.advanceTo(5);
+  const cross = drift.current();
+  // Early drift downwind, while the free fin turns the nose into wind.
+  assert.ok(cross.right > 1 && cross.track > 0 && cross.heading < 0);
+  assert.ok(cross.track - cross.heading > .1);
 });
 
 test('聯はペダル出力の変更と漕ぎ止めを記録し、回転の惰性を着水後まで再生する', () => {
@@ -102,29 +106,25 @@ test('聯の低回転プロペラは前進気流で回され、機体に抵抗�
 });
 
 test('聯の巡航から10秒間、旋回で高度を使い、漕ぎ増すとその損失を補える', () => {
+  const turnHeights = [];
   for (const watts of [0, 203, 300]) {
     const straight = create(), turn = create();
     straight.advanceTo(90);
     turn.advanceTo(90);
     const initial = straight.current();
-    for (let t = 91; t <= 100; t++) {
-      straight.advanceTo(t, 0, 0, watts);
-      turn.advanceTo(t, 0, 1, watts);
-      const a = straight.current(), b = turn.current();
-      assert.equal(b.t, t);
-      assert.ok(b.height < a.height && b.track > a.track);
-      if (watts === 203) {
-        assert.ok(a.speed > plane.speed);
-        assert.ok(a.height > initial.height);
-      } else {
-        const direction = Math.sign(watts - plane.power);
-        for (const sample of [a, b]) {
-          assert.ok(direction * (sample.speed - initial.speed) > 0);
-          assert.ok(direction * (sample.height - initial.height) > 0);
-        }
-      }
-    }
+    straight.advanceTo(100, 0, 0, watts);
+    turn.advanceTo(100, 0, 1, watts);
+    const a = straight.current(), b = turn.current();
+    assert.equal(b.t, 100);
+    assert.ok(b.height < a.height && b.track > a.track && b.bank > 0);
+    // With a free pitch attitude, power changes climb rate. The speed
+    // can oscillate about trim during the longitudinal transient.
+    if (watts === 0) assert.ok(a.height < initial.height && a.verticalSpeed < 0);
+    else assert.ok(a.height > initial.height && a.verticalSpeed > 0);
+    if (watts === 203) near(a.speed, plane.speed, .001);
+    turnHeights.push(b.height);
   }
+  assert.ok(turnHeights[0] < turnHeights[1] && turnHeights[1] < turnHeights[2]);
 });
 
 test('聯はピッチ・バンク・方位を反映した左右の位置で風と対水面高度を読む', () => {
@@ -132,7 +132,7 @@ test('聯はピッチ・バンク・方位を反映した左右の位置で風�
   const launch = { edgeRight: 7, edgeForward: 13 };
   const calls = [];
   const level = { right: 0, forward: 0, height: 8, pathLength: 0, pitch: 0, bank: 0,
-    u: plane.speed, v: 0, w: 0, heading: 0, gustRollRate: 0 };
+    u: plane.speed, v: 0, w: 0, heading: 0, p: 0, q: 0, r: 0 };
   const model = poweredFlightDynamics(profile, launch, 'calm', 17, (_weather, pos) => {
     calls.push(pos);
     return { headwind: 0, updraft: 0 };
@@ -156,15 +156,50 @@ test('聯はピッチ・バンク・方位を反映した左右の位置で風�
 
 test('聯は上昇風を受けた翼が上がり、上昇中の翼の追加荷重は小さくなる', () => {
   const state = { right: 0, forward: 0, height: 8, pathLength: 0, pitch: 0, bank: 0,
-    u: plane.speed, v: 0, w: 0, heading: 0, gustRollRate: 0 };
+    u: plane.speed, v: 0, w: 0, heading: 0, p: 0, q: 0, r: 0 };
   function loads(side, rate = 0) {
     const field = (_mode, pos) => ({ headwind: 0, updraft: side === 0 || side * pos.right > 2 ? .5 : 0 });
     const model = poweredFlightDynamics(aircraftProfile('ren'), { edgeRight: 0, edgeForward: 0 }, 'calm', 0, field);
-    return model.loadsAt({ ...state, gustRollRate: rate }, 0);
+    return model.loadsAt({ ...state, p: rate }, 0);
   }
   const left = loads(-1), right = loads(1);
   assert.ok(left.left.lift > left.right.lift && left.rollMoment > 0);
   near(left.rollMoment, -right.rollMoment, 1e-9);
   near(loads(0).rollMoment, 0, 1e-9);
   assert.ok(loads(-1, .02).rollMoment < left.rollMoment);
+});
+
+test('聯は尾翼だけに入る風と機体角速度から復元モーメントを生じる', () => {
+  const profile = aircraftProfile('ren');
+  const state = { right: 0, forward: 0, height: 10, pathLength: 0, pitch: 0, bank: 0,
+    heading: 0, u: plane.speed, v: 0, w: 0, p: 0, q: 0, r: 0, omega: 0, elevatorDeg: 0 };
+  function rates(field, changes = {}, turn = 0) {
+    const model = poweredFlightDynamics(profile, { edgeRight: 0, edgeForward: 0 }, 'calm', 0, field);
+    return model.rates({ ...state, ...changes }, 0, 0, turn);
+  }
+  const still = () => ({ headwind: 0, updraft: 0 });
+  const horizontalGust = (_mode, pos) => ({ headwind: 0, updraft: Math.abs(pos.forward + 5.30) < .1 ? .5 : 0 });
+  const finGust = (_mode, pos) => ({ headwind: 0, updraft: 0, crosswind: Math.abs(pos.forward + 6.10) < .1 ? .5 : 0 });
+  assert.ok(rates(horizontalGust).q < 0); // tail rises, nose falls
+  near(rates(horizontalGust).r, 0, 1e-12);
+  assert.ok(rates(finGust).r > 0); // wind from the right pushes fin to port
+  assert.ok(rates(still, { q: .05 }).q < 0 && rates(still, { r: .05 }).r < 0);
+  for (const sign of [-1, 1]) {
+    const turn = rates(still, {}, sign), pitch = rates(still, { elevatorDeg: sign * 2 });
+    assert.ok(sign * turn.r > 0 && sign * turn.v < 0);
+    assert.ok(sign * pitch.q > 0 && sign * pitch.w < 0);
+    near(rates(still, { u: plane.speed / 2 }, sign).r, turn.r / 4, 1e-10);
+    assert.ok(sign * rates(still, { omega: plane.rpm * RAD_PER_RPM }, sign).r > sign * turn.r);
+  }
+  const parked = rates(still, { u: 0, elevatorDeg: 10 }, 1);
+  near(parked.q, 0, 1e-12);
+  near(parked.r, 0, 1e-12);
+});
+
+test('聯は自由空間の設計巡航で全力・全モーメントが釣り合う', () => {
+  const model = poweredFlightDynamics(aircraftProfile('ren'), { edgeRight: 0, edgeForward: 0 }, 'calm', 0);
+  const state = { right: 0, forward: 0, height: 1e8, pathLength: 0, pitch: 0, bank: 0,
+    heading: 0, u: 7.2, v: 0, w: 0, p: 0, q: 0, r: 0, omega: 144 * RAD_PER_RPM, elevatorDeg: 0 };
+  const rates = model.rates(state, 0, 0, 0, undefined, 203);
+  for (const axis of ['u', 'v', 'w', 'p', 'q', 'r', 'omega']) near(rates[axis], 0, 1e-7);
 });

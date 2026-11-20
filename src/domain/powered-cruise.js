@@ -4,12 +4,12 @@ import { GRAVITY, RAD_PER_RPM } from './units.js';
 // Design points, not telemetry. Sources and off-design assumptions are in docs/powered-cruise.md.
 export const CRUISE_AIRCRAFT = Object.freeze({
   ren: Object.freeze({ name: '聯', mass: 87.7, span: 32.2, area: 28.25, speed: 7.2,
-    power: 203, rpm: 144, thrust: 22, radius: 1.55, windmillDragArea: 0.32 }),
+    power: 203, rpm: 144, thrust: 22, radius: 1.55, shaftHeight: 1.375, windmillDragArea: 0.32 }),
   skyron: Object.freeze({ name: 'Skyron', mass: 100.6, span: 34, area: 29.01, speed: 7.4,
     power: 216, rpm: 135, thrust: 24, radius: 1.5 }),
 });
 
-const DENSITY = 1.225;
+export const AIR_DENSITY = 1.225;
 const SPAN_EFFICIENCY = 0.85;
 const MAX_LIFT_COEFFICIENT = 1.45;
 const EFFECTIVE_ROTOR_INERTIA = 0.8; // kg m², reflected to the propeller shaft
@@ -19,7 +19,7 @@ const HZ = 120;
 // Bisection covers both static thrust and forward flight without dividing by speed.
 function propellerThrust(diskArea, speed, power) {
   if (power <= 0) return 0;
-  const massFactor = 2 * DENSITY * diskArea;
+  const massFactor = 2 * AIR_DENSITY * diskArea;
   let low = 0, high = Math.cbrt(power / massFactor);
   for (let i = 0; i < 30; i++) {
     const induced = (low + high) / 2;
@@ -32,7 +32,7 @@ function propellerThrust(diskArea, speed, power) {
 
 export function wingPolar(plane) {
   const weight = plane.mass * GRAVITY;
-  const pressureArea = 0.5 * DENSITY * plane.speed ** 2 * plane.area;
+  const pressureArea = 0.5 * AIR_DENSITY * plane.speed ** 2 * plane.area;
   const trimLift = weight / pressureArea;
   const aspectRatio = plane.span ** 2 / plane.area;
   const inducedDragFactor = 1 / (Math.PI * SPAN_EFFICIENCY * aspectRatio);
@@ -40,7 +40,7 @@ export function wingPolar(plane) {
   const liftSlope = 2 * Math.PI / (1 + 2 / (SPAN_EFFICIENCY * aspectRatio));
   return (airspeed, alpha) => {
     const cl = liftCoefficient(trimLift / liftSlope + alpha, liftSlope, MAX_LIFT_COEFFICIENT);
-    const qS = 0.5 * DENSITY * airspeed ** 2 * plane.area;
+    const qS = 0.5 * AIR_DENSITY * airspeed ** 2 * plane.area;
     const inducedDrag = qS * inducedDragFactor * cl ** 2;
     return { lift: qS * cl, drag: qS * parasiteDrag + inducedDrag, inducedDrag, parasiteDrag: qS * parasiteDrag };
   };
@@ -48,11 +48,11 @@ export function wingPolar(plane) {
 
 export function propellerModel(plane) {
   const diskArea = Math.PI * plane.radius ** 2;
-  const inducedAtTrim = (Math.sqrt(plane.speed ** 2 + 2 * plane.thrust / (DENSITY * diskArea)) - plane.speed) / 2;
+  const inducedAtTrim = (Math.sqrt(plane.speed ** 2 + 2 * plane.thrust / (AIR_DENSITY * diskArea)) - plane.speed) / 2;
   const trimDiskPower = plane.thrust * (plane.speed + inducedAtTrim);
   const trimOmega = plane.rpm * RAD_PER_RPM;
   const advancePerRadian = plane.speed / trimOmega;
-  const windmillFactor = 0.5 * DENSITY * (plane.windmillDragArea ?? 0);
+  const windmillFactor = 0.5 * AIR_DENSITY * (plane.windmillDragArea ?? 0);
 
   return (omega, axialSpeed, watts) => {
     const spin = omega / trimOmega;

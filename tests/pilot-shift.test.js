@@ -94,9 +94,11 @@ test('滑走中の角速度は描画姿勢に従い、停止すると回転に�
   const at = t => waterRunoutPose(state, t, hull, wind);
   const p = at(1.2), dt = .00001;
   const pitchDerivative = (at(1.2+dt).pitch - at(1.2-dt).pitch)/(2*dt);
-  close(p.pitchRate, pitchDerivative * Math.cos(p.bank));
+  const headingDerivative = (at(1.2+dt).heading - at(1.2-dt).heading)/(2*dt);
+  const bodyPitchRate = pitchDerivative * Math.cos(p.bank) + headingDerivative * Math.sin(p.bank) * Math.cos(p.pitch);
+  assert.ok(Math.abs(p.pitchRate - bodyPitchRate) < 1e-6);
   const rest = at(4);
   close(rest.pitchRate, 0);
-  close(rest.headwind, wind.headwind * Math.cos(state.heading) + wind.crosswind * Math.sin(state.heading));
+  close(rest.headwind, wind.headwind * Math.cos(rest.heading) + wind.crosswind * Math.sin(rest.heading));
   close(rest.updraft, 0);
 });

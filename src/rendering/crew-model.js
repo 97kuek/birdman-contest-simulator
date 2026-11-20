@@ -125,6 +125,33 @@ function person(profile, team){
   return {root,torso,head,arms,legs,...profile};
 }
 
-export function createCrewMembers(team = 'ryukai') {
-  return profiles.map(profile => person(profile, team));
+export function createCrewMembers(team = 'ryukai', count = profiles.length) {
+  const models = profiles.map(profile => person(profile, team));
+  const members = models.slice(0, count);
+  while (members.length < count) {
+    const base = models[members.length % models.length];
+    const root = base.root.clone();
+    const copy = bone => root.children[base.root.children.indexOf(bone)];
+    const limb = ({ upper, lower, end, ...rest }) => ({ ...rest, upper: copy(upper), lower: copy(lower), end: copy(end) });
+    const torso = copy(base.torso);
+    members.push({ ...base, root, torso, head: torso.children[0], arms: base.arms.map(limb), legs: base.legs.map(limb) });
+  }
+  return members;
+}
+
+// Waiting ground crew hold one pose for most of the trial. Bake that pose to
+// a single draw call; articulated copies take over when a crew member moves.
+export function standingCrewGeometry(member) {
+  const inverse = member.root.matrixWorld.clone();
+  member.root.updateWorldMatrix(true, true);
+  inverse.copy(member.root.matrixWorld).invert();
+  const parts = [];
+  member.root.traverse(part => {
+    if (part.material !== finish) return;
+    const local = inverse.clone().multiply(part.matrixWorld);
+    parts.push(part.geometry.clone().applyMatrix4(local));
+  });
+  const geometry = mergeGeometries(parts);
+  for (const part of parts) part.dispose();
+  return geometry;
 }

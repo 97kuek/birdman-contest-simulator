@@ -13,28 +13,22 @@ import {
 import { aircraftShoreContact } from '../domain/shoreline.js';
 import { aircraftProfile } from '../domain/aircraft-profiles.js';
 import { bodyShiftFromCg } from '../domain/pilot-shift.js';
-import { RADIANS_PER_DEGREE, RAD_PER_RPM } from '../domain/units.js';
+import { RADIANS_PER_DEGREE } from '../domain/units.js';
+import { poweredLaunch } from '../domain/powered-launch.js';
+import { prelaunchPedalSeconds } from './launch-sequence.js';
 import { WEATHER, windAt } from '../domain/weather.js';
 
-// Seated pilot spins up during the crew's run. The flight clock sets phase zero at release.
-function rampPropeller(plane, elapsed, duration) {
-  const progress = Math.max(0, Math.min(1, elapsed / duration));
-  const rpm = plane.rpm * progress;
-  const angle = 0.5 * plane.rpm * RAD_PER_RPM * duration * (progress ** 2 - 1);
-  return { rpm, propellerAngle: angle, watts: plane.power * progress };
-}
-
-function rampSample(launch, weather, elapsed, gustOffset, profile) {
+export function rampSample(launch, weather, elapsed, gustOffset, profile, drive) {
   const ramp = rampAt(launch, elapsed);
-  const remaining = RAMP_LENGTH - ramp.travel;
-  const right = launch.edgeRight - remaining * launch.rightStep;
-  const forward = launch.edgeForward - remaining * launch.forwardStep;
-  const windTime = elapsed - launch.duration;
+  const remaining = (launch.length ?? RAMP_LENGTH) - ramp.travel;
+  const right = launch.edgeRight + (profile.releaseWheelAft ?? 0) * Math.sin(launch.heading) - remaining * launch.rightStep;
+  const forward = launch.edgeForward + (profile.releaseWheelAft ?? 0) * Math.cos(launch.heading) - remaining * launch.forwardStep;
+  const windTime = elapsed - launch.duration + (launch.windTimeOffset ?? 0);
   const bottomHeight = launch.edgeHeight + launch.deckClearance + remaining * launch.dropStep;
   const height = bottomHeight + CG_HEIGHT;
   const wind = windAt(weather, { right, forward, height, gustOffset }, windTime);
   return {
-    ...(profile.propulsion && rampPropeller(profile.propulsion, elapsed, launch.duration)),
+    ...drive,
     wing: { leftTip: 0, rightTip: 0, leftTwist: 0, rightTwist: 0 },
     bottomHeight, height,
     right, forward, windTime, gustOffset,
@@ -64,16 +58,27 @@ export class FlightSession {
   #gustOffset = 0;
   #drawWindOffset;
   #firstLand;
+  #platformContact;
   #profile;
+  #baseLaunch;
+  #poweredLaunch;
+
+  get launch() { return this.#poweredLaunch ?? this.#baseLaunch; }
+
+  resolveLaunch() {
+    if (this.#profile.propulsion) this.#poweredLaunch ??= poweredLaunch(this.#profile, this.#baseLaunch, this.weather, this.#gustOffset);
+    return this.launch;
+  }
   #shoreContact;
   #runoutLimits = new WeakMap();
   #prepared = false;
   #runReferences = new WeakMap();
 
-  constructor(hull, weather, drawWindOffset = () => 0, firstLand, aircraftId = 'ryukai') {
+  constructor(hull, weather, drawWindOffset = () => 0, firstLand, aircraftId = 'ryukai', platformContact) {
     this.#profile = aircraftProfile(aircraftId);
     this.aircraftId = aircraftId;
     this.#firstLand = firstLand;
+    this.#platformContact = platformContact;
     this.#shoreContact = aircraftShoreContact(hull, firstLand);
     this.#drawWindOffset = drawWindOffset;
     this.hull = hull;
@@ -87,7 +92,8 @@ export class FlightSession {
       this.#gustOffset = 0;
     }
     this.weather = weather;
-    this.launch = Object.freeze(launchProfile(1, 0, heading, this.#profile.deckClearance));
+    this.#poweredLaunch = null;
+    this.#baseLaunch = Object.freeze(launchProfile(1, 0, heading, this.#profile.deckClearance));
     this.#baseline = null;
   }
 
@@ -123,42 +129,69 @@ export class FlightSession {
   // Draw before aiming so the pilot can examine the wind before choosing a heading.
   prepareAttempt() {
     this.#gustOffset = WEATHER[this.weather].field ? this.#drawWindOffset() : 0;
+    this.#poweredLaunch = null;
     this.#prepared = true;
     this.#baseline = null;
   }
 
   get onDeck() {
-    return rampSample(this.launch, this.weather, 0, this.options.gustOffset, this.#profile);
+    return this.onDeckAt(0);
+  }
+
+  onDeckAt(spinSeconds) {
+    const drive = this.resolveLaunch().driveAt?.(spinSeconds);
+    return rampSample(this.launch, this.weather, 0, this.#gustOffset, this.#profile, drive);
   }
 
   startAttempt() {
     if (!this.#prepared) this.prepareAttempt();
     this.#prepared = false;
-    const launch = this.launch;
+    const launch = this.resolveLaunch();
     const weather = this.weather;
     const key = this.conditionKey;
     const options = this.options;
     const profile = this.#profile;
-    const flight = createFlight(profile.design, this.hull, { ...options, firstLand: this.#firstLand });
+    const driveAt = elapsed => launch.driveAt?.(prelaunchPedalSeconds + elapsed);
+    const flight = createFlight(profile.design, this.hull, { ...options, launch, firstLand: this.#firstLand, platformContact: this.#platformContact, releaseDrive: driveAt(launch.duration) });
+    const platformContact = this.#platformContact;
+    const rampPose = t => ({ ...rampSample(launch, weather, t, options.gustOffset, profile, driveAt(t)), wing: flight.rampWingAt?.(t) });
+    let previousRamp = rampPose(0), rampHit;
     const number = ++this.#attemptNumber;
     const remember = (run) => {
       if ((this.#history.get(key)?.number ?? 0) < number) this.#history.set(key, { run, number });
     };
     return {
       number,
+      wreckAt: flight.wreckAt,
       samples: flight.samples,
       // Time starts with the GO cue. The solver and recorded inputs start at release.
       advance(elapsed, pitchInput, rudder, watts) {
         const airTime = elapsed - launch.duration;
-        if (airTime < 0) {
-          return {
-            phase: elapsed < launch.handoffTime ? 'push' : 'handoff',
-            sample: { ...rampSample(launch, weather, elapsed, options.gustOffset, profile), wing: flight.rampWingAt?.(elapsed) },
-          };
+        if (previousRamp) {
+          const t = Math.min(launch.duration, elapsed), nextRamp = rampPose(t);
+          // Prescribed ramp motion follows a straight incline, with a nonlinear
+          // time-to-distance mapping during acceleration.
+          const fraction = platformContact?.(previousRamp, nextRamp);
+          if (fraction != null && !rampHit) {
+            const travel = previousRamp.rampTravel + (nextRamp.rampTravel - previousRamp.rampTravel) * fraction;
+            let low = 0, high = t;
+            for (let i = 0; i < 18; i++) {
+              const mid = (low + high) / 2;
+              if (rampAt(launch, mid).travel < travel) low = mid;
+              else high = mid;
+            }
+            rampHit = { ...rampPose(high), t: 0 };
+          }
+          if (rampHit) return { phase: 'platform-contact', sample: rampHit };
+          if (airTime < 0) {
+            previousRamp = nextRamp;
+            return { phase: elapsed < launch.handoffTime ? 'push' : 'handoff', sample: nextRamp };
+          }
+          previousRamp = null;
         }
         flight.advanceTo(airTime, pitchInput, rudder, watts);
         if (flight.failure) return { phase: 'structural-failure', sample: flight.failure };
-        if (flight.disqualified) return { phase: 'disqualified', sample: flight.disqualified };
+        if (flight.disqualified) return { phase: flight.disqualified.contactReason ?? 'disqualified', sample: flight.disqualified };
         if (flight.result) {
           remember(flight.result);
           return { phase: 'touchdown', run: flight.result };
@@ -184,7 +217,8 @@ export class FlightSession {
   waterPose(run, seconds) {
     const contact = run.samples.at(-1);
     const poseAt = time => waterRunoutPose(contact, time, this.hull, run.weather);
-    if (!this.#shoreContact || seconds <= 0) return poseAt(seconds);
+    if ((!this.#shoreContact && !this.#platformContact) || seconds <= 0) return poseAt(seconds);
+    const blocked = (a, b) => this.#shoreContact?.(a, b) != null || this.#platformContact?.(a, b) != null;
     if (!this.#runoutLimits.has(run)) {
       // The contact is already scored. Stop the visual drift before its first
       // shore crossing and use the same limit when seeking directly in replay.
@@ -193,11 +227,11 @@ export class FlightSession {
       for (let frame = 1; frame <= frames; frame++) {
         const time = frame / 20;
         const next = poseAt(time);
-        if (this.#shoreContact(previous, next) !== null) {
+        if (blocked(previous, next)) {
           let low = (frame - 1) / 20, high = time;
           for (let i = 0; i < 12; i++) {
             const mid = (low + high) / 2;
-            if (this.#shoreContact(previous, poseAt(mid)) === null) low = mid;
+            if (!blocked(previous, poseAt(mid))) low = mid;
             else high = mid;
           }
           safeTime = low;

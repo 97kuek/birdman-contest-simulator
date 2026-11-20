@@ -1,6 +1,7 @@
 export function wingFoldDirection(wing, side) {
   if (wing?.failedSide !== side && wing?.failedSide !== 'both') return 0;
-  return wing[side + 'Moment'] < 0 ? -1 : 1;
+  if (wing[side + 'Fold'] !== undefined) return wing[side + 'Fold'];
+  return (wing[side + 'Moment'] < 0 ? -1 : 1) * (wing.foldFraction ?? 1);
 }
 
 // Each vertex stores aft, up, span, bend-up, twist-aft, twist-up, fold-span

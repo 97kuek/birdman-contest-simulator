@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RAMP_LENGTH } from '../domain/launch.js';
+import { createPlatformContact } from './platform-contact.js';
 import { createPlatformMarkings } from './platform-markings.js';
 import { deckHeight, deckRun } from './launch-deck.js';
 
@@ -38,6 +39,8 @@ export function createPlatform({ shoreDistance = 100 } = {}) {
   const group = new THREE.Group();
   group.name = '松原湖岸・プラットフォーム';
   const shoreEnd = Math.max(rear + 8, shoreDistance);
+  const contact = createPlatformContact();
+  group.userData.contact = contact.forAircraft;
   const positions = [], colors = [], tubes = [];
   const red = '#dd3154', blue = '#439cc9', yellow = '#ffda61';
   const steel = '#718085', lightSteel = '#a3aeb0', braces = '#667679';
@@ -45,6 +48,7 @@ export function createPlatform({ shoreDistance = 100 } = {}) {
 
   // Solid panels use one geometry and the scaffold uses one instanced draw.
   function triangle(a, b, c, color) {
+    contact.triangle(a, b, c);
     // Orient sloped decking toward the light, including the radial fan panels.
     const normalY=(b[2]-a[2])*(c[0]-a[0])-(b[0]-a[0])*(c[2]-a[2]);
     if(normalY<0) positions.push(...a,...c,...b);
@@ -57,6 +61,7 @@ export function createPlatform({ shoreDistance = 100 } = {}) {
     triangle(a, c, d, color);
   }
   function tube(a, b, diameter, color) {
+    contact.tube(a, b, diameter);
     tubes.push({ a, b, diameter, color });
   }
   function at(x, z, lift = 0) { return [x, deckHeight(z) + lift, z]; }

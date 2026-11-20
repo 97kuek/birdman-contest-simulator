@@ -14,6 +14,12 @@
     caption { text-align: left; font-weight: bold; padding: 18px 0 8px }
     th, td { padding: 9px 4px; text-align: right; border-bottom: 1px solid #b6cad9 }
     th:first-child { text-align: left }
+    #torsion { margin-top: 22px; border-top: 1px solid #b6cad9; padding: 15px 0 }
+    #torsion summary { font-weight: 700; cursor: pointer }
+    .torsion-inputs { display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap: 14px }
+    .torsion-inputs input { width: 100%; accent-color: #175980 }
+    #torsion-result { padding: 12px; background: #e4eef5; border-left: 4px solid #327299 }
+    #torsion-result[data-unstable="true"] { background: #fae8df; border-color: #ae481a }
     @media (max-width: 480px) { table { font-size: .85rem } th,td { padding-inline: 2px } }
   </style>
 </head>
@@ -33,6 +39,16 @@
     <tbody id="readings"></tbody>
   </table>
   <p class="explain">巡航時の推力と抵抗は各機の設計値で合わせています。出力変更後の反応は簡易モデルによる推定です。高度差は巡航開始位置を基準にしています。</p>
+  <details id="torsion">
+    <summary>聯の翼のねじり発散を試す</summary>
+    <p class="explain">半翼を片持ち梁として、対気速度を上げたときにねじれが自分で増幅する境目を計算します。剛性と弾性軸は仮定値です。</p>
+    <div class="torsion-inputs">
+      <label>ねじり剛性 GJ <output for="rigidity"></output><input id="rigidity" type="range" min="500" max="6000" step="50" value="2000"></label>
+      <label>空力中心から弾性軸まで <output for="offset"></output><input id="offset" type="range" min="-10" max="20" step="1" value="10"></label>
+      <label>対気速度 <output for="airspeed"></output><input id="airspeed" type="range" min="3" max="16" step=".1" value="7.2"></label>
+    </div>
+    <p id="torsion-result" role="status"></p>
+  </details>
 </main>
 <script type="module" src="./src/presentation/powered-cruise.js"></script>
 </body>

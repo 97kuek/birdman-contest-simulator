@@ -33,12 +33,13 @@ export function releaseState(launch, release, pilot, profile = aircraftProfile()
     ? (profile.releasePathDeg == null ? -Math.asin(launch.dropStep) : profile.releasePathDeg * RADIANS_PER_DEGREE)
     : LAUNCH.deckDeg * RADIANS_PER_DEGREE;
   return {
-    pathLength: 0, height: launch.edgeHeight + CG_HEIGHT + profile.deckClearance,
+    pathLength: 0, height: launch.edgeHeight + (launch.releaseHeightOffset ?? 0) + CG_HEIGHT + profile.deckClearance,
     u: launch.speed * Math.cos(flightPath), w: launch.speed * Math.sin(flightPath),
     pitch: pitchDeg * RADIANS_PER_DEGREE, q: pitchRateDeg * RADIANS_PER_DEGREE, elevatorDeg: 0,
     bodyShift: pilot ? bodyShiftFromCg(profile.releaseCgShift, profile) : 0,
     leftTip: 0, rightTip: 0, leftTipRate: 0, rightTipRate: 0,
-    bank: 0, heading: launch.heading, right: 0, forward: 0, v: 0, p: 0, r: 0,
+    bank: 0, heading: launch.heading, right: (launch.releaseRightOffset ?? 0) + (profile.releaseWheelAft ?? 0) * Math.sin(launch.heading),
+    forward: (launch.releaseForwardOffset ?? 0) + (profile.releaseWheelAft ?? 0) * Math.cos(launch.heading), v: 0, p: 0, r: 0,
   };
 }
 
