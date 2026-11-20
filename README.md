@@ -4,7 +4,7 @@
 
 機体の寸法は両チームの三面図をもとにした。竜海は大会の機上ログと速度・高度・姿勢を照合し、QX-25は公式映像とチームの証言から離台時の動きを推定した。機体ごとの出典と仮定は画面内の「資料・出典」と[飛行モデルの検証](docs/physics-audit.md)で確認できる。
 
-[人力プロペラ機部門の追加に向けた設計メモ](docs/propeller-aircraft.md)
+[聯とSkyronの60秒巡航試験](https://97kuek.github.io/birdman-contest-simulator/cruise.html) ／ [試験条件と第48回の競技ルール](docs/powered-cruise.md) ／ [人力プロペラ機部門の追加に向けた設計メモ](docs/propeller-aircraft.md)
 
 [ブラウザでプレイする](https://97kuek.github.io/birdman-contest-simulator/) ／ [竜海の大会映像・IMU・推定身体位置を同じ時刻で見る](https://97kuek.github.io/birdman-contest-simulator/opening.html)
 

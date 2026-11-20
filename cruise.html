@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>人力プロペラ機｜60秒の巡航試験</title>
+  <link rel="stylesheet" href="./src/presentation/opening-comparison.css">
+  <style>
+    main { max-width: 820px; margin-inline: auto }
+    form { display: flex; flex-wrap: wrap; gap: 16px; margin: 22px 0 }
+    label { display: grid; gap: 6px; font-weight: bold }
+    select { min-height: 44px; padding: 6px 12px; color: inherit; font: inherit }
+    table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums }
+    caption { text-align: left; font-weight: bold; padding: 18px 0 8px }
+    th, td { padding: 9px 4px; text-align: right; border-bottom: 1px solid #b6cad9 }
+    th:first-child { text-align: left }
+    @media (max-width: 480px) { table { font-size: .85rem } th,td { padding-inline: 2px } }
+  </style>
+</head>
+<body>
+<main>
+  <a class="back" href="./">← シミュレーター</a>
+  <header><p>人力プロペラ機部門</p><h1>60秒の巡航試験</h1></header>
+  <p>無風で水平に飛んでいる機体のペダル出力を、30秒の時点で変えます。機首の姿勢は固定です。</p>
+  <form>
+    <label>機体<select id="aircraft"><option value="ren">東北大学「聯」 · 2023</option><option value="skyron">早稲田大学「Skyron」 · 2026</option></select></label>
+    <label>30秒以降のペダル操作<select id="power"><option value="1">設計出力を維持</option><option value="0.75">75%に緩める</option><option value="0">漕ぐのをやめる</option><option value="1.25">125%に強める</option></select></label>
+  </form>
+  <p id="result" role="status"></p>
+  <table>
+    <caption>巡航開始からの変化</caption>
+    <thead><tr><th scope="col">経過<br>秒</th><th scope="col">回転数<br>rpm</th><th scope="col">推力<br>N</th><th scope="col">対気速度<br>m/s</th><th scope="col">高度差<br>m</th></tr></thead>
+    <tbody id="readings"></tbody>
+  </table>
+  <p class="explain">巡航時の推力と抵抗は各機の設計値で合わせています。出力変更後の反応は簡易モデルによる推定です。高度差は巡航開始位置を基準にしています。</p>
+</main>
+<script type="module" src="./src/presentation/powered-cruise.js"></script>
+</body>
+</html>
