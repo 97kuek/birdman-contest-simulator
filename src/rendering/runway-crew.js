@@ -60,10 +60,14 @@ function poseMember(member, speed, hold, modelBase, effort = 0, braking = 0) {
   }
 }
 
-function holdWing(member, sample, station, modelBase) {
+export function wingLineAnchor(target, sample, station, modelBase) {
   const side = station < 0 ? 'left' : 'right';
   const bend = (sample.wing?.[side + 'Tip'] ?? 0) * wingBendShape('ren', Math.abs(station) / 16.1);
-  target.set(station, renSparHeight(station) + bend, 0).applyMatrix4(modelBase.matrix);
+  return target.set(station, renSparHeight(station) + bend, 0).applyMatrix4(modelBase.matrix);
+}
+
+function holdWing(member, sample, station, modelBase) {
+  wingLineAnchor(target, sample, station, modelBase);
   target.sub(member.root.position).applyAxisAngle(up, -member.root.rotation.y).divideScalar(member.scale);
   placeBone(member.line, member.arms[1].end.position, target, 1);
 }

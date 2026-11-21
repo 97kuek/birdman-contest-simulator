@@ -17,7 +17,7 @@ const hull = modelHull(createRenAircraft()), profile = aircraftProfile('ren');
 const trim = createRunwayTrial(hull).advance(32, 0, 0, 300).sample;
 const dt = 1 / STEPS_PER_SECOND, radians = Math.PI / 180;
 const bankAngles = [-18, -15, -10, -6, -3, 0, 3, 6, 10, 15, 18];
-function landing(bankDegrees, { earlyApproach = true, windField, omitTipYaw = false, corneringStiffness } = {}) {
+function landing(bankDegrees, { earlyApproach = true, windField, omitTipYaw = false, corneringStiffness, observeLoads, observePose } = {}) {
   const bank = bankDegrees * radians;
   const geometry = geometryAt(0, hullAtControls(hull, 0, 0, trim.wing), bank);
   const contact = { ...trim, bank, t: 0, forward: 676, right: 0, groundSpeed: 7, verticalSpeed: -.36,
@@ -28,18 +28,21 @@ function landing(bankDegrees, { earlyApproach = true, windField, omitTipYaw = fa
   if (earlyApproach) {
     for (let tick = 1; tick <= 5 * STEPS_PER_SECOND; tick++) {
       const seconds = 5 - tick * dt;
-      contact.catchers = advanceCatcherApproach(contact.catchers, { ...contact,
+      const approach = { ...contact, t: -seconds,
         forward: contact.forward - contact.groundSpeed * seconds,
-        bottomHeight: -contact.verticalSpeed * seconds }, dt);
+        height: contact.height - contact.verticalSpeed * seconds, bottomHeight: -contact.verticalSpeed * seconds };
+      contact.catchers = advanceCatcherApproach(contact.catchers, approach, dt);
+      observePose?.({ ...approach, catchers: contact.catchers }, 'flight');
     }
   }
-  const roll = createLandingRoll(hull, contact, 'calm', 0, { windField, omitTipYaw, corneringStiffness });
+  const roll = createLandingRoll(hull, contact, 'calm', 0, { windField, omitTipYaw, corneringStiffness, observeLoads });
   const wheels = poweredGroundRoll(profile, { edgeRight: 0, edgeForward: contact.forward - profile.releaseWheelAft,
     edgeHeight: 0, heading: 0, speed: 0, length: 0, pushed: 0, push: 0, dropStep: 0, rightStep: 0, forwardStep: 1 }, 'calm', 0, windField);
   let wheel = { t: 0, speed: contact.groundSpeed, travel: 0, omega: contact.rpm * RAD_PER_RPM,
     angle: contact.propellerAngle, reserve: contact.reserve, watts: 0 };
   const s = { ...contact };
   roll(s, 0);
+  observePose?.(s, 'rollout');
   const checkpoints = [];
   const wingFirst = Math.abs(s.contactSide) > 1;
   const result = { bankDegrees, wheelS: wingFirst ? null : 0, scrapeS: wingFirst ? 0 : null,
@@ -52,6 +55,7 @@ function landing(bankDegrees, { earlyApproach = true, windField, omitTipYaw = fa
     s.right += travel * Math.sin(s.track);
     Object.assign(s, { t: next.t, groundSpeed: next.speed, rpm: next.omega / RAD_PER_RPM });
     const held = roll(s, dt);
+    observePose?.(s, 'rollout');
     if (s.wheelsOnGround) result.wheelS ??= s.t;
     if (s.scrapingWing && result.scrapeS == null) {
       result.scrapeS = s.t;
@@ -183,6 +187,9 @@ function tyreReport() {
   console.log(JSON.stringify(rows, null, 2));
 }
 
-if (process.argv.includes('--tyres')) tyreReport();
+if (process.argv.includes('--scrape')) {
+  const { scrapeReport } = await import('./ren-runway-scrape.js');
+  scrapeReport(landing, dt);
+} else if (process.argv.includes('--tyres')) tyreReport();
 else if (process.argv.includes('--crosswind')) crosswindReport();
 else calmReport();

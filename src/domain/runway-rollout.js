@@ -48,7 +48,7 @@ function intercept(member, side, sample, x, aft, dt, rear = false) {
 
 // Both wheels are on the fuselage centreline. They carry the residual weight
 // but do not constrain bank like a pair of laterally separated landing wheels.
-export function createLandingRoll(hull, contact, weather, gustOffset, { windField, omitTipYaw = false, corneringStiffness = nominalCorneringStiffness } = {}) {
+export function createLandingRoll(hull, contact, weather, gustOffset, { windField, omitTipYaw = false, corneringStiffness = nominalCorneringStiffness, observeLoads } = {}) {
   const dynamics = poweredFlightDynamics(profile, { edgeRight: 0, edgeForward: 0 }, weather, gustOffset, windField);
   const team = contact.catchers ?? waitingTeam(predictedCatcherStation(contact), contact.forward);
   const { station } = team;
@@ -148,6 +148,8 @@ export function createLandingRoll(hull, contact, weather, gustOffset, { windFiel
       if (sample.groundSpeed > 0) track = heading + Math.atan2(lateralSpeed, state.u);
     }
     const tyreYawMoment = atRest ? 0 : frontArm * frontForce + rearArm * rearForce;
+    observeLoads?.({ tipYawNm: yawMoment, tyreYawNm: tyreYawMoment, tyreSideN, aeroSideN,
+      slipMps: state.v, wheelNormalN: wheelNormal, tipNormalN: tipNormal });
     yawRate += ((yawMoment + tyreYawMoment) / yawInertia + rates.r - .7 * yawRate) * dt;
     // Use the contact reaction below the CG in the next explicit roll step.
     tyreRollMoment = -wheelDepth * Math.cos(bank) * tyreSideN;
