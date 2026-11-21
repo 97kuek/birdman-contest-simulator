@@ -1,7 +1,7 @@
 import { CG_HEIGHT } from './aircraft-dynamics.js';
 import { aircraftProfile } from './aircraft-profiles.js';
 import { poweredFlightDynamics } from './powered-flight.js';
-import { predictedCatcherStation, waitingCatcher, rearCatchPoints } from './runway-support.js';
+import { predictedCatcherStation, waitingTeam, rearCatchPoints, moveRunner, catcherSideGap, wingGripSpan as catchSpan } from './runway-support.js';
 import { RAD_PER_RPM } from './units.js';
 import { geometryAt, hullAtControls } from './water-contact.js';
 
@@ -9,7 +9,6 @@ const profile = aircraftProfile('ren');
 const wheelDepth = CG_HEIGHT + profile.deckClearance;
 const gear = [[-1.04, -wheelDepth], [profile.releaseWheelAft, -wheelDepth]];
 const pivotInertia = profile.rollInertia + profile.mass * wheelDepth ** 2;
-const catchSpan = 12.5;
 const brakeForcePerRunnerN = 55;
 
 // A receiver can move towards an intercept before the aircraft slows to
@@ -19,27 +18,30 @@ function intercept(member, side, sample, x, aft, dt, rear = false) {
   const cos = Math.cos(sample.heading), sin = Math.sin(sample.heading);
   const gripX = sample.right + x * cos - aft * sin;
   const gripF = sample.forward - x * sin - aft * cos;
-  const ahead = member.forward > gripF && sample.groundSpeed > 1;
-  const alongside = rear && ahead && !member.holding;
-  const targetX = gripX + (alongside ? side * 2.2 : 0);
-  const targetF = ahead && !member.holding ? member.forward : gripF;
-  const dx = targetX - member.right, df = targetF - member.forward;
-  const distance = Math.hypot(dx, df);
-  const fraction = distance > 0 ? Math.min(1, receiverSprint * dt / distance) : 0;
-  const right = member.right + dx * fraction, forward = member.forward + df * fraction;
-  return { right, forward, holding: !alongside && sample.groundSpeed <= receiverSprint &&
-    Math.hypot(right - gripX, forward - gripF) <= .35 };
+  const trackX = Math.sin(sample.track), trackF = Math.cos(sample.track);
+  const alongTrack = (member.right - gripX) * trackX + (member.forward - gripF) * trackF;
+  const waitAhead = !member.holding && sample.groundSpeed > 1 ? Math.max(0, alongTrack) : 0;
+  const clearance = rear && waitAhead > 0 ? side * catcherSideGap : 0;
+  const next = moveRunner(member, gripX + waitAhead * trackX + clearance * cos,
+    gripF + waitAhead * trackF - clearance * sin, receiverSprint * dt);
+  // During a ground loop the outside wing can sweep past a runner even
+  // when the aircraft centre is slow enough to follow.
+  const gripSpeed = Math.hypot(sample.groundSpeed * trackX + (gripF - sample.forward) * sample.yawRate,
+    sample.groundSpeed * trackF - (gripX - sample.right) * sample.yawRate);
+  next.holding = !clearance && gripSpeed <= receiverSprint &&
+    Math.hypot(next.right - gripX, next.forward - gripF) <= .35;
+  return next;
 }
 
 // Both wheels are on the fuselage centreline. They carry the residual weight
 // but do not constrain bank like a pair of laterally separated landing wheels.
 export function createLandingRoll(hull, contact, weather, gustOffset) {
   const dynamics = poweredFlightDynamics(profile, { edgeRight: 0, edgeForward: 0 }, weather, gustOffset);
-  const station = predictedCatcherStation(contact);
-  let left = waitingCatcher(station, -1, 0, contact.forward);
-  let right = waitingCatcher(station, 1, 0, contact.forward);
+  const team = contact.catchers ?? waitingTeam(predictedCatcherStation(contact), contact.forward);
+  const { station } = team;
+  let { left, right } = team;
   const rear = Object.entries(rearCatchPoints).map(([name, point]) => ({
-    name, point, runner: waitingCatcher(station, point.side, point.offset, contact.forward), gripTime: 0,
+    name, point, runner: team[name], gripTime: 0,
   }));
   let catchReadyAt = null, wingCaughtAt = null, heldAtRestSeconds = 0;
   let bank = contact.bank, rollRate = contact.rollRate;
@@ -56,6 +58,7 @@ export function createLandingRoll(hull, contact, weather, gustOffset) {
     sample.pitch = contact.pitch * settle;
     sample.heading = heading;
     sample.track = track;
+    sample.yawRate = yawRate;
     sample.bank = bank;
     // Wing catchers can run alongside and steady the wing during rollout.
     // The hand force still requires an actual rendezvous with that wing.
@@ -95,6 +98,7 @@ export function createLandingRoll(hull, contact, weather, gustOffset) {
     const lowest = geometryAt(sample.pitch, shape, bank);
     const elapsed = sample.t - contact.t;
     const wheelGap = Math.max(0, initialWheelGap + verticalSpeed * elapsed - 4.905 * elapsed ** 2);
+    sample.wheelsOnGround = wheelGap === 0;
     const penetration = geometryAt(sample.pitch, gear, bank).bottom - lowest.bottom - wheelGap;
     let tipDrag = 0, yawMoment = 0;
     if (penetration > 0 && Math.abs(lowest.contactSide) > 1) {

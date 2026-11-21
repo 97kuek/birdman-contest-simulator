@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { CRUISE_AIRCRAFT } from '../domain/powered-cruise.js';
 import { renSparHeight } from '../domain/ren-wing.js';
-import { catcherRunSpeed, catcherStations, catcherVerge, predictedCatcherStation, waitingCatcher, rearCatchPoints } from '../domain/runway-support.js';
+import { catcherRunSpeed, catcherStations, catcherVerge, predictedCatcherStation, waitingCatcher, wingGripSpan, rearCatchPoints } from '../domain/runway-support.js';
 import { wingBendShape } from '../domain/wing-structure.js';
 import { createCrewMembers, standingCrewGeometry } from './crew-model.js';
 import { placeBone, poseRunner, reach } from './crew-motion.js';
@@ -20,7 +20,6 @@ const frameStarters = [-1, 1].map(side => ({
   aft: 2.20, gripY: boomHeight, gripZ: 1.92, boom: true,
 }));
 const starterRoles = [catcherRoles[0], ...frameStarters, catcherRoles[2], catcherRoles[3]];
-const catcherWingStation = 12.5;
 // Illustrative reaction time between wheel lift and the two wing handlers
 // letting go together with the frame and tail starters after the push tapers.
 const wingReleaseDelay = 1;
@@ -173,11 +172,14 @@ export function createRunwayCrew() {
       const { side, stationOffset } = member.role;
       const waiting = waitingCatcher(member.station, side, stationOffset, sample.forward);
       const jogging = waiting.forward > member.station + stationOffset && waiting.forward < member.station + stationOffset + 18;
-      const speed = move(member, waiting.right, waiting.forward, dt, true);
-      member.root.visible = jogging;
-      member.waiting.visible = !jogging;
+      const runner = sample.catchers?.station === member.station
+        ? sample.catchers[member.role.key ?? (side < 0 ? 'left' : 'right')] : null;
+      const position = runner ?? waiting;
+      const speed = move(member, position.right, position.forward, dt, true);
+      member.root.visible = Boolean(runner) || jogging;
+      member.waiting.visible = !member.root.visible;
       member.waiting.position.copy(member.root.position);
-      if (jogging) poseMember(member, speed, 0, modelBase);
+      if (member.root.visible) poseMember(member, speed, 0, modelBase);
     }
   }
   function receive(sample, phase, dt, modelBase) {
@@ -194,7 +196,7 @@ export function createRunwayCrew() {
       root.visible = true;
       const side = role.side;
       const slow = phase === 'landed' || sample.groundSpeed < 2;
-      const station = side * catcherWingStation;
+      const station = side * wingGripSpan;
       target.set(role.wing ? station : role.x, 0, role.wing ? .28 : role.aft).applyMatrix4(modelBase.matrix);
       const person = sample.catchers?.[role.wing ? (side < 0 ? 'left' : 'right') : role.key];
       const x = slow ? target.x : side * catcherVerge;

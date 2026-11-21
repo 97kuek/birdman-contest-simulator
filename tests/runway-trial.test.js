@@ -247,3 +247,31 @@ test('減速合図で漕ぎ止めた試技では後部の係が走行中に追�
   assert.ok(brake.t - touch.t < 10 && brake.groundSpeed > 4);
   assert.ok(stop.t > brake.t && stop.forward > brake.forward);
 });
+
+test('低い進入で走者が脇に入り、接地前に荷重を加えず、描画間隔にも左右されない', () => {
+  const trial = createRunwayTrial(hull, 'calm', 0, { preSpin: true });
+  let call, firstApproach, abreast, grip, final;
+  for (let tick = 1; tick <= 140 * 30; tick++) {
+    const { phase, sample } = trial.advance(tick / 30, 0, 0, call ? 0 : 203);
+    if (!call && phase === 'flight' && shouldCallForLanding(sample, 850)) call = tick / 30;
+    if (!sample.catchers) continue;
+    const { frame, left, right, tail } = sample.catchers;
+    if (phase === 'flight') {
+      firstApproach ??= sample;
+      assert.ok([frame, left, right, tail].every(person => !person.holding));
+      assert.ok(!sample.catcherBrakeN);
+    }
+    if (Math.abs(frame.forward - sample.forward) <= 2 && Math.abs(frame.right - sample.right) <= 2.5)
+      abreast ??= sample.t;
+    if (frame.holding) grip ??= sample.t;
+    if (phase === 'landed') { final = sample; break; }
+  }
+  assert.ok(firstApproach && firstApproach.t < final.touchdownAt && Math.abs(firstApproach.bank) < .001);
+  assert.ok(abreast < call + 11 && grip > abreast && grip > final.touchdownAt);
+  const skipped = createRunwayTrial(hull, 'calm', 0, { preSpin: true });
+  skipped.advance(call, 0, 0, 203);
+  const end = skipped.advance(140, 0, 0, 0);
+  assert.equal(end.phase, 'landed');
+  assert.deepEqual(end.sample.catchers, final.catchers);
+  assert.equal(end.sample.forward, final.forward);
+});

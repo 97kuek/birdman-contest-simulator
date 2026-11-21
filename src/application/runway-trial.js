@@ -3,7 +3,7 @@ import { createFlight, STEPS_PER_SECOND } from '../domain/flight.js';
 import { poweredGroundRoll, SPINUP_SECONDS } from '../domain/powered-launch.js';
 import { propTurnsPerCrank, reserveCapacityJ } from '../domain/ren-practice.js';
 import { GRAVITY, RAD_PER_RPM } from '../domain/units.js';
-import { isOnPavement, runwayLength as length, runwayHalfWidth as halfWidth, runwayVerge as verge } from '../domain/runway-support.js';
+import { advanceCatcherApproach, isOnPavement, runwayLength as length, runwayHalfWidth as halfWidth, runwayVerge as verge } from '../domain/runway-support.js';
 import { createRunwayDeparture } from '../domain/runway-departure.js';
 import { createLandingRoll } from '../domain/runway-rollout.js';
 import { rampSample } from './flight-session.js';
@@ -52,6 +52,7 @@ export function createRunwayTrial(hull, weather = 'calm', gustOffset = 0, { preS
   let state = { t: 0, speed: 0, travel: 0, omega: 0, angle: 0, reserve: reserveCapacityJ, watts: 0 };
   let phase = 'roll', reason, duration = null, flight, touchdown, landingRoll, crankAngle = 0, takeoffTravel;
   const departure = createRunwayDeparture(profile, wheelStations);
+  let approachTeam = null, nextCrewSample = 1;
   let starterReleasedAt = null, starterReleaseForward = null;
   function starterStatus() {
     const starterAttached = starterReleasedAt === null;
@@ -141,6 +142,19 @@ export function createRunwayTrial(hull, weather = 'calm', gustOffset = 0, { preS
     phase = 'flight';
   }
 
+  function approachingCatchers(air) {
+    // Consume the same recorded physics steps even when the display skips
+    // the approach. A partial step previews the pose without committing it.
+    for (; nextCrewSample < flight.samples.length; nextCrewSample++) {
+      const point = flight.samples[nextCrewSample];
+      if (departure.liftOff && point.t > departure.liftOff.seconds)
+        approachTeam = advanceCatcherApproach(approachTeam, point, point.t - flight.samples[nextCrewSample - 1].t);
+    }
+    const remainder = air.t - flight.samples[nextCrewSample - 1].t;
+    return remainder > 0 && departure.liftOff && air.t > departure.liftOff.seconds
+      ? advanceCatcherApproach(approachTeam, air, remainder) : approachTeam;
+  }
+
   function beginRollout() {
     touchdown = sample;
     // Large lateral contacts belong to a wing rather than the wheels.
@@ -180,7 +194,9 @@ export function createRunwayTrial(hull, weather = 'calm', gustOffset = 0, { preS
       if (phase === 'flight') {
         flight.advanceTo(elapsed - duration, pitch, rudder, watts);
         const air = flight.current();
-        sample = { ...air, ...starterStatus(), t: duration + air.t, pathLength: takeoffTravel + air.pathLength, distance: takeoffTravel + air.pathLength };
+        const crew = approachingCatchers(air);
+        sample = { ...air, ...starterStatus(), ...(crew && { catchers: crew }), t: duration + air.t,
+          pathLength: takeoffTravel + air.pathLength, distance: takeoffTravel + air.pathLength };
         if (flight.disqualified) abort('off-runway');
         else if (flight.failure) abort('structural-failure');
         else if (flight.result) beginRollout();

@@ -40,3 +40,57 @@ export function shouldCallForLanding(sample, runwayLength) {
   const rollout = Math.abs(along) * sample.groundSpeed / (2 * deceleration);
   return remaining <= Math.abs(along) * airSeconds + rollout + 32;
 }
+
+// The ground team can approach a descending aircraft without supporting it.
+// Estimate the meeting point only over the last few seconds of the approach.
+export const wingGripSpan = 12.5;
+const approachHorizon = 5;
+export const catcherSideGap = 2.2;
+const catcherPoints = {
+  left: { side: -1, right: -wingGripSpan, aft: .28, offset: 0 },
+  right: { side: 1, right: wingGripSpan, aft: .28, offset: 0 },
+  ...rearCatchPoints,
+};
+
+export function moveRunner(member, right, forward, maxTravel) {
+  const dx = right - member.right, df = forward - member.forward;
+  const distance = Math.hypot(dx, df);
+  const fraction = distance ? Math.min(1, maxTravel / distance) : 0;
+  return { right: member.right + fraction * dx, forward: member.forward + fraction * df, holding: false };
+}
+
+export function waitingTeam(station, forward) {
+  const team = { station };
+  for (const [name, point] of Object.entries(catcherPoints))
+    team[name] = waitingCatcher(station, point.side, point.offset, forward);
+  return team;
+}
+
+export function advanceCatcherApproach(team, sample, dt) {
+  const timeToGround = sample.verticalSpeed < 0 ? Math.max(0, sample.bottomHeight) / -sample.verticalSpeed : Infinity;
+  const approaching = timeToGround <= approachHorizon && sample.bottomHeight <= 2;
+  if (!approaching && !team) return null;
+  const lead = Math.min(approachHorizon, timeToGround);
+  const ahead = sample.forward + lead * sample.groundSpeed * Math.cos(sample.track);
+  const across = sample.right + lead * sample.groundSpeed * Math.sin(sample.track);
+  const station = predictedCatcherStation({ ...sample, forward: ahead });
+  team ??= waitingTeam(station, sample.forward);
+  const next = { station: team.station };
+  if (!approaching || (team.station !== station && Math.abs(sample.forward - team.station) > 80)) {
+    const waiting = waitingTeam(team.station, sample.forward);
+    let returned = true;
+    for (const name of Object.keys(catcherPoints)) {
+      const target = waiting[name];
+      next[name] = moveRunner(team[name], target.right, target.forward, catcherRunSpeed * dt);
+      if (Math.hypot(next[name].right - target.right, next[name].forward - target.forward) > .01) returned = false;
+    }
+    return returned ? null : next;
+  }
+  const cos = Math.cos(sample.heading), sin = Math.sin(sample.heading);
+  for (const [name, point] of Object.entries(catcherPoints)) {
+    const lateral = point.right + point.side * catcherSideGap;
+    next[name] = moveRunner(team[name], across + lateral * cos - point.aft * sin,
+      ahead - lateral * sin - point.aft * cos, catcherRunSpeed * dt);
+  }
+  return next;
+}
