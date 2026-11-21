@@ -5,7 +5,7 @@ import { aircraftProfile } from '../src/domain/aircraft-profiles.js';
 import { releaseState } from '../src/domain/aircraft-dynamics.js';
 import { poweredFlightDynamics } from '../src/domain/powered-flight.js';
 import { advanceState, STEPS_PER_SECOND } from '../src/domain/flight.js';
-import { poweredGroundRoll } from '../src/domain/powered-launch.js';
+import { levelRunwayTrack, poweredGroundRoll } from '../src/domain/powered-launch.js';
 import { createLandingRoll } from '../src/domain/runway-rollout.js';
 import { geometryAt, hullAtControls } from '../src/domain/water-contact.js';
 import { advanceCatcherApproach, shouldCallForLanding, runwayHalfWidth, runwayLength, runwayVerge } from '../src/domain/runway-support.js';
@@ -36,8 +36,8 @@ function landing(bankDegrees, { earlyApproach = true, windField, omitTipYaw = fa
     }
   }
   const roll = createLandingRoll(hull, contact, 'calm', 0, { windField, omitTipYaw, corneringStiffness, observeLoads });
-  const wheels = poweredGroundRoll(profile, { edgeRight: 0, edgeForward: contact.forward - profile.releaseWheelAft,
-    edgeHeight: 0, heading: 0, speed: 0, length: 0, pushed: 0, push: 0, dropStep: 0, rightStep: 0, forwardStep: 1 }, 'calm', 0, windField);
+  const track = levelRunwayTrack(profile, contact.right, contact.forward, contact.heading);
+  const wheels = poweredGroundRoll(profile, track, 'calm', 0, windField);
   let wheel = { t: 0, speed: contact.groundSpeed, travel: 0, omega: contact.rpm * RAD_PER_RPM,
     angle: contact.propellerAngle, reserve: contact.reserve, watts: 0 };
   const s = { ...contact };

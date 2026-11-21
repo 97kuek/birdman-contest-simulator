@@ -1,6 +1,6 @@
 import { aircraftProfile } from '../domain/aircraft-profiles.js';
 import { createFlight, STEPS_PER_SECOND } from '../domain/flight.js';
-import { poweredGroundRoll, SPINUP_SECONDS } from '../domain/powered-launch.js';
+import { levelRunwayTrack, poweredGroundRoll, SPINUP_SECONDS } from '../domain/powered-launch.js';
 import { propTurnsPerCrank, reserveCapacityJ } from '../domain/ren-practice.js';
 import { GRAVITY, RAD_PER_RPM } from '../domain/units.js';
 import { advanceCatcherApproach, isOnPavement, runwayLength as length, runwayHalfWidth as halfWidth, runwayVerge as verge } from '../domain/runway-support.js';
@@ -11,8 +11,6 @@ import { rampSample } from './flight-session.js';
 const profile = aircraftProfile('ren');
 const stepSeconds = 1 / STEPS_PER_SECOND;
 const startForward = 38;
-// Nose and rear wheel stations, measured aft of the CG on the 聯 model.
-const wheelStations = [-1.04, profile.releaseWheelAft];
 // Combined push from the starters. The force and hand-off limits are
 // assumptions, documented separately from the field footage.
 const starterPeakN = 120;
@@ -36,22 +34,12 @@ function exitFraction(from, to) {
   return fraction;
 }
 
-// With zero remaining deck length the reference point is the start of a
-// level track, so positive wheel travel advances from that point.
-function levelTrack(right, forward, heading) {
-  return { edgeRight: right - profile.releaseWheelAft * Math.sin(heading),
-    edgeForward: forward - profile.releaseWheelAft * Math.cos(heading), edgeHeight: 0,
-    heading, rightStep: Math.sin(heading), forwardStep: Math.cos(heading), dropStep: 0,
-    deckClearance: profile.deckClearance, length: 0, pushed: 0, push: 0,
-    duration: 0, windTimeOffset: 0, speed: 0 };
-}
-
 export function createRunwayTrial(hull, weather = 'calm', gustOffset = 0, { preSpin = false } = {}) {
-  let track = levelTrack(0, startForward, 0);
+  let track = levelRunwayTrack(profile, 0, startForward, 0);
   let rolling = poweredGroundRoll(profile, track, weather, gustOffset);
   let state = { t: 0, speed: 0, travel: 0, omega: 0, angle: 0, reserve: reserveCapacityJ, watts: 0 };
   let phase = 'roll', reason, duration = null, flight, touchdown, landingRoll, crankAngle = 0, takeoffTravel;
-  const departure = createRunwayDeparture(profile, wheelStations);
+  const departure = createRunwayDeparture(profile);
   let approachTeam = null, nextCrewSample = 1;
   let starterReleasedAt = null, starterReleaseForward = null;
   function starterStatus() {
@@ -133,11 +121,11 @@ export function createRunwayTrial(hull, weather = 'calm', gustOffset = 0, { preS
     const { support, pitchAcceleration } = rolling.forces(state, state.watts);
     const upward = -support / profile.propulsion.mass;
     // The last wheel unloads when each contact can accelerate upwards.
-    if (wheelStations.some(aft => upward - aft * pitchAcceleration <= 0)) return;
+    if (profile.wheelStations.some(aft => upward - aft * pitchAcceleration <= 0)) return;
     releaseStarters();
     duration = state.t;
     takeoffTravel = state.travel;
-    const launch = { ...levelTrack(sample.right, sample.forward, 0), speed: state.speed, windTimeOffset: duration };
+    const launch = { ...levelRunwayTrack(profile, sample.right, sample.forward, 0), speed: state.speed, windTimeOffset: duration };
     flight = createFlight(profile.design, hull, { weather, gustOffset, launch, releaseDrive: sample, runway: { exitFraction, departure } });
     phase = 'flight';
   }
@@ -166,7 +154,7 @@ export function createRunwayTrial(hull, weather = 'calm', gustOffset = 0, { preS
     landingRoll = createLandingRoll(hull, touchdown, weather, gustOffset);
     sample = { ...touchdown };
     landingRoll(sample, 0);
-    track = levelTrack(sample.right, sample.forward, sample.track);
+    track = levelRunwayTrack(profile, sample.right, sample.forward, sample.track);
     rolling = poweredGroundRoll(profile, track, weather, gustOffset);
     state = { t: sample.t, speed: sample.groundSpeed, travel: 0,
       omega: sample.rpm * RAD_PER_RPM, angle: sample.propellerAngle, reserve: sample.reserve, watts: 0 };

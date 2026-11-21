@@ -1,7 +1,7 @@
 // Replay the prescribed approach and rollout through the same skeleton and
 // wing-line attachment used on screen. The physics grip radius is horizontal.
 import { Group, Vector3 } from 'three';
-import { CG_HEIGHT } from '../src/domain/aircraft-dynamics.js';
+import { placeAircraft } from '../src/rendering/aircraft-pose.js';
 import { wingGripSpan } from '../src/domain/runway-support.js';
 import { createRunwayCrew, wingLineAnchor } from '../src/rendering/runway-crew.js';
 
@@ -9,9 +9,7 @@ function crewMeasurement() {
   const crew = createRunwayCrew(), base = new Group();
   const anchor = new Vector3(), palm = new Vector3();
   return (s, phase) => {
-    base.rotation.set(s.pitch, -s.heading, -(s.bank ?? 0), 'YXZ');
-    base.position.set(s.right, s.height, -s.forward)
-      .add(anchor.set(0, -CG_HEIGHT, 0).applyEuler(base.rotation));
+    placeAircraft(base, s);
     crew.update(s, phase, s.t, base);
     if (!s.scrapingWing || !s.catchers) return null;
     const sign = s.scrapingWing === 'right' ? 1 : -1;

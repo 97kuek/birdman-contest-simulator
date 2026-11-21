@@ -126,14 +126,6 @@ button:disabled {
   filter: drop-shadow(0 1px 2px #27405b50);
 }
 
-.text-button {
-  border: 1px solid #a6bcd0;
-  border-radius: 4px;
-  font-weight: 600;
-  font-size: 12px;
-  padding: 8px 12px;
-}
-
 #viewer {
   isolation: isolate;
   overflow: hidden;
@@ -1091,10 +1083,6 @@ dialog a {
 }
 
 @media (any-pointer: coarse) {
-  .weather-choices .local-weather span {
-    min-height: 44px;
-  }
-
   #align-panel kbd {
     display: none;
   }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { aircraftProfile } from '../../domain/aircraft-profiles.js';
 import { createCrewHead } from '../crew-model.js';
 import { addRigidAssembly, bentTube, box, ellipsoid, mesh, rod, surfacePatch } from './mesh-parts.js';
 
@@ -58,7 +59,7 @@ export function addRenCockpit(root, m) {
   for (const [z, y] of [[-1.04, .87], [.67, 1.13]]) {
     ellipsoid(fixed, [0, y, z], [.036, 1.38 - y, .106], m.foam, 'pylon-fairing');
   }
-  for (const z of [-1.04, .29]) {
+  for (const z of aircraftProfile('ren').wheelStations) {
     const wheel = mesh(fixed, new THREE.TorusGeometry(.058, .014, 8, 24), m.rubber, 'wheel');
     wheel.rotation.y = Math.PI / 2;
     wheel.position.set(0, -.328, z);

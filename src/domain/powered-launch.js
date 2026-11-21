@@ -29,6 +29,16 @@ function sampleAt(samples, key, value) {
   return interpolate(a, b, (value - a[key]) / (b[key] - a[key]));
 }
 
+// With zero remaining deck length the reference point is the start of a
+// level track, so positive wheel travel advances from that point.
+export function levelRunwayTrack(profile, right, forward, heading) {
+  return { edgeRight: right - profile.releaseWheelAft * Math.sin(heading),
+    edgeForward: forward - profile.releaseWheelAft * Math.cos(heading), edgeHeight: 0,
+    heading, rightStep: Math.sin(heading), forwardStep: Math.cos(heading), dropStep: 0,
+    deckClearance: profile.deckClearance, length: 0, pushed: 0, push: 0,
+    duration: 0, windTimeOffset: 0, speed: 0 };
+}
+
 export function poweredGroundRoll(profile, base, weather, gustOffset, windField) {
   const plane = profile.propulsion, dynamics = poweredFlightDynamics(profile, base, weather, gustOffset, windField);
   const climate = riderClimate(weather, gustOffset);

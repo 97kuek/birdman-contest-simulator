@@ -7,7 +7,7 @@ import { geometryAt, hullAtControls } from './water-contact.js';
 
 const profile = aircraftProfile('ren');
 const wheelDepth = CG_HEIGHT + profile.deckClearance;
-const gear = [[-1.04, -wheelDepth], [profile.releaseWheelAft, -wheelDepth]];
+const gear = profile.wheelStations.map(aft => [aft, -wheelDepth]);
 const pivotInertia = profile.rollInertia + profile.mass * wheelDepth ** 2;
 // Normalised cornering stiffness (per radian) and dry friction are assumptions
 // for the simulator. Split the residual normal load by the CG lever arms.

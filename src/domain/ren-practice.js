@@ -1,12 +1,9 @@
-import { CRUISE_AIRCRAFT } from './powered-cruise.js';
-
 // Short lake course in platform right/forward metres. Designed for play.
 export const practiceBuoys = Object.freeze([
   { right: -34, forward: 140 }, { right: 20, forward: 272 }, { right: 85, forward: 395 },
 ]);
 const captureRadius = 23;
 export const reserveCapacityJ = 15000;
-export const cruisePowerW = CRUISE_AIRCRAFT.ren.power;
 export const propTurnsPerCrank = 2;
 
 // Scenario values, not measurements of the pilot. Aerodynamic wind is already

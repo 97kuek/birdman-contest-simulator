@@ -1,31 +1,17 @@
 import * as THREE from 'three';
+import { terrainAssets } from './terrain/assets.js';
 import { addServiceVehicles } from './fujikawa-service-area.js';
 import { surfaceHeight, terrainMesh } from './terrain/surface.js';
 import { fieldLandmarks } from './fujikawa-landmarks.js';
 import { runwayVerge } from './fujikawa-verges.js';
 
-function asset(name) {
-  return new URL(`./fujikawa/${name}`, document.baseURI).href;
-}
-
-async function fetchAsset(name) {
-  const response = await fetch(asset(name));
-  if (!response.ok) throw new Error(`Fujikawa terrain ${name}: ${response.status}`);
-  return response;
-}
-
-async function loadLayer(layer, loader) {
-  const [buffer, photo] = await Promise.all([
-    fetchAsset(layer.name + '.bin').then(response => response.arrayBuffer()),
-    loader.loadAsync(asset(layer.name + '.webp')),
+async function loadLayer(layer, assets) {
+  const [grid, photo] = await Promise.all([
+    assets.elevations(layer, layer.name + '.bin'),
+    assets.photo(layer.name + '.webp', 8),
   ]);
-  if (buffer.byteLength !== layer.width * layer.height * 2) {
-    throw new Error(`Invalid Fujikawa elevation grid: ${layer.name}`);
-  }
-  photo.colorSpace = THREE.SRGBColorSpace;
-  photo.anisotropy = 8;
-  // The shared mesh builder expects decimetres. These grids store 20 cm steps.
-  const elevations = Float32Array.from(new Int16Array(buffer), height => height * 2);
+  // The mesh builder expects decimetres. These grids store 20 cm steps.
+  const elevations = Float32Array.from(grid, height => height * 2);
   return { layer, elevations, photo };
 }
 
@@ -107,20 +93,20 @@ function createWindsock() {
 
 /** North-up terrain and a runway frame: +X right, −Z northbound, Y=0 on the pavement. */
 export async function addFujikawaTerrain(scene) {
-  const { layers, runway, fuji } = await (await fetchAsset('layers.json')).json();
-  const loader = new THREE.TextureLoader();
+  const assets = terrainAssets('fujikawa');
+  const { layers, runway, fuji } = await assets.json('layers.json');
   const landscape = new THREE.Group();
   landscape.name = '富士川河口・駿河湾・富士山';
   landscape.position.y = -runway.elevation;
   const [layerData, pavementPhoto, grassDetail, peak, trees, shrubs, canopy, mown, scrub, vergePlants, waterMask] = await Promise.all([
-    Promise.all(layers.map(layer => loadLayer(layer, loader))),
-    loader.loadAsync(asset('pavement.webp')),
-    loader.loadAsync(asset('grass-detail.webp')),
-    loadLayer(fuji, loader),
-    fetchAsset('trees.json').then(response => response.json()),
-    loader.loadAsync(asset('shrubs.png')), loader.loadAsync(asset('canopy.png')),
-    loader.loadAsync(asset('mown-grass.webp')), loader.loadAsync(asset('scrub-surface.webp')),
-    loader.loadAsync(asset('verge-plants.webp')), loader.loadAsync(asset('river-water.png')),
+    Promise.all(layers.map(layer => loadLayer(layer, assets))),
+    assets.photo('pavement.webp', 16),
+    assets.texture('grass-detail.webp'),
+    loadLayer(fuji, assets),
+    assets.json('trees.json'),
+    assets.texture('shrubs.png'), assets.texture('canopy.png'),
+    assets.texture('mown-grass.webp'), assets.texture('scrub-surface.webp'),
+    assets.texture('verge-plants.webp'), assets.texture('river-water.png'),
   ]);
   const riverTime = { value: 0 };
   let parent;
@@ -148,8 +134,6 @@ export async function addFujikawaTerrain(scene) {
   runwayDetail.position.set(facility.position.x, runway.elevation, facility.position.z);
   runwayDetail.rotation.copy(facility.rotation);
   landscape.add(runwayDetail);
-  pavementPhoto.colorSpace = THREE.SRGBColorSpace;
-  pavementPhoto.anisotropy = 16;
   const pavementGeometry = new THREE.PlaneGeometry(runway.width, runway.length);
   const pavement = new THREE.Mesh(pavementGeometry, new THREE.MeshBasicMaterial({
     map: pavementPhoto, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,

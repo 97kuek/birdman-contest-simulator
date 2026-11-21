@@ -50,6 +50,7 @@ const qx25 = Object.freeze({
 
 // The design point fixes the polar. Tail limits come from the three-view. Inertias, stick rates and
 // release conditions are estimates for a seated pilot operating the tail.
+const renWheelStations = Object.freeze([-1.04, .29]); // metres aft of CG, front then rear
 const ren = Object.freeze({
   design: REN_DESIGN, propulsion: CRUISE_AIRCRAFT.ren, fixedPilot: true,
   mass: CRUISE_AIRCRAFT.ren.mass, area: CRUISE_AIRCRAFT.ren.area, span: REN_DESIGN.span,
@@ -57,7 +58,7 @@ const ren = Object.freeze({
   rollInertia: 0.45 * 33.2 * REN_DESIGN.span ** 2 / 12,
   // Mass radius of gyration about the lateral axis, estimated at 1.1 m.
   pitchInertia: CRUISE_AIRCRAFT.ren.mass * 1.1 ** 2,
-  cruiseSpeed: CRUISE_AIRCRAFT.ren.speed, deckClearance: 0.40, releaseWheelAft: .29,
+  cruiseSpeed: CRUISE_AIRCRAFT.ren.speed, deckClearance: 0.40, wheelStations: renWheelStations, releaseWheelAft: renWheelStations[1],
   releasePathDeg: null, releaseCgShift: 0, releasePitchRateDeg: 0,
   rudderLimitDeg: 12.5, elevatorLimitDeg: 10,
   elevatorControl: Object.freeze({ pressDegPerSecond: 18, returnDegPerSecond: 36 }),

@@ -13,8 +13,9 @@ import numpy as np
 from fujikawa_vegetation import bake as bake_verge_textures
 
 LAT, LON = 35.120833, 138.631667
-OUT = Path(__file__).resolve().parents[1] / 'assets' / 'fujikawa'
-CACHE = Path('/tmp') / 'birdman-gsi-fujikawa'
+ROOT = Path(__file__).resolve().parents[1]
+OUT = ROOT / 'assets' / 'fujikawa'
+CACHE = ROOT / '.cache' / 'fujikawa' / 'tiles'
 BASE = 'https://cyberjapandata.gsi.go.jp/xyz/'
 SEA_BGR = (94, 82, 56)
 METRES_PER_WORLD = 40075016.686 * math.cos(math.radians(LAT))

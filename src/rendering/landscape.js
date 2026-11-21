@@ -1,53 +1,16 @@
 import * as THREE from 'three';
+import { terrainAssets } from './terrain/assets.js';
 import { inBounds, matsubaraGround, terrainMesh } from './terrain/surface.js';
 import { shorelineBuildings } from './terrain/buildings.js';
 import { riverBridges } from './terrain/bridges.js';
 import { shorelineTrees } from './terrain/trees.js';
 
-function assetUrl(name) {
-  return new URL(`./terrain/${name}`, document.baseURI);
-}
-
-async function fetchTerrain(name, suffix = '') {
-  const response = await fetch(assetUrl(name + suffix));
-  if (!response.ok) throw new Error(`Terrain asset ${name}: ${response.status}`);
-  return response;
-}
-
-async function readMetadata(name) {
-  const response = await fetchTerrain(name);
-  return response.json();
-}
-
-async function readGrid(name) {
-  const response = await fetchTerrain(name, '.gz');
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  // Some static hosts already decode .gz through the Content-Encoding header.
-  if (bytes[0] !== 0x1f || bytes[1] !== 0x8b) return bytes.buffer;
-  if (typeof DecompressionStream === 'function') {
-    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-    return new Response(stream).arrayBuffer();
-  }
-  const { gunzipSync } = await import('three/addons/libs/fflate.module.js');
-  return gunzipSync(bytes).buffer;
-}
-
-async function loadPhoto(loader, name) {
-  const photo = await loader.loadAsync(assetUrl(name).href);
-  photo.colorSpace = THREE.SRGBColorSpace;
-  photo.anisotropy = 4;
-  return photo;
-}
-
-async function readLayer(layer, loader) {
-  const [buffer, photo] = await Promise.all([
-    readGrid(layer.name + '.bin'),
-    layer.name === 'basin' ? null : loadPhoto(loader, layer.name + '.webp'),
+async function readLayer(layer, assets) {
+  const [elevations, photo] = await Promise.all([
+    assets.elevations(layer, layer.name + '.bin.gz'),
+    layer.name === 'basin' ? null : assets.photo(layer.name + '.webp', 4),
   ]);
-  if (buffer.byteLength !== layer.width * layer.height * 2) {
-    throw new Error(`Invalid elevation grid: ${layer.name}`);
-  }
-  return { layer, elevations: new Int16Array(buffer), photo };
+  return { layer, elevations, photo };
 }
 
 function containsOutline(bounds, outline) {
@@ -59,12 +22,12 @@ function containsOutline(bounds, outline) {
 
 /** Local metres relative to the launch, east +X, south +Z, lake surface Y=0. */
 export async function addLandscape(scene) {
-  const loader = new THREE.TextureLoader();
+  const assets = terrainAssets('terrain');
   const [assetsByLayer, objects, detail, detailBuffer, detailPhoto, shallowsMask, facades, landMask, shoreRings] = await Promise.all([
-    readMetadata('index.json').then(layers => Promise.all(layers.map(layer => readLayer(layer, loader)))),
-    readMetadata('shoreline.json'), readMetadata('matsubara.json'), readGrid('matsubara.bin'),
-    loadPhoto(loader, 'matsubara.webp'), loader.loadAsync(assetUrl('shallows.png').href),
-    loadPhoto(loader, 'facades.jpg'), loader.loadAsync(assetUrl('land-mask.png').href), readMetadata('flight-shore.json'),
+    assets.json('index.json').then(layers => Promise.all(layers.map(layer => readLayer(layer, assets)))),
+    assets.json('shoreline.json'), assets.json('matsubara.json'), assets.buffer('matsubara.bin.gz'),
+    assets.photo('matsubara.webp', 4), assets.texture('shallows.png'),
+    assets.photo('facades.jpg', 4), assets.texture('land-mask.png'), assets.json('flight-shore.json'),
   ]);
   facades.wrapS = THREE.RepeatWrapping;
 

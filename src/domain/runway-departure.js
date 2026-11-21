@@ -4,7 +4,7 @@ import { CG_HEIGHT } from './aircraft-dynamics.js';
 // while the pilot is still accelerating on the runway.
 const tyreRadius = .072;
 
-export function createRunwayDeparture(profile, wheelStations) {
+export function createRunwayDeparture(profile) {
   let liftOff = null, departureComplete = false;
   return {
     get liftOff() { return liftOff; },
@@ -20,7 +20,7 @@ export function createRunwayDeparture(profile, wheelStations) {
       const hubUp = tyreRadius - profile.deckClearance - CG_HEIGHT;
       const hubSide = hubUp * Math.sin(state.bank);
       const pitchOffset = hubUp * Math.cos(state.bank) * Math.sin(state.pitch);
-      if (!wheelStations.some(z => Math.hypot(aft - z * Math.cos(state.pitch) - pitchOffset, side - hubSide) <= tyreRadius))
+      if (!profile.wheelStations.some(z => Math.hypot(aft - z * Math.cos(state.pitch) - pitchOffset, side - hubSide) <= tyreRadius))
         return false;
 
       // An inelastic runway normal arrests only the downward speed at this

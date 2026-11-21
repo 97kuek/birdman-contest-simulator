@@ -1,3 +1,4 @@
+import { byId } from './dom.js';
 import data from './opening-comparison.json';
 
 // Official broadcast seconds corresponding to logger time 3.90 s.
@@ -5,7 +6,6 @@ import data from './opening-comparison.json';
 const videoZero = 123.42;
 const clipEnd = videoZero + data.duration;
 const videoId = 'brdhsnknoKs';
-const byId = id => document.getElementById(id);
 const scrubber = byId('time');
 const play = byId('play');
 const status = byId('film-status');
