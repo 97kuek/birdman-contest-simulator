@@ -275,3 +275,30 @@ test('低い進入で走者が脇に入り、接地前に荷重を加えず、�
   assert.deepEqual(end.sample.catchers, final.catchers);
   assert.equal(end.sample.forward, final.forward);
 });
+
+test('接地直後は風下へ流れ、滑り出したタイヤには逆向きの力が働く', () => {
+  const airborne = createRunwayTrial(hull).advance(32, 0, 0, 300).sample;
+  const geometry = geometryAt(0, hullAtControls(hull, 0, 0, airborne.wing), 0);
+  function touch(crosswind, speed) {
+    const contact = { ...airborne, t: 0, pitch: 0, bank: 0, heading: 0, track: 0,
+      rollRate: 0, yawRate: 0, pitchRate: 0, groundSpeed: speed, verticalSpeed: -.36,
+      height: -geometry.bottom, contactSide: geometry.contactSide };
+    const roll = createLandingRoll(hull, contact, 'calm', 0, {
+      windField: () => ({ crosswind, headwind: 0, updraft: 0 }),
+    });
+    const step = 1 / 120;
+    const first = { ...contact, t: step };
+    roll(first, step);
+    const second = { ...first, t: 2 * step };
+    roll(second, step);
+    return { first, second };
+  }
+  for (const wind of [-.5, .5]) {
+    const { first, second } = touch(wind, 7);
+    assert.ok(first.track * wind < 0 && first.aeroSideN * wind < 0);
+    assert.equal(Math.abs(first.tyreSideN), 0);
+    assert.ok(second.wheelLoad > 0 && second.tyreSideN * wind > 0);
+    assert.equal(touch(wind, 0).second.groundSpeed, 0);
+  }
+  assert.equal(touch(0, 7).second.track, 0);
+});

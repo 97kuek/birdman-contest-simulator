@@ -181,6 +181,7 @@ export function createRunwayTrial(hull, weather = 'calm', gustOffset = 0, { preS
     sample.pathLength += touchdown.pathLength;
     sample.distance = sample.pathLength;
     const stopped = landingRoll(sample, state.t - before);
+    state.speed = sample.groundSpeed;
     if (phase === 'rollout' && stopped) phase = 'landed';
   }
 

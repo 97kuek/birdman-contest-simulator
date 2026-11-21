@@ -2,13 +2,26 @@ import { CG_HEIGHT } from './aircraft-dynamics.js';
 import { aircraftProfile } from './aircraft-profiles.js';
 import { poweredFlightDynamics } from './powered-flight.js';
 import { predictedCatcherStation, waitingTeam, rearCatchPoints, moveRunner, catcherSideGap, wingGripSpan as catchSpan } from './runway-support.js';
-import { RAD_PER_RPM } from './units.js';
+import { GRAVITY, RAD_PER_RPM } from './units.js';
 import { geometryAt, hullAtControls } from './water-contact.js';
 
 const profile = aircraftProfile('ren');
 const wheelDepth = CG_HEIGHT + profile.deckClearance;
 const gear = [[-1.04, -wheelDepth], [profile.releaseWheelAft, -wheelDepth]];
 const pivotInertia = profile.rollInertia + profile.mass * wheelDepth ** 2;
+// Normalised cornering stiffness (per radian) and dry friction are assumptions
+// for the simulator. Split the residual normal load by the CG lever arms.
+const tyreFriction = .5;
+const nominalCorneringStiffness = 4;
+const lowSpeedReference = .5; // m/s, regularises slip angle near rest
+const frontArm = -gear[0][0], rearArm = -gear[1][0];
+const frontLoadFraction = -rearArm / (frontArm - rearArm);
+function tyreSideForce(axleArm, normal, state, corneringStiffness) {
+  const slipSpeed = state.v + axleArm * state.r;
+  const angle = Math.atan2(slipSpeed, Math.max(lowSpeedReference, Math.abs(state.u)));
+  return -normal * tyreFriction * Math.tanh(corneringStiffness * angle / tyreFriction);
+}
+
 const brakeForcePerRunnerN = 55;
 
 // A receiver can move towards an intercept before the aircraft slows to
@@ -35,8 +48,8 @@ function intercept(member, side, sample, x, aft, dt, rear = false) {
 
 // Both wheels are on the fuselage centreline. They carry the residual weight
 // but do not constrain bank like a pair of laterally separated landing wheels.
-export function createLandingRoll(hull, contact, weather, gustOffset) {
-  const dynamics = poweredFlightDynamics(profile, { edgeRight: 0, edgeForward: 0 }, weather, gustOffset);
+export function createLandingRoll(hull, contact, weather, gustOffset, { windField, omitTipYaw = false, corneringStiffness = nominalCorneringStiffness } = {}) {
+  const dynamics = poweredFlightDynamics(profile, { edgeRight: 0, edgeForward: 0 }, weather, gustOffset, windField);
   const team = contact.catchers ?? waitingTeam(predictedCatcherStation(contact), contact.forward);
   const { station } = team;
   let { left, right } = team;
@@ -52,6 +65,7 @@ export function createLandingRoll(hull, contact, weather, gustOffset) {
   const wingFirst = Math.abs(contact.contactSide) > 1;
   let leftTip = contact.wing.leftTip, rightTip = contact.wing.rightTip;
   let leftTipRate = 0, rightTipRate = 0;
+  let tyreRollMoment = 0;
 
   return function advance(sample, dt) {
     const settle = Math.max(0, 1 - (sample.t - contact.t) / .6);
@@ -82,7 +96,7 @@ export function createLandingRoll(hull, contact, weather, gustOffset) {
     const desiredMoment = -pivotInertia * (5 * bank + 3.5 * rollRate);
     const catchMoment = Math.min(left.holding ? 110 * catchSpan : 0,
       Math.max(right.holding ? -110 * catchSpan : 0, desiredMoment));
-    rollRate += (rates.p * profile.rollInertia + wheelMoment + catchMoment) * dt / pivotInertia;
+    rollRate += (rates.p * profile.rollInertia + wheelMoment + tyreRollMoment + catchMoment) * dt / pivotInertia;
     bank += rollRate * dt;
     leftTipRate += rates.leftTipRate * dt;
     rightTipRate += rates.rightTipRate * dt;
@@ -100,26 +114,47 @@ export function createLandingRoll(hull, contact, weather, gustOffset) {
     const wheelGap = Math.max(0, initialWheelGap + verticalSpeed * elapsed - 4.905 * elapsed ** 2);
     sample.wheelsOnGround = wheelGap === 0;
     const penetration = geometryAt(sample.pitch, gear, bank).bottom - lowest.bottom - wheelGap;
-    let tipDrag = 0, yawMoment = 0;
+    let tipDrag = 0, yawMoment = 0, tipNormal = 0;
+    sample.scrapingWing = null;
     if (penetration > 0 && Math.abs(lowest.contactSide) > 1) {
+      sample.scrapingWing = lowest.contactSide < 0 ? 'left' : 'right';
       const arm = lowest.contactSide;
       // Normal impulse required to arrest a descending tip, plus its elastic
       // contact load. Sliding friction opposes the tip velocity, including yaw.
-      const normal = Math.min(profile.mass * 9.81, 7000 * penetration +
+      tipNormal = Math.min(profile.mass * 9.81, 7000 * penetration +
         350 * Math.max(0, arm * rollRate) + (wingFirst && wheelGap > 0 ? support : 0));
       const tipSpeed = sample.groundSpeed * Math.cos(track - heading) - arm * yawRate;
-      const friction = .42 * normal * Math.tanh(tipSpeed / .3);
+      const friction = .42 * tipNormal * Math.tanh(tipSpeed / .3);
       tipDrag = friction * Math.cos(track - heading);
-      yawMoment = arm * friction;
+      // Paired analysis can remove only the yaw torque, retaining normal contact and drag.
+      yawMoment = omitTipYaw ? 0 : arm * friction;
       bank -= penetration / lowest.contactSide;
       if (rollRate * lowest.contactSide > 0) rollRate = 0;
     }
-    // Lateral tyre force turns the velocity vector towards the wheel plane.
-    // Near rest the ground damps residual rotation instead of turning in place.
-    const slip = sample.groundSpeed * Math.sin(heading - track);
-    const lateral = wheelGap > 0 ? 0 : Math.min(.5 * support, Math.max(-.5 * support, 95 * slip));
-    if (sample.groundSpeed > .15) track += lateral * dt / (profile.mass * sample.groundSpeed);
-    yawRate += (yawMoment / yawInertia + rates.r - .7 * yawRate) * dt;
+    // rates.v is in rotating heading axes. Remove its transport term to get
+    // the inertial acceleration to the right of the nose (includes banked lift).
+    const aeroSideN = profile.mass * (rates.v + rates.heading * state.u);
+    const wheelNormal = sample.wheelsOnGround ? Math.max(0, support - tipNormal) : 0;
+    const frontNormal = frontLoadFraction * wheelNormal;
+    const frontForce = tyreSideForce(frontArm, frontNormal, state, corneringStiffness);
+    const rearForce = tyreSideForce(rearArm, wheelNormal - frontNormal, state, corneringStiffness);
+    const atRest = sample.groundSpeed === 0 && Math.abs(aeroSideN) <= tyreFriction * wheelNormal;
+    const tyreSideN = atRest ? -aeroSideN : frontForce + rearForce;
+    const lateralSpeed = state.v + (aeroSideN + tyreSideN) * dt / profile.mass;
+    // The wheel drive has already advanced longitudinal speed and braking.
+    // Apply this transverse impulse once; carry both speed and track forward.
+    if (dt > 0 && !atRest) {
+      sample.groundSpeed = Math.hypot(state.u, lateralSpeed);
+      if (sample.groundSpeed > 0) track = heading + Math.atan2(lateralSpeed, state.u);
+    }
+    const tyreYawMoment = atRest ? 0 : frontArm * frontForce + rearArm * rearForce;
+    yawRate += ((yawMoment + tyreYawMoment) / yawInertia + rates.r - .7 * yawRate) * dt;
+    // Use the contact reaction below the CG in the next explicit roll step.
+    tyreRollMoment = -wheelDepth * Math.cos(bank) * tyreSideN;
+    sample.wheelLoad = wheelNormal / (profile.mass * GRAVITY);
+    sample.speed = loads.air.speed;
+    sample.aeroSideN = aeroSideN;
+    sample.tyreSideN = tyreSideN;
     if (sample.groundSpeed < .15) yawRate *= Math.exp(-6 * dt);
     heading += yawRate * dt;
     sample.heading = heading;

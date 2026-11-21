@@ -29,8 +29,8 @@ function sampleAt(samples, key, value) {
   return interpolate(a, b, (value - a[key]) / (b[key] - a[key]));
 }
 
-export function poweredGroundRoll(profile, base, weather, gustOffset) {
-  const plane = profile.propulsion, dynamics = poweredFlightDynamics(profile, base, weather, gustOffset);
+export function poweredGroundRoll(profile, base, weather, gustOffset, windField) {
+  const plane = profile.propulsion, dynamics = poweredFlightDynamics(profile, base, weather, gustOffset, windField);
   const climate = riderClimate(weather, gustOffset);
   const reference = releaseState(base, true, true, profile);
   const horizontal = Math.hypot(base.rightStep, base.forwardStep);
