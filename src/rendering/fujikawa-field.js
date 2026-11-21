@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { loadVenueModel } from './authored-models.js';
 import { createAircraftPose } from './aircraft-pose.js';
 import { createCockpitDisplay } from './aircraft/display.js';
 import { createRenAircraft } from './aircraft/ren.js';
@@ -7,7 +8,7 @@ import { createSkyDome } from './sky.js';
 import { createRunwayCrew } from './runway-crew.js';
 import { addFujikawaTerrain } from './fujikawa-terrain.js';
 
-export async function createFujikawaField(cameraRig, describe) {
+export async function createFujikawaField(crewModel, cameraRig, describe) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color();
   scene.fog = new THREE.FogExp2(0xcad7d8, 0.000018);
@@ -18,7 +19,11 @@ export async function createFujikawaField(cameraRig, describe) {
   Object.assign(sun.shadow.camera, { left: -24, right: 24, top: 24, bottom: -24, near: 1, far: 140 });
   sun.shadow.normalBias = .015;
   scene.add(sky, sun, sun.target);
-  const { facility, landscape, riverTime } = await addFujikawaTerrain(scene);
+  const [terrain, van] = await Promise.all([
+    addFujikawaTerrain(scene),
+    loadVenueModel('chase-van'),
+  ]);
+  const { facility, landscape, riverTime } = terrain;
   const lightOffset = new THREE.Vector3(-35, 62, 28);
   const skyUniforms = { nightScene: { value: 0 }, sunlight: { value: lightOffset.clone().normalize() },
     clockTime: { value: 0 }, meanWind: { value: 1 }, windAngle: { value: 0 }, gust: { value: 0 } };
@@ -32,7 +37,7 @@ export async function createFujikawaField(cameraRig, describe) {
   const hull = modelHull(aircraft);
   const modelBase = new THREE.Group();
   modelBase.add(aircraft);
-  const crew = createRunwayCrew();
+  const crew = createRunwayCrew(crewModel, van);
   facility.add(modelBase, crew.group);
   let stoppedAt, stoppedSeconds;
   const runway = facility.userData.runway;

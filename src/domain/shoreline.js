@@ -75,9 +75,10 @@ export function aircraftShoreContact(hull, firstLand) {
         const key = point === left ? 'left' : 'right';
         const p = hull.wingTips[key], twist = s.wing[key + 'Twist'];
         const failed = wingFoldDirection(s.wing, key);
+        const foldX = failed < 0 ? 8 : 6, fold = Math.abs(failed);
         aft = p[0] + twist * p[4];
-        up = p[1] + s.wing[key + 'Tip'] * p[3] + twist * p[5] + failed * p[7];
-        side = p[2] + Math.abs(failed) * p[6];
+        up = p[1] + s.wing[key + 'Tip'] * p[3] + twist * p[5] + fold * p[foldX + 1];
+        side = p[2] + fold * p[foldX];
       }
       const back = aft * cp + (up * cb - side * sb) * sp;
       const across = side * cb + up * sb;

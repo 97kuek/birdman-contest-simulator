@@ -8,15 +8,13 @@ import { byId } from './presentation/dom.js';
 import { setupFlightSound } from './presentation/flight-sound.js';
 import { selectedWeather, setupTrials } from './presentation/flight-screen.js';
 import { bindViewerControls, setupViewerShell, showCameraMode, trackViewportFraction } from './presentation/viewer-shell.js';
-import { createAircraft } from './rendering/aircraft.js';
-import { createRenAircraft } from './rendering/aircraft/ren.js';
-import { createQx25Aircraft } from './rendering/aircraft/qx25.js';
 import { createAircraftPose } from './rendering/aircraft-pose.js';
 import { createCockpitDisplay } from './rendering/aircraft/display.js';
 import { createDaylight } from './rendering/daylight.js';
 import { createPracticeBuoys } from './rendering/practice-buoys.js';
 import { createChaseBoat } from './rendering/chase-boat.js';
 import { modelHull } from './rendering/collision-hull.js';
+import { loadAuthoredModel, loadVenueModel } from './rendering/authored-models.js';
 import { createLaunchCrew } from './rendering/crew.js';
 import { createFlightCamera } from './rendering/flight-camera.js';
 import { createFlightTrail } from './rendering/flight-trail.js';
@@ -80,10 +78,15 @@ async function start() {
   const facility = new THREE.Group();
   facility.rotation.y = THREE.MathUtils.degToRad(65);
   scene.add(facility);
-  const platform = createPlatform({ shoreDistance: 168 });
-  const flag = createPlatformFlag();
+  const [platformModel, buoyModel, crewModel, boatModel, { createAircraft }, { createQx25Aircraft }, { createRenAircraft }, landscape] = await Promise.all([
+    loadVenueModel('biwa-platform'), loadAuthoredModel('practice-buoy'),
+    loadAuthoredModel('ground-crew'), loadVenueModel('chase-boat'),
+    import('./rendering/aircraft.js'), import('./rendering/aircraft/qx25.js'), import('./rendering/aircraft/ren.js'),
+    addLandscape(scene),
+  ]);
+  const platform = createPlatform({ shoreDistance: 168 }, platformModel);
+  const flag = createPlatformFlag(platform);
   const flagInset = createFlagInset(byId('flag-inset'));
-  platform.add(flag.group);
   facility.add(platform);
   enableReflection(platform);
   platform.traverse(part => {
@@ -92,7 +95,7 @@ async function start() {
       part.castShadow = true;
     }
   });
-  const toricaCrew = createLaunchCrew();
+  const toricaCrew = createLaunchCrew(crewModel);
   let crew = toricaCrew;
   enableReflection(crew.group);
   facility.add(crew.group);
@@ -106,10 +109,10 @@ async function start() {
 
   let trials, setNight, firstLand, current, field, fieldPromise;
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
-  const marks = createPracticeBuoys();
+  const marks = createPracticeBuoys(buoyModel);
   facility.add(marks);
   enableReflection(marks);
-  const boat = createChaseBoat();
+  const boat = createChaseBoat(boatModel);
   facility.add(boat.group);
   enableReflection(boat.group);
   boat.update(null, 0, 0);
@@ -180,7 +183,6 @@ async function start() {
     renderer.render(scene, cameraRig.camera);
   });
 
-  const landscape = await addLandscape(scene);
   enableReflection(landscape);
   setNight = createDaylight({ scene, skyLight: ambient, directLight: sun, platform, landscape, lake });
   lake.setShallows(landscape.userData.shallows);
@@ -194,7 +196,7 @@ async function start() {
     if (!entry) {
       const model = aircraftFactories[id]();
       if (model !== ryukai) enableReflection(model);
-      const teamCrew = id === 'ryukai' ? toricaCrew : createLaunchCrew(id);
+      const teamCrew = id === 'ryukai' ? toricaCrew : createLaunchCrew(crewModel, id);
       if (teamCrew !== toricaCrew) enableReflection(teamCrew.group);
       const hull = modelHull(model);
       const session = new FlightSession(hull, selectedWeather(), drawWindOffset, firstLand, id, platform.userData.contact(hull));
@@ -224,7 +226,7 @@ async function start() {
     loadField() {
       fieldPromise ??= Promise.all([import('./rendering/fujikawa-field.js'), import('./application/runway-trial.js')])
         .then(async ([{ createFujikawaField }, { createRunwayTrial }]) => {
-          const site = await createFujikawaField(cameraRig, text => renderer.domElement.setAttribute('aria-description', text));
+          const site = await createFujikawaField(crewModel, cameraRig, text => renderer.domElement.setAttribute('aria-description', text));
           return Object.assign(site, { trial: (weather, offset) => createRunwayTrial(site.hull, weather, offset, { preSpin: true }) });
         })
         .catch(error => { fieldPromise = null; throw error; });

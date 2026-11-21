@@ -1,11 +1,10 @@
-// The collision index uses the same facility-local triangles and tube endpoints
-// as the renderer. Painted stripes and decals do not add collision surfaces.
-import { Box3, Line3, Ray, Vector3 } from 'three';
+// The collision index uses the authored meshes in facility-local coordinates. Painted stripes and decals do not add collision surfaces.
+import { Box3, Ray, Vector3 } from 'three';
 
 export function createPlatformContact() {
   const cells = new Map(), bounds = new Box3(), cellWidth = 4;
-  const ray = new Ray(), hit = new Vector3(), nearRay = new Vector3(), nearTube = new Vector3();
-  const delta = new Vector3(), scratch = new Vector3(), stepBounds = new Box3();
+  const ray = new Ray(), hit = new Vector3();
+  const delta = new Vector3(), stepBounds = new Box3();
   function visit(box, fn) {
     for (let x = Math.floor(box.min.x / cellWidth); x <= Math.floor(box.max.x / cellWidth); x++) {
       for (let z = Math.floor(box.min.z / cellWidth); z <= Math.floor(box.max.z / cellWidth); z++) fn(x + '/' + z);
@@ -18,28 +17,16 @@ export function createPlatformContact() {
       cells.get(key).push(shape);
     });
   }
-  function triangle(a, b, c) {
-    const vertices = [a, b, c].map(p => new Vector3(...p));
-    add({ vertices, box: new Box3().setFromPoints(vertices) });
-  }
-  function tube(a, b, diameter) {
-    const line = new Line3(new Vector3(...a), new Vector3(...b));
-    add({ line, radius: diameter / 2, box: new Box3().setFromPoints([line.start, line.end]).expandByScalar(diameter / 2) });
-  }
-  function tubeHit(line, radius, from, length) {
-    const r2 = radius * radius;
-    if (line.closestPointToPoint(from, true, scratch).distanceToSquared(from) <= r2) return 0;
-    if (ray.distanceSqToSegment(line.start, line.end, nearRay, nearTube) > r2) return null;
-    let low = 0, high = Math.min(length, from.distanceTo(nearRay));
-    ray.at(high, hit);
-    if (line.closestPointToPoint(hit, true, scratch).distanceToSquared(hit) > r2 + 1e-12) return null;
-    for (let i = 0; i < 14; i++) {
-      const mid = (low + high) / 2;
-      ray.at(mid, hit);
-      if (line.closestPointToPoint(hit, true, scratch).distanceToSquared(hit) <= r2) high = mid;
-      else low = mid;
+  function addMesh(mesh) {
+    const positions = mesh.geometry.getAttribute('position');
+    const index = mesh.geometry.index;
+    const vertices = Array.from({ length: positions.count }, (_, i) =>
+      new Vector3().fromBufferAttribute(positions, i).applyMatrix4(mesh.matrixWorld));
+    const count = index ? index.count : vertices.length;
+    for (let i = 0; i < count; i += 3) {
+      const triangle = [0, 1, 2].map(j => vertices[index ? index.getX(i + j) : i + j]);
+      add({ vertices: triangle, box: new Box3().setFromPoints(triangle) });
     }
-    return high / length;
   }
   function firstHit(from, to) {
     stepBounds.makeEmpty().expandByPoint(from).expandByPoint(to);
@@ -54,8 +41,7 @@ export function createPlatformContact() {
         if (tested.has(shape) || !shape.box.intersectsBox(stepBounds)) continue;
         tested.add(shape);
         let f = null;
-        if (shape.line) f = tubeHit(shape.line, shape.radius, from, length);
-        else if (ray.intersectTriangle(...shape.vertices, false, hit)) f = hit.distanceTo(from) / length;
+        if (ray.intersectTriangle(...shape.vertices, false, hit)) f = hit.distanceTo(from) / length;
         if (f !== null && f <= 1 && (first === null || f < first)) first = f;
       }
     });
@@ -134,5 +120,5 @@ export function createPlatformContact() {
       return first;
     };
   }
-  return { triangle, tube, forAircraft };
+  return { addMesh, forAircraft };
 }

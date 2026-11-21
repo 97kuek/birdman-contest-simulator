@@ -1,49 +1,55 @@
-import * as THREE from 'three';
+import { Color, DynamicDrawUsage, Float32BufferAttribute } from 'three';
 import { windAt } from '../domain/weather.js';
-import { deckHeight } from './launch-deck.js';
 
-// The Nagoya AirCraft photograph shows flags beside the rear working deck.
-// Placement, fabric and response below are visual estimates, in metres.
-export function createPlatformFlag() {
-  const group = new THREE.Group();
-  group.name = 'プラットフォームの風見旗';
-  group.position.set(-7.6, deckHeight(15) - .5, 15);
-  const poleHeight = 4.1;
-  const pole = new THREE.Mesh(new THREE.CylinderGeometry(.035, .055, poleHeight, 8),
-    new THREE.MeshStandardMaterial({color: '#c6cece', metalness: .4, roughness: .54}));
-  pole.position.y = poleHeight / 2;
-  group.add(pole);
-  const length = 1.9, depth = .72, strips = 12;
-  const geometry = new THREE.PlaneGeometry(length, depth, strips, 1);
-  const points = geometry.getAttribute('position');
-  points.setUsage(THREE.DynamicDrawUsage);
-  const colors = [];
-  const stripColors = Array.from({ length: strips + 1 }, (_, i) =>
-    i / strips < .47 || i / strips > .74 ? '#ffcf22' : '#e83934');
-  const tint = new THREE.Color();
-  for (let i = 0; i < points.count; i++) {
-    tint.set(stripColors[i % (strips + 1)]).toArray(colors, i * 3);
+// Deform the authored cloth along its span. The inset uses the same upper
+// and lower hems even when the glTF vertex order differs from Blender's.
+export function createPlatformFlag(platform) {
+  let group, cloth;
+  platform.traverse(part => {
+    if (part.userData.platformRole === 'flag') group = part;
+    if (part.userData.platformRole === 'cloth') cloth = part;
+  });
+  const geometry = cloth.geometry.clone();
+  cloth.geometry = geometry;
+  const rest = geometry.getAttribute('position').clone();
+  const fabric = geometry.getAttribute('position').setUsage(DynamicDrawUsage);
+  const colors = geometry.getAttribute('color');
+  const stations = [...new Set(Array.from({ length: rest.count }, (_, i) => rest.getX(i)))].sort((a,b) => a-b);
+  const strips = stations.length - 1;
+  const length = stations[strips] - stations[0];
+  geometry.computeBoundingBox();
+  const poleHeight = geometry.boundingBox.max.y;
+  const points = new Float32BufferAttribute(new Float32Array(stations.length * 2 * 3), 3);
+  const stripColors = [], top = [], bottom = [];
+  for (let i = 0; i < rest.count; i++) {
+    const column = stations.indexOf(rest.getX(i));
+    if (top[column] === undefined || rest.getY(i) > rest.getY(top[column])) top[column] = i;
+    if (bottom[column] === undefined || rest.getY(i) < rest.getY(bottom[column])) bottom[column] = i;
   }
-  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  geometry.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, poleHeight - .5, 0), length + depth);
-  const cloth = new THREE.Mesh(geometry, new THREE.MeshLambertMaterial({vertexColors: true, side: THREE.DoubleSide}));
-  group.add(cloth);
+  for (const i of top) stripColors.push('#' + new Color().fromBufferAttribute(colors, i).getHexString());
+  const hems = [...top, ...bottom];
+  const refreshHems = () => hems.forEach((vertex, i) => points.copyAt(i, fabric, vertex));
+  refreshHems();
+  // In a calm wind the free end can hang below its original bounding box.
+  cloth.frustumCulled = false;
 
   function update(weather, gustOffset, windTime, fabricTime) {
-    const wind = windAt(weather, {right: group.position.x, forward: -group.position.z, height: group.position.y + poleHeight, gustOffset}, windTime);
+    const wind = windAt(weather, {right: group.position.x, forward: -group.position.z,
+      height: group.position.y + poleHeight, gustOffset}, windTime);
     const x = -(wind.crosswind ?? 0), z = wind.headwind;
     const speed = Math.hypot(x, z), stretch = speed / Math.hypot(speed, .65);
     const dirX = speed ? x / speed : 0, dirZ = speed ? z / speed : 1;
-    for (let i = 0; i < points.count; i++) {
-      const u = (i % (strips + 1)) / strips;
+    for (let i = 0; i < rest.count; i++) {
+      const span = rest.getX(i) - stations[0], u = span / length;
       const ripple = .095 * stretch * u * Math.sin(u * 11 - fabricTime * (4 + Math.min(speed, 4)));
-      const reach = u * length * (.09 + .91 * stretch);
+      const reach = span * (.09 + .91 * stretch);
       const drop = u ** 1.25 * length * Math.sqrt(1 - stretch ** 2);
-      points.setXYZ(i, dirX * reach + dirZ * ripple, poleHeight - (i > strips ? depth : 0) - drop,
-        dirZ * reach - dirX * ripple);
+      fabric.setXYZ(i, stations[0] + dirX * reach + dirZ * ripple, rest.getY(i) - drop,
+        rest.getZ(i) + dirZ * reach - dirX * ripple);
     }
-    points.needsUpdate = true;
+    fabric.needsUpdate = true;
     geometry.computeVertexNormals();
+    refreshHems();
     return wind;
   }
   return { group, points, strips, stripColors, poleHeight, update };

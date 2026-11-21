@@ -4,7 +4,10 @@ import { test } from 'node:test';
 import { FlightSession } from '../src/application/flight-session.js';
 import { createShoreline } from '../src/domain/shoreline.js';
 import { createAircraft } from '../src/rendering/aircraft.js';
+import { readModel } from '../analysis/model-fixture.js';
 import { createChaseBoat } from '../src/rendering/chase-boat.js';
+const boatModel = await readModel('chase-boat.glb.gz');
+
 import { modelHull } from '../src/rendering/collision-hull.js';
 
 const shape = [[-1, -0.45], [1, -0.45], [0, 0.5]];
@@ -72,7 +75,7 @@ test('接水直前の陸地進入と、記録確定後の湖岸で止まる滑�
 });
 
 test('追走艇の本体と観測席を岸の手前に保ち、水上に戻る試技に追従する', () => {
-  const boat = createChaseBoat();
+  const boat = createChaseBoat(boatModel.clone());
   const coast = createShoreline([[[20, -600], [200, -600], [200, 200], [20, 200]]], 0);
   const samples = Array.from({length: 801}, (_, i) => {
     const t = i / 20;
@@ -99,7 +102,7 @@ test('岸まで同じ距離でも、翼を含む対地進路が陸に届く場�
 });
 
 test('追走艇は旋回でも船首方向へ進み、着水後は惰性で減速する', () => {
-  const boat = createChaseBoat();
+  const boat = createChaseBoat(boatModel.clone());
   const samples = Array.from({length: 721}, (_, i) => {
     const t = i / 20, turn = Math.max(0, t - 24) * .09;
     return {t, right: 100 * (1 - Math.cos(turn)), forward: Math.min(t, 24) * 9 + 100 * Math.sin(turn),

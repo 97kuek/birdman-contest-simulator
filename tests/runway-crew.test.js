@@ -5,10 +5,28 @@ import { createRunwayTrial } from '../src/application/runway-trial.js';
 import { CG_HEIGHT } from '../src/domain/aircraft-dynamics.js';
 import { createRenAircraft } from '../src/rendering/aircraft/ren.js';
 import { modelHull } from '../src/rendering/collision-hull.js';
+import { readModel } from '../analysis/model-fixture.js';
+import { createRunwaySupportCar } from '../src/rendering/runway-support-car.js';
 import { createRunwayCrew } from '../src/rendering/runway-crew.js';
+const [groundCrewModel, vanModel] = await Promise.all([readModel('ground-crew.glb'), readModel('chase-van.glb.gz')]);
+
+
+test('追走車の四輪は近景と遠景の両方で回転し、車内外の鏡面が残る', () => {
+  const { group, setDistance } = createRunwaySupportCar(vanModel.clone());
+  setDistance(1.3, 7.2);
+  for (let i = 0; i < 4; i++) {
+    const wheel = group.getObjectByName('Wheel' + i);
+    assert.equal(wheel.rotation.x, -4);
+    const lod = wheel.children.find(part => part.isLOD);
+    assert.deepEqual(lod.levels.map(level => level.object.name), ['Wheel' + i + 'Near', 'Wheel' + i + 'Far']);
+  }
+  for (const name of ['MirrorSurface', 'DoorMirrorPort', 'DoorMirrorStarboard']) {
+    assert.ok(group.getObjectByName(name).isReflector);
+  }
+});
 
 test('地上班は機体を押し、手放した後は翼端を追い、着地後は近くのキャッチャーが左右の翼を支える', () => {
-  const crew = createRunwayCrew(), base = new Group();
+  const crew = createRunwayCrew(groundCrewModel, vanModel.clone()), base = new Group();
   const hull = modelHull(createRenAircraft());
   const trial = createRunwayTrial(hull);
   const pusher = crew.group.getObjectByName('左フレームスターター');
@@ -85,7 +103,7 @@ test('地上班は機体を押し、手放した後は翼端を追い、着地�
 test('追走車は左右ラダーの切り返しでも緩やかに向きを変え、カメラは前席にとどまる', () => {
   const base = createRenAircraft();
   const trial = createRunwayTrial(modelHull(base), 'calm', 0, { preSpin: true });
-  const crew = createRunwayCrew();
+  const crew = createRunwayCrew(groundCrewModel, vanModel.clone());
   const car = crew.supportCar;
   const mount = car.getObjectByName('chase-car-camera');
   const seat = mount.position.clone();

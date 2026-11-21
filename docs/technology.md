@@ -44,3 +44,29 @@ Mac（Apple M5、Node.js v26.8.1、モデル `dd499b8`）で、60 Hzの表示1�
 | QX-25 | 0.012 | 0.014 |
 
 60 Hz表示で使える約16.7 msのうち、このMacでの飛行計算は小さい。対象スマホで物理計算が繰り返しフレーム遅延の主因になった場合には、時間のかかる計算だけを Rust または C++ から WebAssembly にコンパイルして比べる。同じ端末で JS との受け渡しを含めた時間と、同一入力での軌跡・飛距離・接水時刻を照合して採否を決める。[WebAssembly の設計目標](https://webassembly.org/docs/high-level-goals/)
+
+## Blender の原本と再利用
+
+Blender の「プリファレンス → ファイルパス → アセットライブラリ」で、このリポジトリの `models/` を登録する。別作品ではアセットブラウザーからコレクションをドラッグする。「アペンド」を選ぶと、その作品で形や材質を編集できる。会場を丸ごと別の場所へコピーするときは、琵琶湖が相対リンクする発進台原本も含めて `models/` をコピーする。
+
+| 原本 | 編集・配置できるもの |
+| --- | --- |
+| `models/flight-venues.blend` | `Lake Biwa` と `Fujikawa` の2シーン。追走車は車体・乗員・四輪・車内・3枚の鏡が一台に収まる。ボートには船体・操舵席・操船者・船外機がある。河川敷の建物15棟と草の株も個別に配置できる。 |
+| `models/biwa-platform.blend` | `Launch Platform` に発進面、作業床、鋼管、岸までの搬入路、風見旗、掲示幕、夜間照明が入る。練習ブイは独立したコレクション。 |
+| `models/ground-crew.blend` | 全身の地上クルー。髪型、服、靴、手と足、姿勢用のリグをまとめて配置できる。 |
+| `models/aircraft-{ryukai,qx25,ren}.blend` | 竜海、QX-25、聯の完成機。各原本が搭乗者、操縦席、計器、舵面と主翼の変形形状を持つ。 |
+
+各原本はメートル単位。富士川の原点は滑走路南端で、Blender の +Y が滑走方向。850 × 30 m の滑走路、河口から富士山までの地形と航空写真をそろえた。河川敷の建物の位置・屋根の輪郭には航空写真を使い、軒高・扉・外装は推定で補った。琵琶湖の発進台は第48回ルールブックの予定図を基準に、先端高10 m、助走面10 m、勾配3.5°、床幅12 mを採った。車体内装と船上装備も参考形状による復元である。
+
+### ゲーム用データの書き出し
+
+リポジトリで `npm ci` を実行してから、編集した原本に対応するコマンドを使う。書き出し先は `assets/models/`。会場の書き出しは配信用の複製で固定部品を結合し、標高地形を圧縮し、植生の配置点をGPUインスタンスに変換する。会場の航空写真は配信用の `assets/terrain/` と `assets/fujikawa/` から参照する。
+
+```sh
+blender -b models/flight-venues.blend --python-exit-code 1 -P analysis/export-venues.py
+blender -b models/biwa-platform.blend --python-exit-code 1 -P analysis/export-platform.py
+blender -b models/ground-crew.blend --python-exit-code 1 -P analysis/export-ground-crew.py
+blender -b models/aircraft-ren.blend --python-exit-code 1 -P analysis/export-aircraft.py
+```
+
+竜海・QX-25にも同じ `export-aircraft.py` を使う。ブラウザーは原本の支点や計器面を使って、飛行状態に応じた翼の変形、ペダルの回転、GPS表示、車輪とメーターの動き、車載ミラーの反射を更新する。湖面・川面・空は時刻、風、カメラに応じて描画する。

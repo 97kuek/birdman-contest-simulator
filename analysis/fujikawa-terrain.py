@@ -15,6 +15,7 @@ from fujikawa_vegetation import bake as bake_verge_textures
 LAT, LON = 35.120833, 138.631667
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'assets' / 'fujikawa'
+AUTHORING = ROOT / '.cache' / 'fujikawa' / 'survey'
 CACHE = ROOT / '.cache' / 'fujikawa' / 'tiles'
 BASE = 'https://cyberjapandata.gsi.go.jp/xyz/'
 SEA_BGR = (94, 82, 56)
@@ -142,7 +143,7 @@ def bake(name, zoom, nx, ny, dem_zoom, resolution, grid, center=None):
         cell_diagonal = math.hypot(nx, ny)*METRES_PER_WORLD/(scale*grid)
         blend = np.clip((distance-cell_diagonal)/25, 0, 1)
         elevation = FIELD_ALTITUDE + blend*(elevation-FIELD_ALTITUDE)
-    np.rint(elevation*5).astype('<i2').tofile(OUT/(name+'.bin'))
+    np.rint(elevation*5).astype('<i2').tofile(AUTHORING/(name+'.bin'))
     west, east = (xx[0, [0, -1]]/scale-CX)*METRES_PER_WORLD
     north, south = (yy[[0, -1], 0]/scale-CY)*METRES_PER_WORLD
     return dict(name=name, width=grid+1, height=grid+1, bounds=[west, north, east, south],
@@ -318,12 +319,13 @@ def bake_landmarks():
                 height = round(nominal_height*rng.uniform(.72, 1.37), 2)
                 stands.append([u, v, height, round(height*rng.uniform(.52, .88), 2),
                                round((r+g+b)/3)])
-    (OUT/'trees.json').write_text(json.dumps(stands, separators=(',', ':'))+'\n')
+    (AUTHORING/'trees.json').write_text(json.dumps(stands, separators=(',', ':'))+'\n')
 
 
 if __name__ == '__main__':
     CACHE.mkdir(parents=True, exist_ok=True)
     OUT.mkdir(parents=True, exist_ok=True)
+    AUTHORING.mkdir(parents=True, exist_ok=True)
     # At zoom14 and 11, 32 cells per tile place each finer tile boundary on a grid edge.
     layers = [bake('runway', 17, 6, 8, 14, 256, 176),
               bake('river', 14, 6, 6, 13, 192, 192),

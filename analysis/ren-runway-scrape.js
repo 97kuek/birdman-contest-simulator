@@ -3,10 +3,13 @@
 import { Group, Vector3 } from 'three';
 import { placeAircraft } from '../src/rendering/aircraft-pose.js';
 import { wingGripSpan } from '../src/domain/runway-support.js';
+import { readModel } from './model-fixture.js';
 import { createRunwayCrew, wingLineAnchor } from '../src/rendering/runway-crew.js';
+const [groundCrewModel, vanModel] = await Promise.all([readModel('ground-crew.glb'), readModel('chase-van.glb.gz')]);
+
 
 function crewMeasurement() {
-  const crew = createRunwayCrew(), base = new Group();
+  const crew = createRunwayCrew(groundCrewModel, vanModel.clone()), base = new Group();
   const anchor = new Vector3(), palm = new Vector3();
   return (s, phase) => {
     placeAircraft(base, s);

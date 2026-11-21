@@ -22,9 +22,9 @@ export function modelHull(model) {
         point.fromBufferAttribute(attr, i).applyMatrix4(transform);
         const side = part.userData.wingSide;
         if (side) {
-          const [bend, twist, fold] = part.geometry.morphAttributes.position;
+          const [bend, twist, foldUp, foldDown] = part.geometry.morphAttributes.position;
           const vertex = [point.z, point.y - CG_HEIGHT, point.x, bend.getY(i),
-            twist.getZ(i), twist.getY(i), fold.getX(i), fold.getY(i)];
+            twist.getZ(i), twist.getY(i), foldUp.getX(i), foldUp.getY(i), foldDown.getX(i), foldDown.getY(i)];
           (side < 0 ? left : right).push(vertex);
           point.y += part.userData.referenceTip * bend.getY(i);
           referenceWing.push(point.clone());

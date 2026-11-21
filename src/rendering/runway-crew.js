@@ -3,7 +3,7 @@ import { CRUISE_AIRCRAFT } from '../domain/powered-cruise.js';
 import { renSparHeight } from '../domain/ren-wing.js';
 import { catcherRunSpeed, catcherStations, catcherVerge, predictedCatcherStation, waitingCatcher, wingGripSpan, rearCatchPoints } from '../domain/runway-support.js';
 import { wingBendShape } from '../domain/wing-structure.js';
-import { createCrewMembers, standingCrewGeometry } from './crew-model.js';
+import { createCrewMembers, waitingCrewModel } from './crew-model.js';
 import { placeBone, poseRunner, reach } from './crew-motion.js';
 import { createRunwaySupportCar } from './runway-support-car.js';
 
@@ -56,7 +56,7 @@ function poseMember(member, speed, hold, modelBase, effort = 0, braking = 0) {
       else pole.set(sign * .027, role.gripY + sign * .055, role.gripZ).applyMatrix4(localGrip);
       target.lerp(pole, hold);
     }
-    reach(arm, start, target, pole.set(sign * .55, -.28, .8));
+    reach(arm, start, target, pole.set(sign * .85, -1, .05));
   }
 }
 
@@ -82,14 +82,14 @@ function move(member, x, forward, seconds, turn) {
   return seconds ? distance / seconds : 0;
 }
 
-export function createRunwayCrew() {
+export function createRunwayCrew(crewModel, van) {
   const group = new THREE.Group();
   group.name = '富士川の地上班';
-  const members = createCrewMembers('ren', starterRoles.length + catcherRoles.length * catcherStations.length);
+  const members = createCrewMembers(crewModel, 'ren', starterRoles.length + catcherRoles.length * catcherStations.length);
   const starters = members.slice(0, starterRoles.length), catchers = members.slice(starterRoles.length);
-  const car = createRunwaySupportCar();
+  const car = createRunwaySupportCar(van);
   group.add(...members.map(member => member.root), car.group);
-  const waitingGeometry = new Map();
+  const waitingModels = new Map();
   for (const [i, member] of members.entries()) {
     const catcherIndex = i - starterRoles.length;
     const role = catcherIndex < 0 ? starterRoles[i] : catcherRoles[catcherIndex % catcherRoles.length];
@@ -103,11 +103,10 @@ export function createRunwayCrew() {
     member.station = catcherStations[Math.floor(catcherIndex / catcherRoles.length)];
     member.root.name += '・' + member.station + 'm';
     poseMember(member, 0, 0);
-    if (!waitingGeometry.has(member.phase)) waitingGeometry.set(member.phase, standingCrewGeometry(member));
-    member.waiting = new THREE.Mesh(waitingGeometry.get(member.phase), member.torso.material);
+    if (!waitingModels.has(member.phase)) waitingModels.set(member.phase, waitingCrewModel(member));
+    member.waiting = waitingModels.get(member.phase).clone();
     member.waiting.name = member.root.name + '・待機';
     member.waiting.scale.copy(member.root.scale);
-    member.waiting.castShadow = true;
     group.add(member.waiting);
   }
 

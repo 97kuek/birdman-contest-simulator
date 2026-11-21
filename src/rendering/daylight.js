@@ -1,6 +1,5 @@
 import * as THREE from 'three';
-import { deckHeight } from './launch-deck.js';
-import { lakeReflectionLayer, sunDirection } from './lake.js';
+import { sunDirection } from './lake.js';
 
 // A readable moonlit training scene. Lamp positions and moon bearing are artistic settings.
 export function createDaylight({ scene, skyLight, directLight, platform, landscape, lake }) {
@@ -11,26 +10,14 @@ export function createDaylight({ scene, skyLight, directLight, platform, landsca
     if (part.material?.isMeshBasicMaterial && !terrainMaterials.has(part.material))
       terrainMaterials.set(part.material, part.material.color.clone());
   });
-  const lamps = new THREE.Group();
-  const frame = new THREE.MeshStandardMaterial({ color: '#33424c', roughness: .65 });
-  const lens = new THREE.MeshBasicMaterial({ color: '#fff1ce' });
-  const poleShape = new THREE.CylinderGeometry(.035, .055, 2.0, 8);
-  const lensShape = new THREE.BoxGeometry(.43, .26, .10);
-  for (const side of [-1, 1]) {
-    const height = deckHeight(12);
-    const pole = new THREE.Mesh(poleShape, frame);
-    pole.position.set(side * 5.75, height + 1.0, 12);
-    lamps.add(pole);
-    const panel = new THREE.Mesh(lensShape, lens);
-    panel.position.copy(pole.position).y += 1;
-    panel.rotation.set(-.42, -side * .45, 0);
-    lamps.add(panel);
-    const light = new THREE.PointLight(0xffe5bd, 42, 23, 2);
-    light.position.copy(panel.position);
-    lamps.add(light);
-  }
-  lamps.traverse(part => part.layers.enable(lakeReflectionLayer));
-  platform.add(lamps);
+  const lamps = [], lenses = new Map();
+  platform.traverse(part => {
+    if (part.isPointLight) lamps.push(part);
+    if (part.userData.platformRole === 'lampLens') {
+      part.material = part.material.clone();
+      lenses.set(part.material, part.material.emissiveIntensity);
+    }
+  });
 
   let current;
   return function setNight(night) {
@@ -50,6 +37,7 @@ export function createDaylight({ scene, skyLight, directLight, platform, landsca
       material.color.copy(dayColor);
       if (night) material.color.multiply(landscapeTint);
     }
-    lamps.visible = night;
+    for (const lamp of lamps) lamp.visible = night;
+    for (const [material, intensity] of lenses) material.emissiveIntensity = night ? intensity : 0;
   };
 }

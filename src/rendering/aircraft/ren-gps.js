@@ -54,7 +54,7 @@ export function drawRenGps(ctx, s, instruments, northInCourse, runway) {
     target ? 'ブイ ' + target.number + 'まで ' + Math.round(target.metres) + ' m' : '完走 ' + (s.courseTime ?? 0).toFixed(1) + ' 秒';
   label(route, 12, 468, 32, '#fff');
   label(Math.round(s.watts ?? 0) + ' W', 12, 539, 42, '#b8dce3');
-  label('加速余力 ' + reserve + '%', w-12, 539, 38, '#f7e596', 'right');
+  label('余力 ' + reserve + '%', w-12, 539, 38, '#f7e596', 'right');
   ctx.fillStyle = '#4c5860'; ctx.fillRect(12,564,336,11);
   ctx.fillStyle = '#f2c647'; ctx.fillRect(12,564,336 * reserve / 100,11);
   return '対気速度 ' + speed + ' m/s、高度 ' + height + ' m、' +

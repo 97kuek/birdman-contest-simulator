@@ -15,12 +15,8 @@ export function createCockpitDisplay(aircraft, { describe, aircraftId, northInCo
   const ctx = canvas.getContext('2d');
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  const face = new THREE.Mesh(
-    gps ? new THREE.PlaneGeometry(.091, .152) : new THREE.PlaneGeometry(0.149, 0.0745),
-    new THREE.MeshBasicMaterial({ map: texture, toneMapped: false }),
-  );
-  if (gps) face.position.z = .0015; // Screen glass sits forward of the case.
-  aircraft.getObjectByName('cockpit-display-mount').add(face);
+  const face = aircraft.getObjectByName('cockpit-screen');
+  face.material = new THREE.MeshBasicMaterial({ map: texture, toneMapped: false });
   ctx.textAlign = 'center';
 
   function text(value, x, y, size, color = INK, maxWidth = WIDTH) {

@@ -1,19 +1,6 @@
 import * as THREE from 'three';
+import { loadVenueModel } from './authored-models.js';
 import { terrainAssets } from './terrain/assets.js';
-import { addServiceVehicles } from './fujikawa-service-area.js';
-import { surfaceHeight, terrainMesh } from './terrain/surface.js';
-import { fieldLandmarks } from './fujikawa-landmarks.js';
-import { runwayVerge } from './fujikawa-verges.js';
-
-async function loadLayer(layer, assets) {
-  const [grid, photo] = await Promise.all([
-    assets.elevations(layer, layer.name + '.bin'),
-    assets.photo(layer.name + '.webp', 8),
-  ]);
-  // The mesh builder expects decimetres. These grids store 20 cm steps.
-  const elevations = Float32Array.from(grid, height => height * 2);
-  return { layer, elevations, photo };
-}
 
 function addMountainHaze(material) {
   // The humid coastal plain loses more contrast than the summit above it.
@@ -67,90 +54,44 @@ function addSurfaceDetail(material, detail, waterMask, clock) {
   };
 }
 
-// The JTSB's site sketch places the windsock about 100 m inland of mid-runway.
-function createWindsock() {
-  const marker = new THREE.Group();
-  marker.name = '滑走路中央西側の吹き流し';
-  const mast = new THREE.Mesh(new THREE.CylinderGeometry(.04, .075, 4.7, 8),
-    new THREE.MeshStandardMaterial({ color: 0xb6b3a6, roughness: .9 }));
-  mast.position.y = 2.35;
-  marker.add(mast);
-  const fabric = [0xd75531, 0xeae3ce].map(color =>
-    new THREE.MeshStandardMaterial({ color, roughness: 1, side: THREE.DoubleSide }));
-  const axis = new THREE.Vector3(.82, -.20, .53).normalize();
-  const taper = [0.40, 0.35, 0.29, 0.23, 0.17, 0.12];
-  for (let i = 0; i < 5; i++) {
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(taper[i+1], taper[i], .52, 12, 1, true),
-      fabric[i % 2]);
-    band.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis);
-    band.position.copy(axis).multiplyScalar((i+.5)*.52);
-    band.position.y += 4.65;
-    marker.add(band);
-  }
-  marker.position.set(-105, 0, -425);
-  return marker;
-}
-
-/** North-up terrain and a runway frame: +X right, −Z northbound, Y=0 on the pavement. */
 export async function addFujikawaTerrain(scene) {
   const assets = terrainAssets('fujikawa');
-  const { layers, runway, fuji } = await assets.json('layers.json');
-  const landscape = new THREE.Group();
-  landscape.name = '富士川河口・駿河湾・富士山';
-  landscape.position.y = -runway.elevation;
-  const [layerData, pavementPhoto, grassDetail, peak, trees, shrubs, canopy, mown, scrub, vergePlants, waterMask] = await Promise.all([
-    Promise.all(layers.map(layer => loadLayer(layer, assets))),
-    assets.photo('pavement.webp', 16),
-    assets.texture('grass-detail.webp'),
-    loadLayer(fuji, assets),
-    assets.json('trees.json'),
-    assets.texture('shrubs.png'), assets.texture('canopy.png'),
-    assets.texture('mown-grass.webp'), assets.texture('scrub-surface.webp'),
-    assets.texture('verge-plants.webp'), assets.texture('river-water.png'),
+  const [landscape, { runway }, grass, waterMask] = await Promise.all([
+    loadVenueModel('fujikawa-scenery'), assets.json('layers.json'),
+    assets.texture('grass-detail.webp'), assets.texture('river-water.png'),
   ]);
-  const riverTime = { value: 0 };
-  let parent;
-  const surfaces = {};
-  for (const item of layerData) {
-    parent = terrainMesh(item.layer, item.elevations, item.photo, parent);
-    if (item.layer.name === 'runway') addSurfaceDetail(parent.mesh.material, grassDetail, waterMask, riverTime);
-    else addMountainHaze(parent.mesh.material);
-    landscape.add(parent.mesh);
-    surfaces[item.layer.name] = parent;
-  }
-  const summit = terrainMesh(peak.layer, peak.elevations, peak.photo, surfaces.mountains);
-  addMountainHaze(summit.mesh.material);
-  landscape.add(summit.mesh, fieldLandmarks(surfaces.runway, surfaces.river, trees, { shrubs, canopy }));
-  landscape.add(runwayVerge(surfaces.runway, runway, mown, scrub, vergePlants, grassDetail));
   const facility = new THREE.Group();
   facility.name = '富士川滑空場 RWY 36';
+  facility.userData.runway = runway;
   facility.position.set(runway.southThreshold[0], 0, runway.southThreshold[1]);
   facility.rotation.y = -THREE.MathUtils.degToRad(runway.trueBearingDegrees);
-  facility.userData.runway = runway;
-  addServiceVehicles(facility, (x, z) => surfaceHeight(surfaces.runway, x, z) - runway.elevation);
-
-  // Put the pavement under the same day/night tint as the surrounding photography.
-  const runwayDetail = new THREE.Group();
-  runwayDetail.position.set(facility.position.x, runway.elevation, facility.position.z);
-  runwayDetail.rotation.copy(facility.rotation);
-  landscape.add(runwayDetail);
-  const pavementGeometry = new THREE.PlaneGeometry(runway.width, runway.length);
-  const pavement = new THREE.Mesh(pavementGeometry, new THREE.MeshBasicMaterial({
-    map: pavementPhoto, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
-  }));
-  pavement.name = '富士川滑空場の舗装と標示';
-  pavement.rotation.x = -Math.PI / 2;
-  pavement.position.set(0, .018, -runway.length / 2);
-  runwayDetail.add(pavement, createWindsock());
-
-  const pavementShadow = new THREE.Mesh(pavementGeometry,
-    new THREE.ShadowMaterial({ opacity: 0.32, depthWrite: false,
-      polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
-  pavementShadow.name = '滑走路面の影';
-  pavementShadow.receiveShadow = true;
-  pavementShadow.rotation.x = -Math.PI / 2;
-  pavementShadow.position.set(0, .035, -runway.length / 2);
-  facility.add(pavementShadow);
-  scene.add(landscape, facility);
+  facility.add(landscape);
+  const riverTime = { value: 0 };
+  // GLB images have top-left UVs; the water mask follows the same convention.
+  waterMask.flipY = false;
+  waterMask.needsUpdate = true;
+  addSurfaceDetail(landscape.getObjectByName('DEM_runway').material, grass, waterMask, riverTime);
+  for (const layer of ['river', 'mountains', 'fuji']) {
+    addMountainHaze(landscape.getObjectByName('DEM_' + layer).material);
+  }
+  landscape.traverse(part => {
+    const m = part.material;
+    // Blend a second sampling direction on the grass and gravel strips.
+    if (m?.transparent && m.userData.tile) {
+      m.onBeforeCompile = shader => {
+        shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', `
+          vec2 secondary = mat2(0.81,-0.59,0.59,0.81) * vMapUv * 0.67 + vec2(.13,.67);
+          diffuseColor *= mix(texture2D(map,vMapUv),texture2D(map,secondary),.44);`);
+      };
+    }
+  });
+  const pavement = landscape.getObjectByName('Pavement');
+  const shadow = new THREE.Mesh(pavement.geometry, new THREE.ShadowMaterial({ opacity: .32,
+    depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+  shadow.name = '滑走路面の影';
+  shadow.receiveShadow = true;
+  shadow.position.y = .017;
+  pavement.add(shadow);
+  scene.add(facility);
   return { landscape, facility, riverTime };
 }

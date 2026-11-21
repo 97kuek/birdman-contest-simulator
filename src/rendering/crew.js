@@ -3,6 +3,7 @@ import { LAUNCH, RAMP_LENGTH, rampAt } from '../domain/launch.js';
 import { aircraftProfile } from '../domain/aircraft-profiles.js';
 import { renSparHeight } from '../domain/ren-wing.js';
 import { createCrewMembers } from './crew-model.js';
+import layout from './biwa-platform.json' with { type: 'json' };
 import { deckHeight, deckRun, deckSlope } from './launch-deck.js';
 
 import { placeBone, poseRunner, reach } from './crew-motion.js';
@@ -14,7 +15,7 @@ function runnerReleaseTime(launch, startX, startZ) {
   function insideDeck(travel) {
     const x = startX + travel * launch.rightStep;
     const z = startZ - travel * launch.forwardStep;
-    return Math.abs(x) < 6.43 && Math.hypot(x, Math.max(0, deckRun - z) + 0.52) < 9.87;
+    return Math.abs(x) < layout.deck_half_width - .39 && Math.hypot(x, Math.max(0, deckRun - z) + 0.52) < 9.87;
   }
   let stop = launch.pushed;
   if (!insideDeck(stop)) {
@@ -29,9 +30,9 @@ function runnerReleaseTime(launch, startX, startZ) {
   return launch.timeAtTravel?.(stop) ?? Math.sqrt(2 * stop / launch.acceleration);
 }
 
-export function createLaunchCrew(team = 'ryukai') {
+export function createLaunchCrew(model, team = 'ryukai') {
   const group = new THREE.Group();
-  const members = createCrewMembers(team);
+  const members = createCrewMembers(model, team);
   group.name = 'プラットフォームのプッシャー';
   group.add(...members.map(member => member.root));
   let previousTime = -1, previousLaunch = null;
@@ -107,7 +108,7 @@ export function createLaunchCrew(team = 'ryukai') {
           target.y += sign * .075;
         }
         target.lerp(segment.set(sign * 0.22, 0.61, -0.16), relax);
-        reach(arm, start, target, pole.set(sign * 0.58, -0.24, 0.82));
+        reach(arm, start, target, pole.set(sign * .85, -1, .05));
       }
       if (member.line) {
         // A removable handling line stays with the runner after release.
