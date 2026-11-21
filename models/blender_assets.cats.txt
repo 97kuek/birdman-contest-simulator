@@ -1,0 +1,9 @@
+VERSION 1
+
+3d089571-9aac-5e3b-8baf-b581fc44e41d:Vehicles:Vehicles
+cff55019-584c-5f03-931c-5d4f2b5d1467:People:People
+0c3f328d-482e-5a9d-afaf-2bd4e362dd60:Landscapes:Landscapes
+6dd8ea5e-7808-574c-b1a1-54ea3c310073:Buildings:Buildings
+baa127fb-efa0-5f74-972f-2186ef29fe43:Structures:Structures
+f5605c27-bbb4-5e37-ad30-84b8fede1253:Equipment:Equipment
+0009c9e7-7282-5b9d-a5d0-7e100f678a0f:Aircraft:Aircraft
