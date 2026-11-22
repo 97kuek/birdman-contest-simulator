@@ -47,6 +47,7 @@ export function setupTiltControl() {
     listening = pending = calibrated = false;
     last = neutral = null;
     mode = select.value = 'touch';
+    remember('touch');
     delete document.body.dataset.tilt;
     notice(message);
   }
@@ -60,6 +61,7 @@ export function setupTiltControl() {
     const nextAngle = screenAngle();
     if (nextAngle !== angle) neutral = null;
     angle = nextAngle;
+    if (!last) remember('tilt');
     last = screenTilt(event.beta, event.gamma, angle);
     if (calibrated && !neutral) {
       neutral = last;
@@ -92,6 +94,7 @@ export function setupTiltControl() {
     let saved;
     try { saved = localStorage.getItem(preferenceKey); } catch { /* Show the welcome for this visit. */ }
     if (!supported) {
+      if (saved === 'tilt') remember('touch');
       byId('mobile-intro-title').textContent = 'タッチで操縦';
       byId('mobile-intro-body').textContent = '横スワイプで発進方向を決めます。飛行中は画面の前・後と左右のラダーで操縦できます。';
     }
@@ -99,14 +102,13 @@ export function setupTiltControl() {
     else select.value = 'touch';
     if (!saved) dialog.showModal();
     function accept() {
-      remember(supported ? 'tilt' : 'touch');
       if (supported) enable(); // iOS needs the OK button's user activation.
+      else stop();
       dialog.close();
     }
     byId('accept-mobile-input').onclick = accept;
     dialog.oncancel = () => stop();
     select.onchange = () => {
-      remember(select.value);
       if (select.value === 'tilt') {
         calibrated = ['countdown', 'flight'].includes(document.body.dataset.stage);
         enable();
