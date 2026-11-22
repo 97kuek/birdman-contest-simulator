@@ -10,9 +10,38 @@ import { createRunwaySupportCar } from '../src/rendering/runway-support-car.js';
 import { launchProfile } from '../src/domain/launch.js';
 import { createLaunchCrew } from '../src/rendering/crew.js';
 import { placeAircraft } from '../src/rendering/aircraft-pose.js';
-import { createRunwayCrew } from '../src/rendering/runway-crew.js';
+import { createRunwayCrew, wingLineAnchor } from '../src/rendering/runway-crew.js';
+import { rampSample } from '../src/application/flight-session.js';
+import { aircraftProfile } from '../src/domain/aircraft-profiles.js';
+import { renSparHeight } from '../src/domain/ren-wing.js';
+import { wingGripSpan } from '../src/domain/runway-support.js';
 const [groundCrewModel, vanModel] = await Promise.all([readModel('ground-crew.glb'), readModel('chase-van.glb.gz')]);
+const cord = groundCrewModel.getObjectByName('WingHandlingLine');
 
+// Measure cross sections in the actual posed mesh. The Blender sheath is
+// symmetric around the centre, including the duplicate vertices of the caps.
+function cordSection(person, fraction) {
+  const mesh = person.getObjectByName('翼の保持索');
+  assert.equal(mesh.material, cord.material);
+  const section = [], rest = cord.geometry.getAttribute('position');
+  for (let i = 0; i < rest.count; i++) {
+    if (rest.getY(i) === fraction)
+      section.push(mesh.localToWorld(new Vector3().fromBufferAttribute(mesh.geometry.attributes.position, i)));
+  }
+  const center = section.reduce((sum, vertex) => sum.add(vertex), new Vector3()).divideScalar(section.length);
+  const radius = Math.max(...section.map(vertex => vertex.distanceTo(center)));
+  assert.ok(Math.abs(radius - .010) < .001);
+  return center;
+}
+
+function checkHeldCord(person, anchor, upperHand, lowerHand) {
+  const upper = person.getObjectByName(upperHand).getWorldPosition(new Vector3());
+  const lower = person.getObjectByName(lowerHand).getWorldPosition(new Vector3());
+  assert.ok(cordSection(person, 0).distanceTo(anchor) < .001);
+  assert.ok(cordSection(person, .5).distanceTo(upper) < .001);
+  assert.ok(cordSection(person, .75).distanceTo(lower) < .001);
+  assert.ok(cordSection(person, .25).y < (anchor.y + upper.y) * .5 - .03);
+}
 
 test('追走車の四輪は近景と遠景の両方で回転し、車内外の鏡面が残る', () => {
   const source = vanModel.clone();
@@ -85,6 +114,7 @@ test('地上班は機体を押し、手放した後は翼端を追い、着地�
       assert.ok(person.getObjectByName(hand).getWorldPosition(new Vector3()).distanceTo(grip) < .01);
     }
   }
+  checkHeldCord(follower, wingLineAnchor(new Vector3(), trial.onGround, 13.2, base), '右手', '左手');
   assert.ok(-car.position.z - 2.35 > 0 && -car.position.z - 2.35 < .5);
   assert.ok(trial.onGround.forward + car.position.z > 35);
   const start = pusher.position.clone();
@@ -93,7 +123,8 @@ test('地上班は機体を押し、手放した後は翼端を追い、着地�
     frame = trial.advance(t, 0, 0, t <= 50 ? 300 : 0);
     show(frame.sample, frame.phase, t);
     const held = follower.getObjectByName('翼の保持索').visible;
-    assert.equal(held, !crew.wingFollowersReleased);
+    if (!crew.wingFollowersReleased) assert.equal(held, true);
+    else if (t >= frame.sample.liftOffAt + 1.55) assert.equal(held, false);
     if (frame.phase === 'roll' && !frame.sample.starterAttached) assert.equal(held, true);
     if (frame.phase === 'flight' && t < frame.sample.liftOffAt + 1) {
       assert.equal(held, true);
@@ -116,6 +147,10 @@ test('地上班は機体を押し、手放した後は翼端を追い、着地�
   assert.ok(frame.sample.forward + car.position.z < 21);
   const holding = crew.group.children.filter(person => person.name.includes('キャッチャー') && person.visible && person.getObjectByName('翼の保持索')?.visible);
   assert.equal(holding.length, 2);
+  for (const person of holding) {
+    const station = (person.name.startsWith('左') ? -1 : 1) * wingGripSpan;
+    checkHeldCord(person, wingLineAnchor(new Vector3(), frame.sample, station, base), '右手', '左手');
+  }
   const receivers = crew.group.children.filter(person => person.isGroup && person.visible && person.name.includes('キャッチャー'));
   assert.equal(receivers.length, 4);
   assert.ok(receivers.some(person => person.name.startsWith('テール')));
@@ -130,6 +165,9 @@ test('地上班は機体を押し、手放した後は翼端を追い、着地�
   show(groundStop.sample, groundStop.phase, 60);
   assert.equal(groundStop.sample.starterAttached, false);
   assert.equal(crew.wingFollowersReleased, true);
+  show(groundStop.sample, groundStop.phase, 60.5);
+  assert.ok(cordSection(follower, 0).y < cordSection(follower, .5).y - .38);
+  show(groundStop.sample, groundStop.phase, 61);
   assert.equal(follower.getObjectByName('翼の保持索').visible, false);
 });
 
@@ -211,4 +249,29 @@ test('台上では手を離したあとも足を運び、傾斜面の端より�
   assert.ok(speeds[peak + 12] > 1 && speeds[peak + 12] < speeds[peak]);
   assert.equal(speeds.at(-1), 0);
   assert.ok(distances.at(-1) > .5);
+});
+
+test('蓮の台上の索は斜め発進でも翼と両手につながり、離脱後は翼係の手元に垂れる', () => {
+  const profile = aircraftProfile('ren');
+  const launch = launchProfile(1, 0, 24, profile.deckClearance);
+  const crew = createLaunchCrew(groundCrewModel, 'ren');
+  const base = new Group();
+  for (const t of [0, .4]) {
+    crew.update(launch, t);
+    placeAircraft(base, rampSample(launch, 'calm', t, 0, profile));
+    for (const side of [-1, 1]) {
+      const member = crew.group.children[side < 0 ? 0 : 2];
+      const anchor = base.localToWorld(new Vector3(side * 3.85, renSparHeight(3.85), 0));
+      checkHeldCord(member, anchor, 'R_ArmEnd', 'L_ArmEnd');
+    }
+  }
+  crew.update(launch, Infinity);
+  for (const index of [0, 2]) {
+    const member = crew.group.children[index];
+    assert.ok(member.getObjectByName('翼の保持索').visible);
+    assert.ok(cordSection(member, .5).y - cordSection(member, 0).y > .48);
+  }
+  assert.equal(crew.group.children[1].getObjectByName('翼の保持索'), undefined);
+  crew.update(launch, 0);
+  assert.ok(cordSection(crew.group.children[0], 0).y > cordSection(crew.group.children[0], .5).y);
 });

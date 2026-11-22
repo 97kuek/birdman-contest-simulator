@@ -5,10 +5,8 @@ import { renSparHeight } from '../domain/ren-wing.js';
 import { createCrewMembers } from './crew-model.js';
 import layout from './biwa-platform.json' with { type: 'json' };
 import { deckHeight, deckRun, deckSlope } from './launch-deck.js';
-
-import { placeBone, poseRunner, reach, resetRunner } from './crew-motion.js';
-
-const down = new THREE.Vector3(0, -1, 0);
+import { poseRunner, reach, resetRunner } from './crew-motion.js';
+import { createWingHandlingLine } from './wing-handling-line.js';
 
 // Reserve the stopping distance before the curved lip. Both feet must stay
 // on the usable deck even on an oblique launch.
@@ -47,17 +45,7 @@ export function createLaunchCrew(model, team = 'ryukai') {
   const releaseWheelAft = aircraftProfile(team).releaseWheelAft ?? 0;
   const fuselageCrew = team === 'qx25';
   if (team === 'ren') {
-    const geometry = new THREE.CylinderGeometry(.010, .010, 1, 6);
-    geometry.translate(0, -.5, 0);
-    const material = new THREE.MeshStandardMaterial({ color: '#b4402b', roughness: .9 });
-    for (const member of members.filter(m => m.side)) {
-      member.line = Array.from({ length: 3 }, () => {
-        const part = new THREE.Mesh(geometry, material);
-        part.name = 'wing-handling-line';
-        member.root.add(part);
-        return part;
-      });
-    }
+    for (const member of members.filter(m => m.side)) member.line = createWingHandlingLine(model, member);
   }
   const stations = {
     ryukai: [{ lateral: 3.12, aft: 1.15, y: .535, z: .565 }, { lateral: .29, aft: 1.79, y: .34, z: 1.32 }],
@@ -122,15 +110,9 @@ export function createLaunchCrew(model, team = 'ryukai') {
       member.gaze = member.head.rotation.x;
       if (member.line) {
         // A removable handling line stays with the runner after release.
-        const upper = member.arms[1].end.position, lower = member.arms[0].end.position;
         start.set((member.side * sideStation.lateral - lateral) / member.scale,
           (aircraftY + renSparHeight(sideStation.lateral) - member.root.position.y) / member.scale, -station.aft / member.scale);
-        start.lerp(target.copy(upper).addScaledVector(down, .54), relax);
-        placeBone(member.line[0], start, upper, 1);
-        placeBone(member.line[1], upper, lower, 1);
-        target.copy(lower).addScaledVector(down, .25);
-        target.z += .06 * Math.min(1, speed / 4);
-        placeBone(member.line[2], lower, target, 1);
+        member.line.pose(start, relax, speed);
       }
     }
   }

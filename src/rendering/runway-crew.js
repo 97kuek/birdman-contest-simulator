@@ -4,7 +4,8 @@ import { renSparHeight } from '../domain/ren-wing.js';
 import { catcherRunSpeed, catcherStations, catcherVerge, predictedCatcherStation, waitingCatcher, wingGripSpan, rearCatchPoints } from '../domain/runway-support.js';
 import { wingBendShape } from '../domain/wing-structure.js';
 import { createCrewMembers, waitingCrewModel } from './crew-model.js';
-import { placeBone, poseRunner, reach, resetRunner } from './crew-motion.js';
+import { poseRunner, reach, resetRunner } from './crew-motion.js';
+import { createWingHandlingLine } from './wing-handling-line.js';
 import { createRunwaySupportCar } from './runway-support-car.js';
 
 const { clamp, smoothstep } = THREE.MathUtils;
@@ -25,14 +26,6 @@ const starterRoles = [catcherRoles[0], ...frameStarters, catcherRoles[2], catche
 const wingReleaseDelay = 1;
 const start = new THREE.Vector3(), target = new THREE.Vector3(), pole = new THREE.Vector3();
 const up = new THREE.Vector3(0, 1, 0), localGrip = new THREE.Matrix4();
-const ropeShape = new THREE.CylinderGeometry(.014, .014, 1, 5).translate(0, -.5, 0);
-const ropeMaterial = new THREE.MeshStandardMaterial({ color: '#c5923b', roughness: 1 });
-
-function addLine(member) {
-  member.line = new THREE.Mesh(ropeShape, ropeMaterial);
-  member.line.name = '翼の保持索';
-  member.root.add(member.line);
-}
 
 function poseMember(member, speed, dt, hold, modelBase, action, progress, weight = 0) {
   const { role, root } = member;
@@ -73,10 +66,9 @@ export function wingLineAnchor(target, sample, station, modelBase) {
   return target.set(station, renSparHeight(station) + bend, 0).applyMatrix4(modelBase.matrix);
 }
 
-function holdWing(member, sample, station, modelBase) {
+function runnerLineAnchor(member, sample, station, modelBase) {
   wingLineAnchor(target, sample, station, modelBase);
-  target.sub(member.root.position).applyAxisAngle(up, -member.root.rotation.y).divideScalar(member.scale);
-  placeBone(member.line, member.arms[1].end.position, target, 1);
+  return target.sub(member.root.position).applyAxisAngle(up, -member.root.rotation.y).divideScalar(member.scale);
 }
 
 function move(member, x, forward, seconds, turn) {
@@ -111,9 +103,9 @@ export function createRunwayCrew(crewModel, van) {
     }
     for (const arm of member.arms) arm.end.name = arm.sign < 0 ? '左手' : '右手';
     member.root.name = role.name + (catcherIndex < 0 ? 'スターター' : 'キャッチャー');
-    if (role.wing) addLine(member);
+    if (role.wing) member.line = createWingHandlingLine(crewModel, member);
     if (catcherIndex < 0) continue;
-    if (member.line) member.line.visible = false;
+    if (member.line) member.line.mesh.visible = false;
     member.station = catcherStations[Math.floor(catcherIndex / catcherRoles.length)];
     member.root.name += '・' + member.station + 'm';
     poseMember(member, 0, 0, 0);
@@ -144,12 +136,13 @@ export function createRunwayCrew(crewModel, van) {
       member.waiting.position.copy(member.root.position);
       member.waiting.rotation.copy(member.root.rotation);
       member.root.visible = false;
-      if (member.line) member.line.visible = false;
+      if (member.line) member.line.mesh.visible = false;
       member.waiting.visible = true;
     }
     for (const member of members) {
       resetRunner(member);
       member.catchAge = 0;
+      member.releaseAnchor = null;
       for (const arm of member.arms) arm.lastGrip = null;
     }
     // Rear bumper just inside the south threshold, aligned behind the aircraft.
@@ -197,8 +190,13 @@ export function createRunwayCrew(crewModel, van) {
         : (member.role.name === 'テール' ? .25 : .53 + .47 * smoothstep(sample.starterForceN, 0, 90));
       poseMember(member, speed, dt, free ? 0 : 1, modelBase, action, free ? relax : null, weight);
       if (wing) {
-        member.line.visible = !free;
-        if (!free) holdWing(member, sample, x, modelBase);
+        member.line.mesh.visible = !free || age < .55;
+        if (member.line.mesh.visible) {
+          if (!free || !member.releaseAnchor) {
+            (member.releaseAnchor ??= new THREE.Vector3()).copy(runnerLineAnchor(member, sample, x, modelBase));
+          }
+          member.line.pose(member.releaseAnchor, smoothstep(age, 0, .55), speed);
+        }
       }
     }
   }
@@ -251,8 +249,8 @@ export function createRunwayCrew(crewModel, van) {
       poseMember(member, speed, dt, hold || reaching * .65, modelBase, 'Catch', absorb,
         hold ? .65 + .35 * smoothstep(speed, .1, 2) : reaching);
       if (role.wing) {
-        member.line.visible = hold > .95;
-        if (member.line.visible) holdWing(member, sample, station, modelBase);
+        member.line.mesh.visible = hold > .95;
+        if (member.line.mesh.visible) member.line.pose(runnerLineAnchor(member, sample, station, modelBase), 0, speed);
       }
     }
   }
