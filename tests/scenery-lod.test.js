@@ -38,7 +38,8 @@ test('会場の親座標・個体色を保ち、反射や望遠の各カメラ�
   assert.strictEqual(far.geometry.attributes.uv, geometry.attributes.uv);
   const point = new Vector3().setFromMatrixPosition(placement);
   const camera = new PerspectiveCamera(70, 1.5, .1, 10000);
-  function visible(z, fov, y) {
+  function visible(z, fov, y, height = 1440) {
+    camera.userData.renderHeight = height;
     camera.fov = fov;
     camera.position.copy(point).add(new Vector3(0, y, z));
     camera.lookAt(point);
@@ -50,5 +51,9 @@ test('会場の親座標・個体色を保ち、反射や望遠の各カメラ�
   assert.deepEqual(visible(8, 70, 1), [true, false]);
   assert.deepEqual(visible(160, 70, -8), [false, true]);
   assert.deepEqual(visible(160, 5, 1), [true, false]);
+  assert.deepEqual(visible(40, 70, 1, 1440), [true, false]);
+  assert.deepEqual(visible(40, 70, 1, 288), [false, true]);
+  assert.deepEqual(visible(450, 70, 1, 288), [false, false]);
+  assert.deepEqual(visible(450, 70, 1, 1266), [false, true]);
   assert.deepEqual(visible(6000, 70, 1), [false, false]);
 });

@@ -103,7 +103,9 @@ export function addLakeAndSky(scene, compact = false) {
         vec3 deep=mix(vec3(.018,.065,.079),vec3(.031,.140,.149),mottling);
         vec3 scatter=deep*(.84+.34*max(dot(n,sunlight),0.));
         if(shallow>.001){
-          vec3 imageColor=texture2D(bottomPhoto,clamp(uv+n.xz*.00012,0.,1.)).rgb;
+          // The mask uses bottom-left UVs; the shore's glTF image uses top-left UVs.
+          vec2 bottomUV=clamp(uv+n.xz*.00012,0.,1.);
+          vec3 imageColor=texture2D(bottomPhoto,vec2(bottomUV.x,1.-bottomUV.y)).rgb;
           scatter=mix(scatter,imageColor,shallow*.80);
         }
         if(nightScene>.5) scatter*=vec3(.24,.33,.46);
@@ -140,6 +142,7 @@ export function addLakeAndSky(scene, compact = false) {
     }
   });
   water.camera.layers.set(lakeReflectionLayer);
+  water.camera.userData.renderHeight = water.getRenderTarget().height;
   water.getRenderTarget().texture.type=THREE.UnsignedByteType;
   water.rotation.x=-Math.PI/2;
   scene.add(water);

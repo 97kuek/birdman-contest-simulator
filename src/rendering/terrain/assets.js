@@ -13,14 +13,8 @@ export function terrainAssets(directory) {
   }
 
   const texture = name => loader.loadAsync(url(name));
-  async function photo(name, anisotropy) {
-    const image = await texture(name);
-    image.colorSpace = THREE.SRGBColorSpace;
-    image.anisotropy = anisotropy;
-    return image;
-  }
   async function json(name) {
     return (await fetchFile(name)).json();
   }
-  return { json, photo, texture };
+  return { json, texture };
 }

@@ -111,6 +111,7 @@ export function bindViewerControls(host, renderer, cameraRig) {
     if (!width || !height) return;
     cameraRig.setAspect(width / height);
     renderer.setSize(width, height, false);
+    camera.userData.renderHeight = renderer.domElement.height;
     framePanel();
     if (cameraRig.view() === 'tracks') setView('tracks');
   }

@@ -5,6 +5,7 @@ const viewBounds = new Box3();
 const position = new Vector3();
 const transform = new Matrix4();
 const colour = new Color();
+const referenceHeight = 1440; // Used for distance-based raycasts and cameras without a render target.
 
 // The renderer calls LOD.update separately for the flight and reflection cameras.
 // All placement buffers are static, so a nested lake pass cannot overwrite them.
@@ -21,8 +22,8 @@ class SceneryCell extends LOD {
     viewMatrix.multiplyMatrices(camera.matrixWorldInverse, this.matrixWorld);
     viewBounds.copy(this.bounds).applyMatrix4(viewMatrix);
     const depth = camera.isPerspectiveCamera ? Math.max(.01, -viewBounds.max.z) : 1;
-    // Measure a conservative projected footprint for a 1440-pixel-high view.
-    const pixelsPerMetre = 720 * Math.abs(camera.projectionMatrix.elements[5])
+    const height = camera.userData.renderHeight ?? referenceHeight;
+    const pixelsPerMetre = height * .5 * Math.abs(camera.projectionMatrix.elements[5])
       * this.matrixWorld.getMaxScaleOnAxis() / depth;
     const visible = this.instanceRadius * pixelsPerMetre >= 1.25;
     const [near, far] = this.children;
@@ -90,7 +91,7 @@ function partitionField(source) {
       far.castShadow = near.castShadow;
       far.receiveShadow = near.receiveShadow;
       far.visible = false;
-      cell.addLevel(far, cell.error * 720 / 1.25);
+      cell.addLevel(far, cell.error * referenceHeight * .5 / 1.25);
     }
     field.add(cell);
   });
