@@ -1,3 +1,4 @@
+import { addFlatlandDetail } from './terrain/flatland.js';
 import { terrainAssets } from './terrain/assets.js';
 import { loadVenueModel } from './authored-models.js';
 
@@ -11,6 +12,7 @@ export async function addLandscape(scene) {
   // The shallows shader uses the original (bottom-left) map orientation.
   group.userData.shoreRings = shoreRings;
   group.userData.shallows = { photo, mask, bounds: bounds.shallows, landMask, landBounds: bounds.land };
+  await addFlatlandDetail(group, 'terrain');
   scene.add(group);
   return group;
 }

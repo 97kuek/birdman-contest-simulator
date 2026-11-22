@@ -1,3 +1,4 @@
+import { addFlatlandDetail } from './terrain/flatland.js';
 import * as THREE from 'three';
 import { loadVenueModel } from './authored-models.js';
 import { terrainAssets } from './terrain/assets.js';
@@ -92,6 +93,7 @@ export async function addFujikawaTerrain(scene) {
   shadow.receiveShadow = true;
   shadow.position.y = .017;
   pavement.add(shadow);
+  await addFlatlandDetail(landscape, 'fujikawa');
   scene.add(facility);
   return { landscape, facility, riverTime };
 }
