@@ -3,6 +3,14 @@ import { terrainAssets } from './assets.js';
 
 let grainPromise;
 
+export function loadSurfaceGrain() {
+  return grainPromise ??= terrainAssets('terrain').texture('flatland-grain.webp').then(texture => {
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.anisotropy = 8;
+    return texture;
+  });
+}
+
 // The Blender material stores a north-up land-use mask and its footprint in metres.
 // The three mask channels identify cultivated/playing fields, roads, and shingle.
 export async function addFlatlandDetail(landscape, directory) {
@@ -11,15 +19,10 @@ export async function addFlatlandDetail(landscape, directory) {
     if (part.material?.userData.flatlandMask) materials.add(part.material);
   });
   if (!materials.size) return;
-  grainPromise ??= terrainAssets('terrain').texture('flatland-grain.webp').then(texture => {
-    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-    texture.anisotropy = 8;
-    return texture;
-  });
   await Promise.all([...materials].map(async material => {
     const spec = material.userData;
     const [grain, mask] = await Promise.all([
-      grainPromise, terrainAssets(directory).texture(spec.flatlandMask),
+      loadSurfaceGrain(), terrainAssets(directory).texture(spec.flatlandMask),
     ]);
     mask.flipY = false;
     mask.anisotropy = 4;

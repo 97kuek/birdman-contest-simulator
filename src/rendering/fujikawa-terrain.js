@@ -1,4 +1,4 @@
-import { addFlatlandDetail } from './terrain/flatland.js';
+import { addFlatlandDetail, loadSurfaceGrain } from './terrain/flatland.js';
 import * as THREE from 'three';
 import { loadVenueModel } from './authored-models.js';
 import { terrainAssets } from './terrain/assets.js';
@@ -19,6 +19,26 @@ function addMountainHaze(material) {
         #ifdef USE_FOG
         gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, coastalHaze);
         #endif`);
+  };
+}
+
+// The 850 m ortho preserves the surveyed markings. The shared material tile
+// supplies the aggregate and worn patches resolved from a low cockpit or cab.
+function addPavementGrain(material, grain) {
+  material.onBeforeCompile = shader => {
+    shader.uniforms.surfaceGrain = { value: grain };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 pavementMetres;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\npavementMetres = position.xz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 pavementMetres;\nuniform sampler2D surfaceGrain;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        float aggregate = texture2D(surfaceGrain, pavementMetres / 3.8).r - .5;
+        vec2 patchUV = mat2(.8, -.6, .6, .8) * pavementMetres / 15.7;
+        float patches = texture2D(surfaceGrain, patchUV).r - .5;
+        // Preserve paint contrast as the camera crosses a runway marking.
+        float asphalt = 1.0 - smoothstep(.17, .54, sampledDiffuseColor.r);
+        diffuseColor.rgb *= 1.0 + asphalt * (1.65 * aggregate + .9 * patches);`);
   };
 }
 
@@ -57,9 +77,9 @@ function addSurfaceDetail(material, detail, waterMask, clock) {
 
 export async function addFujikawaTerrain(scene) {
   const assets = terrainAssets('fujikawa');
-  const [landscape, { runway }, grass, waterMask] = await Promise.all([
+  const [landscape, { runway }, grass, waterMask, surfaceGrain] = await Promise.all([
     loadVenueModel('fujikawa-scenery'), assets.json('layers.json'),
-    assets.texture('grass-detail.webp'), assets.texture('river-water.png'),
+    assets.texture('grass-detail.webp'), assets.texture('river-water.png'), loadSurfaceGrain(),
   ]);
   const facility = new THREE.Group();
   facility.name = '富士川滑空場 RWY 36';
@@ -87,6 +107,7 @@ export async function addFujikawaTerrain(scene) {
     }
   });
   const pavement = landscape.getObjectByName('Pavement');
+  addPavementGrain(pavement.material, surfaceGrain);
   const shadow = new THREE.Mesh(pavement.geometry, new THREE.ShadowMaterial({ opacity: .32,
     depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
   shadow.name = '滑走路面の影';

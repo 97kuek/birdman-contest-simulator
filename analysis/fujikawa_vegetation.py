@@ -15,12 +15,56 @@ def mottling(rng, size, scale):
     return blurred / max(.001, blurred.std())
 
 
-def surface_texture(brush):
-    rng = np.random.default_rng(312 if brush else 408)
+def mown_surface():
+    """A 4.2 × 5.2 m tile of bent leaves, dry clippings and darker turf crowns."""
+    rng = np.random.default_rng(492)
+    size = 512
+    pockets = mottling(rng, size, 24)
+    crowns = mottling(rng, size, 5)
+    speckle = mottling(rng, size, 1.2)
+    straw = np.clip((.8 * pockets + .5 * crowns - .28) / 2.1, 0, 1)
+    shade = 6 * pockets + 11 * crowns + 4 * speckle
+    bgr = np.array([46, 94, 79]) + shade[:, :, None] * [.47, .91, 1.05]
+    bgr += straw[:, :, None] * [7, 11, 24]
+    # Contrasting windrows of cuttings bridge the gap between individual
+    # blades and the mowing passes that are painted on the full mesh.
+    yy, xx = np.ogrid[:size, :size]
+    cuttings = np.zeros((size, size), np.float32)
+    for _ in range(180):
+        x, y = rng.uniform(0, size, 2)
+        a = rng.normal(.47, .64)
+        dx = (xx - x + size/2) % size - size/2
+        dy = (yy - y + size/2) % size - size/2
+        along = (dx*np.cos(a) + dy*np.sin(a)) / rng.uniform(6, 19)
+        across = (dy*np.cos(a) - dx*np.sin(a)) / rng.uniform(1.2, 3.9)
+        cuttings += rng.uniform(.4, 1) * np.exp(-1.3*(along*along + across*across))
+    bgr += cuttings[:, :, None] * np.array([11, 18, 29])
+    # The tips lie in loose sprays. Wrap strokes that cross a seam.
+    for _ in range(1700):
+        x, y = rng.uniform(0, size, 2)
+        dry = straw[int(y), int(x)]
+        angle = rng.uniform(-np.pi, np.pi)
+        for _ in range(rng.integers(5, 15)):
+            theta = angle + rng.normal(0, .52)
+            length = rng.uniform(3, 14)
+            start = np.array([x, y]) + rng.normal(0, 2.1, 2)
+            end = start + length * np.array([np.cos(theta), np.sin(theta)])
+            tone = rng.uniform(-17, 27) + 10 * dry
+            pixel = bgr[int(start[1]) % size, int(start[0]) % size]
+            colour = tuple(np.clip(pixel + tone * np.array([.48, .85, 1]), 18, 180))
+            for step in np.linspace(0, 1, int(length) + 1):
+                i, j = np.rint(start + step * (end - start)).astype(int) % size
+                bgr[j, i] = colour
+    cv2.imwrite(str(OUT/'mown-grass.webp'), np.uint8(np.clip(bgr, 0, 255)),
+                [cv2.IMWRITE_WEBP_QUALITY, 90])
+
+
+def scrub_surface():
+    rng = np.random.default_rng(312)
     size = 256
-    coarse = mottling(rng, size, 12 if brush else 19)
+    coarse = mottling(rng, size, 12)
     fine = mottling(rng, size, 2)
-    mid = np.array([42, 78, 52] if brush else [43, 91, 76])
+    mid = np.array([42, 78, 52])
     field = mid + ((6*coarse + 5*fine)[:, :, None] * np.array([.64,1,.95]))
     # Green tips catch light; small cool recesses remain between adjacent sprays.
     for _ in range(13500):
@@ -30,8 +74,7 @@ def surface_texture(brush):
         dx,dy = rng.integers(-2,3),rng.integers(-4,2)
         for t in (0, .33, .66, 1):
             field[round(y+dy*t)%size,round(x+dx*t)%size] = colour
-    name = 'scrub-surface' if brush else 'mown-grass'
-    cv2.imwrite(str(OUT/(name+'.webp')), field.clip(0,255).astype('uint8'), [cv2.IMWRITE_WEBP_QUALITY,92])
+    cv2.imwrite(str(OUT/'scrub-surface.webp'), field.clip(0,255).astype('uint8'), [cv2.IMWRITE_WEBP_QUALITY,92])
 
 
 def plant_card(form, seed):
@@ -92,8 +135,8 @@ def plant_card(form, seed):
 
 
 def bake():
-    surface_texture(False)
-    surface_texture(True)
+    mown_surface()
+    scrub_surface()
     cards = [plant_card(form, seed) for form,seed in
              [('grass',12),('reed',71),('brush',101),('brush',202)]]
     # Keep mapped low bushes at their original locations but use the branched
