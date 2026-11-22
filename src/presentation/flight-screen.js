@@ -482,8 +482,9 @@ export function setupTrials({
     latestRecord?.trail.dispose();
     latestRecord = null;
     session.select(selectedWeather(), direction);
-    renderWind(session.onDeck);
-    aircraftPose.placeOnDeck(session.launch, session.onDeck);
+    const preview = session.onDeck;
+    renderWind(preview);
+    aircraftPose.placeOnDeck(session.launch, preview);
     $('previous-result').hidden = Boolean(field) || !session.latest;
   }
   for (const control of weatherControls) {

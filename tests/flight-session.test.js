@@ -42,9 +42,9 @@ test('聯の助走から離台に駆動位相を引き継ぎ、同じ発進か�
   const session = new FlightSession(hull, 'calm', () => 0, undefined, 'ren');
   assert.equal(session.reference, null);
   assert.equal(session.onDeck.rpm, 0);
-  const release = session.launch.duration;
   const run = watts => {
     const attempt = session.startAttempt();
+    const release = session.launch.duration;
     const justBefore = attempt.advance(release - 0.001, 0, 0).sample;
     const atRelease = attempt.advance(release, 0, 0).sample;
     assert.ok(Math.abs(atRelease.propellerAngle - justBefore.propellerAngle) < 0.02);
@@ -56,4 +56,22 @@ test('聯の助走から離台に駆動位相を引き継ぎ、同じ発進か�
   assert.equal(pedal.watts, 300);
   assert.ok(pedal.rpm > coast.rpm);
   assert.ok(pedal.pathLength > coast.pathLength);
+});
+
+test('聯の方位調整中は発進計算を保留し、確定後は同じ風と台上姿勢から回転を始める', () => {
+  const session = new FlightSession(hull, 'day-hard', () => 7.5, undefined, 'ren');
+  session.prepareAttempt();
+  let preview;
+  for (const direction of [-24, 8, 23]) {
+    session.select('day-hard', direction);
+    preview = session.onDeck;
+    assert.equal(session.launch.driveAt, undefined);
+    assert.equal(preview.heading, session.launch.heading);
+  }
+  assert.deepEqual(session.onDeckAt(0), preview);
+  const confirmed = session.launch;
+  assert.ok(session.onDeckAt(2).rpm > 0);
+  const attempt = session.startAttempt();
+  assert.equal(session.launch, confirmed);
+  assert.equal(attempt.advance(confirmed.duration, 0, 0).phase, 'release');
 });

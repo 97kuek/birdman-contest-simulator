@@ -15,8 +15,11 @@ import { aircraftProfile } from '../domain/aircraft-profiles.js';
 import { bodyShiftFromCg } from '../domain/pilot-shift.js';
 import { RADIANS_PER_DEGREE } from '../domain/units.js';
 import { poweredLaunch } from '../domain/powered-launch.js';
+import { reserveCapacityJ } from '../domain/ren-practice.js';
 import { prelaunchPedalSeconds } from './launch-sequence.js';
 import { WEATHER, windAt } from '../domain/weather.js';
+
+const parkedDrive = { rpm: 0, watts: 0, reserve: reserveCapacityJ, propellerAngle: 0, crankAngle: 0 };
 
 export function rampSample(launch, weather, elapsed, gustOffset, profile, drive) {
   const ramp = rampAt(launch, elapsed);
@@ -135,7 +138,11 @@ export class FlightSession {
   }
 
   get onDeck() {
-    return this.onDeckAt(0);
+    if (!this.#profile.propulsion) return this.onDeckAt(0);
+    const base = this.#baseLaunch;
+    // Powered ground-roll wind uses GO as time zero, including while aiming.
+    const preview = { ...base, windTimeOffset: base.duration };
+    return rampSample(preview, this.weather, 0, this.#gustOffset, this.#profile, parkedDrive);
   }
 
   onDeckAt(spinSeconds) {
