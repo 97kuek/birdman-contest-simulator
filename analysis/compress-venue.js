@@ -1,7 +1,9 @@
-// Lossless buffer compression. Blender still owns the mesh topology, normals and UVs.
+// Prepare the distribution meshes and losslessly compress their glTF buffers.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { MeshoptEncoder } from 'meshoptimizer';
+import { simplifyVenueTerrain } from './simplify-venue-terrain.js';
+import { addVenueLod } from './venue-lod.js';
 
 const [input, output] = process.argv.slice(2);
 const raw = readFileSync(input);
@@ -19,13 +21,20 @@ function append(bytes) {
   return offset;
 }
 
+function readView(id) {
+  const view = doc.bufferViews[id];
+  const start = view.byteOffset ?? 0;
+  return binary.subarray(start, start + view.byteLength);
+}
+const terrain = await simplifyVenueTerrain(doc, readView);
+await addVenueLod(doc, readView);
 await MeshoptEncoder.ready;
 const componentBytes = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 };
 const dimensions = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 };
-const fallback = doc.buffers[0].byteLength;
+let fallback = 0;
 for (const [i, view] of doc.bufferViews.entries()) {
-  const start = view.byteOffset || 0;
-  const bytes = binary.subarray(start, start + view.byteLength);
+  const bytes = terrain.get(i) ?? readView(i);
+  view.byteLength = bytes.byteLength;
   const accessor = doc.accessors.find(a => a.bufferView === i);
   const stride = view.byteStride || (accessor && componentBytes[accessor.componentType] * dimensions[accessor.type]);
   const mode = view.target === 34963 ? 'TRIANGLES' : 'ATTRIBUTES';
@@ -39,6 +48,8 @@ for (const [i, view] of doc.bufferViews.entries()) {
     buffer: 0, byteOffset: append(compressed), byteLength: compressed.length, byteStride: stride, count, mode,
   } };
   view.buffer = 1;
+  view.byteOffset = fallback;
+  fallback += Math.ceil(bytes.byteLength / 4) * 4;
 }
 doc.buffers = [{ byteLength: length }, { byteLength: fallback, extensions: { EXT_meshopt_compression: { fallback: true } } }];
 for (const key of ['extensionsRequired', 'extensionsUsed']) (doc[key] ??= []).push('EXT_meshopt_compression');

@@ -2,6 +2,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
+import { prepareSceneryLod } from './terrain/scenery-lod.js';
+
 const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const models = new Map();
 
@@ -52,5 +54,6 @@ export async function loadVenueModel(name) {
       [material.polygonOffsetFactor, material.polygonOffsetUnits] = offset;
     }
   });
+  if (name.endsWith('-scenery')) prepareSceneryLod(scene);
   return scene;
 }

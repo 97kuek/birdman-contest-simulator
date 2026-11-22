@@ -1,4 +1,5 @@
 """Build the offline Fujikawa terrain with numpy and opencv-python."""
+import argparse
 import concurrent.futures
 import json
 import math
@@ -10,6 +11,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from mountain_relief import SHEETS, bake_photo
 from fujikawa_vegetation import bake as bake_verge_textures
 
 LAT, LON = 35.120833, 138.631667
@@ -30,7 +32,7 @@ FIELD_ALTITUDE = 6
 
 
 def tile(layer, zoom, x, y):
-    suffix = 'jpg' if layer == 'seamlessphoto' else 'png'
+    suffix = 'jpg' if layer in ('seamlessphoto', 'ort') else 'png'
     path = CACHE / f'{layer}-{zoom}-{x}-{y}.{suffix}'
     absent = path.with_suffix('.missing')
     if absent.exists():
@@ -56,7 +58,7 @@ def tile(layer, zoom, x, y):
 
 
 def mosaic(layer, zoom, x0, y0, width, height):
-    photo = layer == 'seamlessphoto'
+    photo = layer in ('seamlessphoto', 'ort')
     nodata = np.nan if layer == 'dem5a_png' else 0
     shape = (256*height, 256*width)
     output = np.empty((*shape, 3), np.uint8) if photo else np.zeros(shape, np.float32)
@@ -83,7 +85,7 @@ def mosaic(layer, zoom, x0, y0, width, height):
     return output
 
 
-def bake(name, zoom, nx, ny, dem_zoom, resolution, grid, center=None):
+def bake(name, zoom, nx, ny, dem_zoom, grid, center=None):
     scale = 2**zoom
     cx, cy = CX, CY
     if center:
@@ -91,8 +93,6 @@ def bake(name, zoom, nx, ny, dem_zoom, resolution, grid, center=None):
         cx = (lon+180)/360
         cy = (1-math.asinh(math.tan(math.radians(lat)))/math.pi)/2
     x0, y0 = round(cx*scale - nx/2), round(cy*scale - ny/2)
-    photo = mosaic('seamlessphoto', zoom, x0, y0, nx, ny)
-    resized = cv2.resize(photo, (resolution*nx, resolution*ny), interpolation=cv2.INTER_AREA)
 
     factor = 2**(dem_zoom-zoom)
     xx, yy = np.meshgrid(np.linspace(x0, x0+nx, grid+1), np.linspace(y0, y0+ny, grid+1))
@@ -113,26 +113,9 @@ def bake(name, zoom, nx, ny, dem_zoom, resolution, grid, center=None):
         high = cv2.remap(laser, ((xx*factor5-x5)*256-.5).astype('f'),
                          ((yy*factor5-y5)*256-.5).astype('f'), cv2.INTER_LINEAR)
         elevation = np.where(np.isfinite(high), high, elevation)
-    if name == 'fuji':
-        # Use the source DEM at the image resolution to keep ravines, crater walls
-        # and the isolated modeled spring/summer snow patches legible from the river mouth.
-        h, w = resized.shape[:2]
-        u, v = np.meshgrid(np.linspace(px[0, 0], px[0, -1], w), np.linspace(py[0, 0], py[-1, 0], h))
-        alt = cv2.remap(heights, u.astype('f'), v.astype('f'), cv2.INTER_LINEAR)
-        mpp = nx*METRES_PER_WORLD/scale/w
-        north_slope, east_slope = np.gradient(alt, mpp)
-        slope = np.hypot(north_slope, east_slope)
-        valleys = cv2.GaussianBlur(alt, (0, 0), 270/mpp) - alt
-        relief = np.clip(.91 + .40*east_slope + .16*north_slope, .59, 1.06)
-        snowline = 3390 + 260*slope - 4.8*valleys + 100*east_slope
-        cover = np.clip((alt-snowline)/250, 0, 1)
-        exposed = np.clip((slope-.58)*1.8 + (-valleys-13)/68, 0, .86)
-        cover *= (1-exposed) * .60
-        snow_bgr = np.array([242, 237, 225])*relief[:, :, None] + np.array([12, 6, 0])
-        resized = np.clip(resized*(1-cover[:, :, None]) + snow_bgr*cover[:, :, None], 0, 255).astype('uint8')
-    if not cv2.imwrite(str(OUT/(name+'.webp')), resized, [cv2.IMWRITE_WEBP_QUALITY, 84]):
-        raise OSError(f'Failed to write {name}.webp')
-    if name == 'runway':
+        photo = mosaic('seamlessphoto', zoom, x0, y0, nx, ny)
+        if not cv2.imwrite(str(OUT/'runway.webp'), photo, [cv2.IMWRITE_WEBP_QUALITY, 84]):
+            raise OSError('Failed to write runway.webp')
         # Level the flight surface and ease the join into the surveyed riverbank.
         dx = (xx/scale-SOUTH[0])*METRES_PER_WORLD
         dz = (yy/scale-SOUTH[1])*METRES_PER_WORLD
@@ -143,6 +126,8 @@ def bake(name, zoom, nx, ny, dem_zoom, resolution, grid, center=None):
         cell_diagonal = math.hypot(nx, ny)*METRES_PER_WORLD/(scale*grid)
         blend = np.clip((distance-cell_diagonal)/25, 0, 1)
         elevation = FIELD_ALTITUDE + blend*(elevation-FIELD_ALTITUDE)
+    else:
+        bake_photo(name, mosaic, ROOT)
     np.rint(elevation*5).astype('<i2').tofile(AUTHORING/(name+'.bin'))
     west, east = (xx[0, [0, -1]]/scale-CX)*METRES_PER_WORLD
     north, south = (yy[[0, -1], 0]/scale-CY)*METRES_PER_WORLD
@@ -355,12 +340,19 @@ def bake_floodplain_photo():
 
 if __name__ == '__main__':
     CACHE.mkdir(parents=True, exist_ok=True)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--mountain-textures', action='store_true',
+                        help='regenerate the six mountainous photograph sheets only')
+    if parser.parse_args().mountain_textures:
+        for sheet in SHEETS:
+            bake_photo(sheet, mosaic, ROOT)
+        raise SystemExit(0)
     OUT.mkdir(parents=True, exist_ok=True)
     AUTHORING.mkdir(parents=True, exist_ok=True)
     # At zoom14 and 11, 32 cells per tile place each finer tile boundary on a grid edge.
-    layers = [bake('runway', 17, 6, 8, 14, 256, 176),
-              bake('river', 14, 6, 6, 13, 192, 192),
-              bake('mountains', 11, 6, 6, 10, 96, 192)]
+    layers = [bake('runway', 17, 6, 8, 14, 176),
+              bake('river', 14, 6, 6, 13, 192),
+              bake('mountains', 11, 6, 6, 10, 192)]
     bake_pavement()
     bake_grass_detail()
     bake_landmarks()
@@ -370,7 +362,7 @@ if __name__ == '__main__':
         outer['hole'] = inner['bounds']
     # This independent inset sits north of the river sheet and fits exactly on
     # mountain-sheet grid lines. Keep its neighbour heights for a watertight join.
-    fuji = bake('fuji', 13, 5, 5, 13, 192, 176, center=(35.36, 138.73))
+    fuji = bake('fuji', 13, 5, 5, 13, 176, center=(35.36, 138.73))
     layers[-1]['holes'] = [layers[-1].pop('hole'), fuji['bounds']]
     runway = dict(southThreshold=THRESHOLD, trueBearingDegrees=math.degrees(BEARING)%360,
                   length=850, width=30, elevation=FIELD_ALTITUDE)
