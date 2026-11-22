@@ -32,29 +32,61 @@ def append_attribute(document, binary, values, dimensions):
     return len(accessors)-1
 
 
-def export_instances(document, binary, fields):
-    """Preserve the same transforms in Blender Geometry Nodes and GPU instances."""
-    if not fields:
+def batch_collection_instances(collection, instances):
+    """Join each linked house once, keeping its placements as GPU transforms."""
+    groups = {}
+    for obj in instances:
+        groups.setdefault(obj.instance_collection, []).append(obj.matrix_world.decompose())
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    result = {}
+    for asset, transforms in groups.items():
+        bpy.ops.object.select_all(action='DESELECT')
+        prototype = bpy.data.objects.new(asset.name, bpy.data.meshes.new(asset.name))
+        collection.objects.link(prototype)
+        prototype.select_set(True)
+        for source in asset.all_objects:
+            if source.type != 'MESH' or source.hide_render:
+                continue
+            evaluated = source.evaluated_get(depsgraph)
+            mesh = bpy.data.meshes.new_from_object(evaluated, depsgraph=depsgraph)
+            part = bpy.data.objects.new(source.name, mesh)
+            collection.objects.link(part)
+            part.matrix_world = evaluated.matrix_world.copy()
+            part.location -= asset.instance_offset
+            part.select_set(True)
+        bpy.context.view_layer.objects.active = prototype
+        bpy.ops.object.join()
+        if not prototype.data.polygons:
+            raise ValueError(f'No geometry in instanced collection {asset.name}')
+        result[prototype.name] = transforms
+    return result
+
+
+def export_instances(document, binary, fields, batches):
+    """Encode editable point fields and linked collection placements in glTF axes."""
+    transforms = dict(batches)
+    colours = {}
+    for field in fields:
+        mesh = field.data
+        name = field['prototype']
+        transforms[name] = [
+            (v.co, Euler(mesh.attributes['rotation'].data[i].vector).to_quaternion(),
+             mesh.attributes['scale'].data[i].vector)
+            for i, v in enumerate(mesh.vertices)]
+        if mesh.attributes.get('tint'):
+            colours[name] = [v.vector[:] for v in mesh.attributes['tint'].data]
+    if not transforms:
         return
     nodes = {n.get('name'): n for n in document['nodes']}
-    for field in fields:
-        prototype = bpy.data.objects[field['prototype']]
-        node = nodes[prototype.name]
-        mesh = field.data
-        positions, rotations, scales = [], [], []
-        for i, vertex in enumerate(mesh.vertices):
-            x, y, z = vertex.co
-            positions.append((x, z, -y))
-            q = Euler(mesh.attributes['rotation'].data[i].vector).to_quaternion()
-            rotations.append((q.x, q.z, -q.y, q.w))
-            x, y, z = mesh.attributes['scale'].data[i].vector
-            scales.append((x, z, y))
-        attributes = {name: append_attribute(document, binary, values, n) for name, values, n in
-                      [('TRANSLATION', positions, 3), ('ROTATION', rotations, 4), ('SCALE', scales, 3)]}
-        if mesh.attributes.get('tint'):
-            colours = [v.vector[:] for v in mesh.attributes['tint'].data]
-            attributes['_COLOR_0'] = append_attribute(document, binary, colours, 3)
-        node.setdefault('extensions', {})['EXT_mesh_gpu_instancing'] = {'attributes': attributes}
+    for name, rows in transforms.items():
+        attributes = {
+            'TRANSLATION': append_attribute(document, binary, [(p.x, p.z, -p.y) for p, q, s in rows], 3),
+            'ROTATION': append_attribute(document, binary, [(q.x, q.z, -q.y, q.w) for p, q, s in rows], 4),
+            'SCALE': append_attribute(document, binary, [(s.x, s.z, s.y) for p, q, s in rows], 3),
+        }
+        if name in colours:
+            attributes['_COLOR_0'] = append_attribute(document, binary, colours[name], 3)
+        nodes[name].setdefault('extensions', {})['EXT_mesh_gpu_instancing'] = {'attributes': attributes}
     for key in ('extensionsUsed', 'extensionsRequired'):
         document.setdefault(key, []).append('EXT_mesh_gpu_instancing')
 
@@ -164,6 +196,10 @@ def export_collection(scene_name, collection_name, filename, *, landscape=False)
             for polygon in mesh.polygons:
                 polygon.use_smooth = True
             mesh.normals_split_custom_set_from_vertices([(0, 0, 1)] * len(mesh.vertices))
+    placements = [o for o in collection.all_objects
+                  if o.instance_type == 'COLLECTION' and o.instance_collection
+                  and (o.get('venueInstance') or o.instance_collection.get('batchVenueInstances'))]
+    batches = batch_collection_instances(collection, placements)
     fields = [o for o in collection.all_objects if 'prototype' in o]
     for field in fields:
         proto = bpy.data.objects[field['prototype']]
@@ -172,8 +208,9 @@ def export_collection(scene_name, collection_name, filename, *, landscape=False)
         proto.matrix_world = field.matrix_world.copy()
     bpy.context.view_layer.update()
     bpy.ops.object.select_all(action='DESELECT')
+    skip = set(fields + placements)
     for obj in list(collection.all_objects):
-        if obj not in fields:
+        if obj not in skip:
             obj.select_set(True)
     with TemporaryDirectory() as temp:
         glb = Path(temp) / 'model.glb'
@@ -184,7 +221,7 @@ def export_collection(scene_name, collection_name, filename, *, landscape=False)
     size = struct.unpack_from('<I', raw, 12)[0]
     document = json.loads(raw[20:20+size])
     binary = bytearray(raw[28+size:28+size+document['buffers'][0]['byteLength']])
-    export_instances(document, binary, fields)
+    export_instances(document, binary, fields, batches)
     if landscape:
         scene_textures(document)
     document['buffers'][0]['byteLength'] = len(binary)
