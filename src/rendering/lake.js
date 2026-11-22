@@ -162,11 +162,13 @@ export function addLakeAndSky(scene, compact = false) {
       uniforms.sunlight.value.copy(direction);
       spray.material.color.setHex(night ? 0x8fabc0 : 0xd7f0ee);
     },
-    setWake(boat, strength) {
+    setWake(origin, strength) {
       uniforms.wakeStrength.value = strength;
       if (strength <= .01) return;
-      boat.localToWorld(stern.set(0, 0, 2.65));
-      aftAxis.set(0, 0, 1).transformDirection(boat.matrixWorld);
+      origin.getWorldPosition(stern);
+      origin.getWorldDirection(aftAxis);
+      aftAxis.y = 0;
+      aftAxis.normalize();
       uniforms.boatWake.value.set(stern.x, stern.z, aftAxis.x, aftAxis.z);
     },
     touch(point,direction,sink){

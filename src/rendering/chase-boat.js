@@ -6,6 +6,9 @@ export function createChaseBoat(group) {
   const hull = group.getObjectByName('BoatHull');
   const eye = group.getObjectByName('BoatEye');
 
+  const wakeOrigin = hull.getObjectByName('BoatWakeOrigin');
+  const engineOrigin = hull.getObjectByName('BoatEngineOrigin');
+
   const positionAt = createChaseCourse();
   function update(samples, time, waveTime, firstLand, stopTime) {
     const state = positionAt(samples, time, firstLand, stopTime);
@@ -17,5 +20,5 @@ export function createChaseBoat(group) {
     hull.rotation.set(.003 * Math.sin(waveTime * .58), 0, -heel + .004 * Math.sin(waveTime * .66));
     return state.speed;
   }
-  return { group, eye, update };
+  return { group, eye, wakeOrigin, engineOrigin, update };
 }

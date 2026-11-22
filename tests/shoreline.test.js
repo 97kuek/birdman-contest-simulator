@@ -10,6 +10,19 @@ const boatModel = await readModel('chase-boat.glb.gz');
 
 import { modelHull } from '../src/rendering/collision-hull.js';
 
+test('船尾の航跡とエンジン音はBlenderの船体に追従する', () => {
+  const boat = createChaseBoat(boatModel.clone());
+  const hull = boat.group.getObjectByName('BoatHull');
+  assert.equal(boat.wakeOrigin.parent, hull);
+  assert.equal(boat.engineOrigin.parent.name, 'Outboard');
+  assert.ok(boat.wakeOrigin.position.z > 0);
+  assert.ok(Math.abs(boat.wakeOrigin.position.y) < .05);
+  const point = boat.group.position.clone();
+  assert.ok(boat.engineOrigin.getWorldPosition(point).y > boat.wakeOrigin.position.y);
+  hull.rotation.y = Math.PI / 2;
+  assert.ok(boat.wakeOrigin.getWorldDirection(point).x > .99);
+});
+
 const shape = [[-1, -0.45], [1, -0.45], [0, 0.5]];
 // A square island with a lagoon. At yaw zero, forward is north (negative Z).
 const island = [[-10, -20], [10, -20], [10, -10], [-10, -10]];

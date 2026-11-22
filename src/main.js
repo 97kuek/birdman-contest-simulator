@@ -150,10 +150,10 @@ async function start() {
     const visualTime = reduceMotion.matches ? 0 : trials?.waveTime() ?? sceneTime;
     const route = trials?.boatRoute(now) ?? {};
     const boatSpeed = boat.update(route.samples, route.time, visualTime, firstLand, route.stopTime);
-    lake.setWake(boat.group, THREE.MathUtils.smoothstep(boatSpeed, 0.4, 6));
+    lake.setWake(boat.wakeOrigin, THREE.MathUtils.smoothstep(boatSpeed, 0.4, 6));
     cameraRig.update();
     if (trials) {
-      boat.group.localToWorld(motorPosition.set(0, .45, 2.7));
+      boat.engineOrigin.getWorldPosition(motorPosition);
       const range = cameraRig.camera.position.distanceTo(motorPosition);
       sound.update(trials.soundPhase, current.display.sample, current.display.instruments, cameraRig.view(), range, boatSpeed, null,
         cameraRig.camera.position.distanceTo(modelBase.getWorldPosition(wheelPosition)));
