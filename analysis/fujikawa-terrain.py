@@ -374,5 +374,5 @@ if __name__ == '__main__':
     layers[-1]['holes'] = [layers[-1].pop('hole'), fuji['bounds']]
     runway = dict(southThreshold=THRESHOLD, trueBearingDegrees=math.degrees(BEARING)%360,
                   length=850, width=30, elevation=FIELD_ALTITUDE)
-    (OUT/'layers.json').write_text(json.dumps(dict(runway=runway, layers=layers[::-1], fuji=fuji), indent=2)+'\n')
+    (AUTHORING/'layers.json').write_text(json.dumps(dict(runway=runway, layers=layers[::-1], fuji=fuji), indent=2)+'\n')
     bake_floodplain_photo()

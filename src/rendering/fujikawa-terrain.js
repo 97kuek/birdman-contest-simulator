@@ -77,10 +77,12 @@ function addSurfaceDetail(material, detail, waterMask, clock) {
 
 export async function addFujikawaTerrain(scene) {
   const assets = terrainAssets('fujikawa');
-  const [landscape, { runway }, grass, waterMask, surfaceGrain] = await Promise.all([
-    loadVenueModel('fujikawa-scenery'), assets.json('layers.json'),
+  const [landscape, grass, waterMask, surfaceGrain] = await Promise.all([
+    loadVenueModel('fujikawa-scenery'),
     assets.texture('grass-detail.webp'), assets.texture('river-water.png'), loadSurfaceGrain(),
   ]);
+  const runway = landscape.children.find(part => part.userData.runway)?.userData.runway;
+  if (!runway) throw new Error('Fujikawa model is missing the runway reference frame');
   const facility = new THREE.Group();
   facility.name = '富士川滑空場 RWY 36';
   facility.userData.runway = runway;

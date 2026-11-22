@@ -35,7 +35,7 @@
 
 ズーム17のタイル（116007, 51860）を左上にして、元の256 px角のタイルを6列・8行に並べた。舗装の南北端の中央は、左上からそれぞれ (910, 1335) px、(757, 480) px。南端は北緯約35.11718°、東経約138.63250°、2点間の写真上の距離は約849 m、真方位は約349.85°となる。ゲームでは南端を滑走路座標の原点に固定し、前方を −Z、右を +X、路面を Y=0 とする。[地理院地図で南端を開く](https://maps.gsi.go.jp/#17/35.11718/138.63250/&base=seamlessphoto&ls=seamlessphoto&disp=1)
 
-写真と標高は `assets/fujikawa/` に同梱している。更新時はリポジトリ直下から次を実行する。生成処理は取得済みタイルを `.cache/fujikawa/tiles/` に保存し、次回以降は再利用する。
+写真と標高は `assets/fujikawa/` に同梱している。更新時はリポジトリ直下から次を実行する。生成処理は取得済みタイルを `.cache/fujikawa/tiles/` に保存し、次回以降は再利用する。 標高格子と各レイヤーの範囲は `.cache/fujikawa/survey/` に書き出す。ゲームは滑走路の基準点と方位を会場モデルから読み込む。
 
 ```sh
 uv run --with numpy --with opencv-python-headless python analysis/fujikawa-terrain.py
