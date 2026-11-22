@@ -6,8 +6,9 @@ export function createChaseBoat(group) {
   const hull = group.getObjectByName('BoatHull');
   const eye = group.getObjectByName('BoatEye');
 
-  const wakeOrigin = hull.getObjectByName('BoatWakeOrigin');
-  const engineOrigin = hull.getObjectByName('BoatEngineOrigin');
+  // Boats cached before the dedicated markers still have an outboard and propeller.
+  const engineOrigin = hull.getObjectByName('BoatEngineOrigin') ?? hull.getObjectByName('Outboard') ?? hull;
+  const wakeOrigin = hull.getObjectByName('BoatWakeOrigin') ?? hull.getObjectByName('Outboard_propeller') ?? engineOrigin;
 
   const positionAt = createChaseCourse();
   function update(samples, time, waveTime, firstLand, stopTime) {

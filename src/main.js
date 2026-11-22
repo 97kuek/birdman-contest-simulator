@@ -123,8 +123,8 @@ async function start() {
   const motorPosition = new THREE.Vector3(), wheelPosition = new THREE.Vector3();
   let last = 0, sceneTime = 0, lastImpactRun;
   const impactDirection = new THREE.Vector3(), impactPoint = new THREE.Vector3();
-  renderer.setAnimationLoop(now => {
-    if (now - last < 30) return;
+  function renderFrame(now) {
+    if (last && now - last < 30) return;
     if (last && !document.hidden) sceneTime += (now - last) / 1000;
     last = now;
     trials?.tick(now);
@@ -180,7 +180,7 @@ async function start() {
     lake.update(cameraRig.camera, visualTime, weather.lakeWindSpeed, fluctuation, angle, weather.field, windTime, facility.rotation.y,
       sample?.gustOffset ?? 0, age);
     renderer.render(scene, cameraRig.camera);
-  });
+  }
 
   enableReflection(landscape);
   setNight = createDaylight({ scene, skyLight: ambient, directLight: sun, platform, landscape, lake });
@@ -259,6 +259,8 @@ async function start() {
     makeTrail: (run, color) => createFlightTrail(run, color, { facility, release }),
     sceneSeconds: () => sceneTime,
   });
+  renderFrame(performance.now());
+  renderer.setAnimationLoop(renderFrame);
   status.hidden = true;
   host.dataset.ready = 'true';
 }

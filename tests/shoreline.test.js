@@ -23,6 +23,18 @@ test('船尾の航跡とエンジン音はBlenderの船体に追従する', () =
   assert.ok(boat.wakeOrigin.getWorldDirection(point).x > .99);
 });
 
+test('旧形式の追走艇でも初回描画に必要な音源と航跡の位置を取得できる', () => {
+  const model = boatModel.clone();
+  for (const name of ['BoatEngineOrigin', 'BoatWakeOrigin']) model.getObjectByName(name).removeFromParent();
+  const boat = createChaseBoat(model);
+  assert.equal(boat.engineOrigin.name, 'Outboard');
+  assert.equal(boat.wakeOrigin.name, 'Outboard_propeller');
+  boat.update(null, 0, 0);
+  const point = model.position.clone();
+  assert.ok(boat.engineOrigin.getWorldPosition(point).toArray().every(Number.isFinite));
+  assert.ok(boat.wakeOrigin.getWorldPosition(point).toArray().every(Number.isFinite));
+});
+
 const shape = [[-1, -0.45], [1, -0.45], [0, 0.5]];
 // A square island with a lagoon. At yaw zero, forward is north (negative Z).
 const island = [[-10, -20], [10, -20], [10, -10], [-10, -10]];

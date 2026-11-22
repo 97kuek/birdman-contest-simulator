@@ -1,9 +1,10 @@
 import * as THREE from 'three';
+import { sceneAssetUrl } from '../asset-url.js';
 
 // Each venue owns its files beneath the page URL (including on GitHub Pages).
 export function terrainAssets(directory) {
   const loader = new THREE.TextureLoader();
-  const url = name => new URL(directory + '/' + name, document.baseURI).href;
+  const url = name => sceneAssetUrl(directory + '/' + name);
 
   async function fetchFile(name) {
     const response = await fetch(url(name));

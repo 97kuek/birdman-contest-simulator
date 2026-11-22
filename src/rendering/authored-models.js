@@ -1,10 +1,10 @@
+import { LoadingManager } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-
+import { sceneAssetUrl } from './asset-url.js';
 import { prepareSceneryLod } from './terrain/scenery-lod.js';
 
-const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+const loader = new GLTFLoader(new LoadingManager().setURLModifier(sceneAssetUrl)).setMeshoptDecoder(MeshoptDecoder);
 const models = new Map();
 
 // Both venues use the same instrument. Copies share geometry and materials.
@@ -28,7 +28,7 @@ export function loadAuthoredModel(name) {
 // Large venues stay separate downloads. Native decompression is preferred on
 // mobile; the bundled fallback also accepts already-decoded static responses.
 export async function loadVenueModel(name) {
-  const url = new URL('models/' + name + '.glb.gz', document.baseURI);
+  const url = new URL(sceneAssetUrl('models/' + name + '.glb.gz'));
   const response = await fetch(url);
   if (!response.ok) throw new Error('Could not load ' + url.pathname + ' (' + response.status + ')');
   let bytes = await response.arrayBuffer();
