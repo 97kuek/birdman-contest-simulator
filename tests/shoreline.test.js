@@ -27,6 +27,18 @@ test('岸線を飛び越えた区間、岸に沿う区間と陸中の水域を�
   assert.ok(Math.abs(rotated(0, 0, 25, 0) - 0.4) < 1e-9);
 });
 
+test('多景島・竹生島・沖島では水際を越えてから陸地に入る', () => {
+  const rings = JSON.parse(readFileSync(new URL('../assets/terrain/flight-shore.json', import.meta.url)));
+  const land = createShoreline(rings, 0);
+  // East/north metres in the local launch frame. Each pair starts on open water.
+  for (const [waterX, shoreX, north] of [[-6600, -6920, 270], [-9600, -10120, 14250], [-15700, -16875, -9475]]) {
+    assert.equal(land(waterX, north, waterX, north), null);
+    assert.equal(land(shoreX, north, shoreX, north), 0);
+    const crossing = land(waterX, north, shoreX, north);
+    assert.ok(crossing > 0 && crossing < 1);
+  }
+});
+
 test('松原の実際の岸線に進入した試技は失格で終了し直前の湖上の記録を保つ', () => {
   const rings = JSON.parse(readFileSync(new URL('../assets/terrain/flight-shore.json', import.meta.url)));
   const land = createShoreline(rings, 65 * Math.PI / 180);
