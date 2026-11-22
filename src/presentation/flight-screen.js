@@ -138,8 +138,8 @@ export function setupTrials({
   $('result-replay').onclick = () => openReplay(resultRecord, $('result-replay'));
 
   function showResult(record) {
-    resultRecord = record;
-    announceResult({ kind: 'scored', run: record.run, score: records.forRun(record.run) });
+    resultRecord = record.run ? record : null;
+    announceResult({ kind: 'scored', run: record.summary, score: records.forRun(record.summary), replayAvailable: Boolean(record.run) });
   }
   function announceResult(outcome) {
     showRecordBoard(outcome);
@@ -176,6 +176,10 @@ export function setupTrials({
     let previous = latestRecord;
     if (!previous) {
       const saved = session.latest;
+      if (!saved.run) {
+        showResult(saved);
+        return;
+      }
       const color = trialColor(saved.number);
       previous = {
         ...saved,
@@ -271,7 +275,8 @@ export function setupTrials({
     const { record, commentary } = active;
     record.run = run;
     releaseWaveTimes.set(run, record.releaseWaveTime);
-    records.record(run);
+    record.summary = session.latest.summary;
+    records.record(record.summary);
     record.trail.extend(run.samples);
     latestRecord?.trail.dispose();
     latestRecord = record;

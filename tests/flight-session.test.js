@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FlightSession } from '../src/application/flight-session.js';
+import { FlightRecords } from '../src/application/flight-records.js';
 import { MAX_LAUNCH_HEADING_DEGREES, WATER_RUNOUT_SECONDS } from '../src/domain/flight.js';
 
 const hull = [
@@ -74,4 +75,30 @@ test('聯の方位調整中は発進計算を保留し、確定後は同じ風�
   const attempt = session.startAttempt();
   assert.equal(session.launch, confirmed);
   assert.equal(attempt.advance(confirmed.duration, 0, 0).phase, 'release');
+});
+
+test('直近3条件のリプレイを残し、古い方位でも距離・試技番号・自己ベストを参照できる', () => {
+  const session = new FlightSession(hull, 'head');
+  const records = new FlightRecords(() => null);
+  const trials = [];
+  for (const direction of [0, 3, 6, 3, 9, 12]) {
+    session.select('head', direction);
+    const attempt = session.startAttempt();
+    const { run } = attempt.advance(session.launch.duration + 120, 0, 0);
+    trials.push(run);
+    records.record(session.latest.summary);
+  }
+  for (const [direction, index, canReplay] of [[0, 0, false], [3, 3, true], [6, 2, false], [9, 4, true], [12, 5, true]]) {
+    session.select('head', direction);
+    const { run, number, summary } = session.latest;
+    assert.equal(number, index + 1);
+    assert.equal(run, canReplay ? trials[index] : undefined);
+    assert.equal(summary.distance, trials[index].distance);
+    assert.equal(summary.duration, trials[index].duration);
+    assert.equal(summary.samples, undefined);
+    assert.equal(summary.launch, undefined);
+    assert.equal(records.forRun(summary).metres, trials[index].distance.toFixed(2));
+  }
+  assert.equal(records.forRun(session.latest.summary).best,
+    Math.max(...trials.map(run => Math.round(run.distance * 100))));
 });

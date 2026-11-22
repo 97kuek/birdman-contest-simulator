@@ -6,6 +6,7 @@ import { byId as $ } from './dom.js';
 function scoredBoard(run, score) {
   const aircraft = aircraftCards[run.aircraftId ?? 'ryukai'];
   const practice = run.aircraftId === 'ren';
+  const courseTime = run.courseTime ?? run.samples?.at(-1)?.courseTime;
   const official = score.official;
   const updated = score.personal === 'improved';
   const personal = {
@@ -18,7 +19,7 @@ function scoredBoard(run, score) {
     title: official === 'allTime' ? '歴代最高記録超え！' :
       official === 'winner2026' ? '優勝記録超え！' : updated ? '自己ベスト更新！' : practice ? '練習飛行の距離' : 'ただ今の記録',
     value: score.metres,
-    detail: [practice && (run.samples.at(-1).courseTime != null ? '練習コース完走 ' + run.samples.at(-1).courseTime.toFixed(1) + ' 秒' : aircraft.name + '・累積水平距離'), WEATHER[run.weather].label, personal[score.personal]].filter(Boolean).join(' ／ '),
+    detail: [practice && (courseTime != null ? '練習コース完走 ' + courseTime.toFixed(1) + ' 秒' : aircraft.name + '・累積水平距離'), WEATHER[run.weather].label, personal[score.personal]].filter(Boolean).join(' ／ '),
     award: official ? (official === 'allTime' ? '滑空機部門 歴代最高' : '2026年 滑空機部門優勝') +
       ' ' + (GLIDER_RECORDS[official] / 100).toFixed(2) + ' m を突破' : '',
     highlight: official || (updated ? 'personal' : ''),
@@ -36,11 +37,12 @@ export function showRecordBoard(outcome) {
   $('result-heading').textContent = board.title;
   $('result-value').textContent = board.value;
   $('result-unit').hidden = !scored;
-  $('record-detail').textContent = board.detail;
+  $('record-detail').textContent = outcome.replayAvailable === false ? board.detail + ' ／ リプレイの保存対象外' : board.detail;
   $('record-official').textContent = board.award;
   $('record-official').hidden = !board.award;
-  $('result-replay').hidden = !scored;
-  $('return-to-setup').hidden = scored;
+  const canReplay = scored && outcome.replayAvailable !== false;
+  $('result-replay').hidden = !canReplay;
+  $('return-to-setup').hidden = canReplay;
   const share = $('share-result');
   share.hidden = !scored;
   if (scored) {

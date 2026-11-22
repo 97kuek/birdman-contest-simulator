@@ -105,6 +105,13 @@ test('再挑戦と履歴表示で、記録板の強調と公式記録の説明�
   assert.equal(elements['result-replay'].hidden, false);
   assert.equal(elements['record-official'].hidden, false);
   assert.equal(elements['result-value'].textContent, '651.20');
+  const practice = { ...run(1020), aircraftId: 'ren', courseTime: 78.23 };
+  showRecordBoard({ kind: 'scored', run: practice, score: records.record(practice), replayAvailable: false });
+  assert.equal(elements['result-value'].textContent, '1020.00');
+  assert.match(elements['record-detail'].textContent, /完走 78\.2 秒/);
+  assert.match(elements['record-detail'].textContent, /リプレイの保存対象外/);
+  assert.equal(elements['result-replay'].hidden, true);
+  assert.equal(elements['return-to-setup'].hidden, false);
 });
 
 test('人力プロペラ機の練習距離は機体別の自己ベストにのみ記録する', () => {

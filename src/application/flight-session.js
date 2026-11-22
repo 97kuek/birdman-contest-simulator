@@ -19,6 +19,7 @@ import { reserveCapacityJ } from '../domain/ren-practice.js';
 import { prelaunchPedalSeconds } from './launch-sequence.js';
 import { WEATHER, windAt } from '../domain/weather.js';
 
+const replayLimit = 3;
 const parkedDrive = { rpm: 0, watts: 0, reserve: reserveCapacityJ, propellerAngle: 0, crankAngle: 0 };
 
 export function rampSample(launch, weather, elapsed, gustOffset, profile, drive) {
@@ -55,6 +56,7 @@ export function rampSample(launch, weather, elapsed, gustOffset, profile, drive)
 // One browser session. A trial keeps the launch conditions it started with.
 export class FlightSession {
   #history = new Map();
+  #replays = new Map();
   #baseline = null;
   #attemptNumber = 0;
 
@@ -105,7 +107,9 @@ export class FlightSession {
   }
 
   get latest() {
-    return this.#history.get(this.conditionKey);
+    const key = this.conditionKey;
+    const entry = this.#history.get(key);
+    return entry && { ...entry, run: this.#replays.get(key) };
   }
 
   get options() {
@@ -165,7 +169,13 @@ export class FlightSession {
     let previousRamp = rampPose(0), rampHit;
     const number = ++this.#attemptNumber;
     const remember = (run) => {
-      if ((this.#history.get(key)?.number ?? 0) < number) this.#history.set(key, { run, number });
+      if ((this.#history.get(key)?.number ?? 0) >= number) return;
+      const { aircraftId, weather, distance, duration } = run;
+      const summary = { aircraftId, weather, distance, duration, courseTime: run.samples.at(-1).courseTime };
+      this.#history.set(key, { number, summary });
+      this.#replays.delete(key);
+      this.#replays.set(key, run);
+      if (this.#replays.size > replayLimit) this.#replays.delete(this.#replays.keys().next().value);
     };
     return {
       number,
