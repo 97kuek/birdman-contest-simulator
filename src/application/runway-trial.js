@@ -34,7 +34,7 @@ function exitFraction(from, to) {
   return fraction;
 }
 
-export function createRunwayTrial(hull, weather = 'calm', gustOffset = 0, { preSpin = false } = {}) {
+export function createRunwayTrial(hull, weather = 'calm', gustOffset = 0, { preSpin = false, wingStagger, lineTakeupN } = {}) {
   let track = levelRunwayTrack(profile, 0, startForward, 0);
   let rolling = poweredGroundRoll(profile, track, weather, gustOffset);
   let state = { t: 0, speed: 0, travel: 0, omega: 0, angle: 0, reserve: reserveCapacityJ, watts: 0 };
@@ -136,11 +136,11 @@ export function createRunwayTrial(hull, weather = 'calm', gustOffset = 0, { preS
     for (; nextCrewSample < flight.samples.length; nextCrewSample++) {
       const point = flight.samples[nextCrewSample];
       if (departure.liftOff && point.t > departure.liftOff.seconds)
-        approachTeam = advanceCatcherApproach(approachTeam, point, point.t - flight.samples[nextCrewSample - 1].t);
+        approachTeam = advanceCatcherApproach(approachTeam, point, point.t - flight.samples[nextCrewSample - 1].t, wingStagger);
     }
     const remainder = air.t - flight.samples[nextCrewSample - 1].t;
     return remainder > 0 && departure.liftOff && air.t > departure.liftOff.seconds
-      ? advanceCatcherApproach(approachTeam, air, remainder) : approachTeam;
+      ? advanceCatcherApproach(approachTeam, air, remainder, wingStagger) : approachTeam;
   }
 
   function beginRollout() {
@@ -151,7 +151,7 @@ export function createRunwayTrial(hull, weather = 'calm', gustOffset = 0, { preS
       return;
     }
     phase = 'rollout';
-    landingRoll = createLandingRoll(hull, touchdown, weather, gustOffset);
+    landingRoll = createLandingRoll(hull, touchdown, weather, gustOffset, { lineTakeupN });
     sample = { ...touchdown };
     landingRoll(sample, 0);
     track = levelRunwayTrack(profile, sample.right, sample.forward, sample.track);

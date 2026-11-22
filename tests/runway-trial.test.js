@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { shouldCallForLanding } from '../src/domain/runway-support.js';
+import { measureCatcherApproach } from '../analysis/ren-catcher-approach.js';
+import { shouldCallForLanding, wingLaneStagger } from '../src/domain/runway-support.js';
 import { createRunwayTrial } from '../src/application/runway-trial.js';
 import { createRenAircraft } from '../src/rendering/aircraft/ren.js';
 import { createLandingRoll } from '../src/domain/runway-rollout.js';
@@ -112,7 +113,8 @@ test('「ペラ回します」からGOまで車輪を保持し、回転位相・
 
 test('単列車輪は接地時の傾きと角速度を残し、左右反転した着陸を翼係が到着後に支える', () => {
   function land(turn) {
-    const trial = createRunwayTrial(hull);
+    // Isolate the aircraft symmetry from the staggered approach lanes.
+    const trial = createRunwayTrial(hull, 'calm', 0, { wingStagger: 0 });
     trial.advance(50, 0, 0, 300);
     trial.advance(70, 0, 0, 0);
     let before, first, earliest, maxBank = 0;
@@ -274,6 +276,26 @@ test('低い進入で走者が脇に入り、接地前に荷重を加えず、�
   assert.equal(end.phase, 'landed');
   assert.deepEqual(end.sample.catchers, final.catchers);
   assert.equal(end.sample.forward, final.forward);
+});
+
+test('富士川の無風試技で翼係の経路を反転すると保持順とロールが反転する', () => {
+  const left = measureCatcherApproach(hull);
+  const right = measureCatcherApproach(hull, { wingStagger: -wingLaneStagger });
+  const equal = measureCatcherApproach(hull, { wingStagger: 0 });
+  const slack = measureCatcherApproach(hull, { lineTakeupN: 0 });
+  for (const run of [left, right, equal, slack]) {
+    assert.equal(run.touch, left.touch);
+    assert.ok(run.abreast >= run.call + 7 && run.abreast <= run.call + 10);
+    assert.ok(run.abreast < run.touch && run.touch < Math.min(run.left, run.right));
+    assert.ok(run.tail < run.frame && run.frame < run.stop);
+  }
+  assert.ok(left.left < left.right && right.right < right.left);
+  assert.ok(Math.abs(left.left - right.right) < 1 / 60);
+  assert.ok(left.peakBank < 0 && Math.abs(left.peakBank + right.peakBank) < .001);
+  assert.equal(equal.left, equal.right);
+  assert.equal(equal.peakBank, 0);
+  assert.ok(slack.left < slack.right);
+  assert.equal(slack.peakBank, 0);
 });
 
 test('接地直後は風下へ流れ、滑り出したタイヤには逆向きの力が働く', () => {

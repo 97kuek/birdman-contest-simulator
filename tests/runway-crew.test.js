@@ -2,7 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Group, PerspectiveCamera, Vector3 } from 'three';
 import { createRunwayTrial } from '../src/application/runway-trial.js';
-import { CG_HEIGHT } from '../src/domain/aircraft-dynamics.js';
 import { createRenAircraft } from '../src/rendering/aircraft/ren.js';
 import { modelHull } from '../src/rendering/collision-hull.js';
 import { readModel } from '../analysis/model-fixture.js';
@@ -14,7 +13,7 @@ import { createRunwayCrew, wingLineAnchor } from '../src/rendering/runway-crew.j
 import { rampSample } from '../src/application/flight-session.js';
 import { aircraftProfile } from '../src/domain/aircraft-profiles.js';
 import { renSparHeight } from '../src/domain/ren-wing.js';
-import { wingGripSpan } from '../src/domain/runway-support.js';
+import { catcherStations, waitingTeam, wingGripSpan } from '../src/domain/runway-support.js';
 const [groundCrewModel, vanModel] = await Promise.all([readModel('ground-crew.glb'), readModel('chase-van.glb.gz')]);
 const cord = groundCrewModel.getObjectByName('WingHandlingLine');
 
@@ -95,7 +94,7 @@ test('地上班は機体を押し、手放した後は翼端を追い、着地�
   const follower = crew.group.getObjectByName('右翼スターター');
   const car = crew.group.getObjectByName('追走車');
   function show(sample, phase, time) {
-    base.position.set(sample.right, sample.height - CG_HEIGHT, -sample.forward);
+    placeAircraft(base, sample);
     crew.update(sample, phase, time, base);
   }
   show(trial.onGround, 'ready', 0);
@@ -119,6 +118,7 @@ test('地上班は機体を押し、手放した後は翼端を追い、着地�
   assert.ok(trial.onGround.forward + car.position.z > 35);
   const start = pusher.position.clone();
   let frame, heldAfterLift = false;
+  let minRight = trial.onGround.right, maxRight = minRight;
   for (let t = .5; t <= 110; t += .5) {
     frame = trial.advance(t, 0, 0, t <= 50 ? 300 : 0);
     show(frame.sample, frame.phase, t);
@@ -139,7 +139,10 @@ test('地上班は機体を押し、手放した後は翼端を追い、着地�
       assert.ok(Math.abs(pusher.position.x) > 15);
       assert.equal(follower.getObjectByName('翼の保持索').visible, false);
     }
-    assert.ok(Math.abs(car.position.x) < .001 && frame.sample.forward + car.position.z >= (frame.phase === 'landed' ? 19.99 : 35.29));
+    minRight = Math.min(minRight, frame.sample.right);
+    maxRight = Math.max(maxRight, frame.sample.right);
+    assert.ok(car.position.x >= minRight - .001 && car.position.x <= maxRight + .001);
+    assert.ok(frame.sample.forward + car.position.z >= (frame.phase === 'landed' ? 19.99 : 35.29));
   }
   assert.ok(heldAfterLift);
   assert.equal(frame.phase, 'landed');
@@ -193,6 +196,25 @@ test('追走車は左右ラダーの切り返しでも緩やかに向きを変�
     if (phase === 'aborted') break;
   }
   assert.ok(maxYaw > .04);
+});
+
+test('滑走路脇を並走する翼係は移動方向を向き、保持前は索を持たない', () => {
+  const trial = createRunwayTrial(modelHull(createRenAircraft()));
+  const crew = createRunwayCrew(groundCrewModel, vanModel.clone());
+  const station = catcherStations[0], base = new Group();
+  const team = waitingTeam(station, 0);
+  const runner = crew.group.getObjectByName('右翼キャッチャー・' + station + 'm');
+  crew.update(trial.onGround, 'ready', 0, base);
+  for (let step = 1; step <= 60; step++) {
+    const t = step / 60;
+    team.right.forward = station + 4 * t;
+    const sample = { ...trial.onGround, forward: team.right.forward - 6, groundSpeed: 4, catchers: team };
+    placeAircraft(base, sample);
+    crew.update(sample, 'rollout', t, base);
+    assert.equal(runner.getObjectByName('翼の保持索').visible, false);
+    assert.equal(-runner.position.z, team.right.forward);
+  }
+  assert.ok(Math.abs(runner.rotation.y) < .01);
 });
 
 test('着地後のフレーム班は走ったまま両手を掛け、制動中の支持足を路面に残す', () => {

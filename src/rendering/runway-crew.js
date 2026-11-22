@@ -71,18 +71,21 @@ function runnerLineAnchor(member, sample, station, modelBase) {
   return target.sub(member.root.position).applyAxisAngle(up, -member.root.rotation.y).divideScalar(member.scale);
 }
 
-function move(member, x, forward, seconds, turn) {
+function wrappedAngle(angle) {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
+}
+
+function move(member, x, forward, seconds, turn, gripHeading = 0, gripWeight = 0) {
   const position = member.root.position;
   const dx = x - position.x, df = forward + position.z;
   const distance = Math.hypot(dx, df);
-  if (turn && distance > .001) turnTo(member, -Math.atan2(dx, df), seconds);
+  if (turn) {
+    const course = distance > .001 ? -Math.atan2(dx, df) : member.root.rotation.y;
+    const heading = course + gripWeight * wrappedAngle(gripHeading - course);
+    member.root.rotation.y += clamp(wrappedAngle(heading - member.root.rotation.y), -5 * seconds, 5 * seconds);
+  }
   position.set(x, 0, -forward);
   return seconds ? distance / seconds : 0;
-}
-
-function turnTo(member, heading, seconds) {
-  const delta = heading - member.root.rotation.y;
-  member.root.rotation.y += clamp(Math.atan2(Math.sin(delta), Math.cos(delta)), -5 * seconds, 5 * seconds);
 }
 
 export function createRunwayCrew(crewModel, van) {
@@ -131,7 +134,8 @@ export function createRunwayCrew(crewModel, van) {
     }
     for (const member of catchers) {
       const { side, stationOffset } = member.role;
-      member.root.position.set(side * catcherVerge, 0, -(member.station + stationOffset));
+      const waiting = waitingCatcher(member.station, side, stationOffset, sample.forward);
+      member.root.position.set(waiting.right, 0, -waiting.forward);
       member.root.rotation.y = side * Math.PI * .55;
       member.waiting.position.copy(member.root.position);
       member.waiting.rotation.copy(member.root.rotation);
@@ -205,12 +209,11 @@ export function createRunwayCrew(crewModel, van) {
     for (const member of catchers) {
       const { side, stationOffset } = member.role;
       const waiting = waitingCatcher(member.station, side, stationOffset, sample.forward);
-      const jogging = waiting.forward > member.station + stationOffset && waiting.forward < member.station + stationOffset + 18;
       const runner = sample.catchers?.station === member.station
         ? sample.catchers[member.role.key ?? (side < 0 ? 'left' : 'right')] : null;
       const position = runner ?? waiting;
       const speed = move(member, position.right, position.forward, dt, true);
-      member.root.visible = Boolean(runner) || jogging;
+      member.root.visible = Boolean(runner) || waiting.jogging;
       member.waiting.visible = !member.root.visible;
       member.waiting.position.copy(member.root.position);
       if (member.root.visible) poseMember(member, speed, dt, 0, modelBase);
@@ -238,12 +241,13 @@ export function createRunwayCrew(crewModel, van) {
       const dx = x - root.position.x, df = forward + root.position.z;
       const distance = Math.hypot(dx, df);
       const fraction = Math.min(1, dt * catcherRunSpeed / (distance || 1));
-      const speed = move(member, person ? person.right : root.position.x + dx * fraction,
-        person ? person.forward : -root.position.z + df * fraction, dt, !person?.holding && distance > 1.35);
+      const nextX = person?.right ?? root.position.x + dx * fraction;
+      const nextForward = person?.forward ?? -root.position.z + df * fraction;
       const hold = person ? Number(person.holding) : slow ? 1 - smoothstep(distance, .35, 1) : 0;
-      const remaining = Math.hypot(target.x - root.position.x, target.z - root.position.z);
+      const remaining = Math.hypot(target.x - nextX, target.z + nextForward);
       const reaching = !hold ? 1 - smoothstep(remaining, .25, 1.35) : 0;
-      if (hold || reaching) turnTo(member, -sample.heading + (role.wing ? 0 : side * .92), dt);
+      const gripHeading = -sample.heading + (role.wing ? 0 : side * .92);
+      const speed = move(member, nextX, nextForward, dt, true, gripHeading, hold || reaching);
       member.catchAge = hold ? member.catchAge + dt : 0;
       const absorb = clamp(member.catchAge / .65, 0, 1);
       poseMember(member, speed, dt, hold || reaching * .65, modelBase, 'Catch', absorb,
@@ -297,7 +301,7 @@ export function createRunwayCrew(crewModel, van) {
     last = elapsed;
     modelBase.updateMatrix();
     depart(sample, elapsed, dt, modelBase);
-    if (phase === 'flight') approach(sample, dt, modelBase);
+    if (phase === 'roll' || phase === 'flight') approach(sample, dt, modelBase);
     if (phase === 'landed' || phase === 'rollout') receive(sample, phase, dt, modelBase);
     followCar(sample, phase, dt);
   }

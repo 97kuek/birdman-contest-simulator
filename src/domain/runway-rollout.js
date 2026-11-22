@@ -1,7 +1,7 @@
 import { CG_HEIGHT } from './aircraft-dynamics.js';
 import { aircraftProfile } from './aircraft-profiles.js';
 import { poweredFlightDynamics } from './powered-flight.js';
-import { predictedCatcherStation, waitingTeam, rearCatchPoints, moveRunner, catcherSideGap, wingGripSpan as catchSpan } from './runway-support.js';
+import { predictedCatcherStation, waitingTeam, rearCatchPoints, moveRunner, catcherSprint, catcherSideGap, wingGripSpan as catchSpan } from './runway-support.js';
 import { GRAVITY, RAD_PER_RPM } from './units.js';
 import { geometryAt, hullAtControls } from './water-contact.js';
 
@@ -23,10 +23,14 @@ function tyreSideForce(axleArm, normal, state, corneringStiffness) {
 }
 
 const brakeForcePerRunnerN = 55;
+const wingSupportLimitN = 110;
+// A light pull while gathering the handling line. No line force was measured
+// on film; the calm-flight comparison also runs with a completely slack line.
+const defaultLineTakeupN = 5;
+const gripLoadSeconds = .35;
 
 // A receiver can move towards an intercept before the aircraft slows to
 // running speed. Only a rendezvous with the actual grip point transfers load.
-const receiverSprint = 6.2;
 function intercept(member, side, sample, x, aft, dt, rear = false) {
   const cos = Math.cos(sample.heading), sin = Math.sin(sample.heading);
   const gripX = sample.right + x * cos - aft * sin;
@@ -36,19 +40,19 @@ function intercept(member, side, sample, x, aft, dt, rear = false) {
   const waitAhead = !member.holding && sample.groundSpeed > 1 ? Math.max(0, alongTrack) : 0;
   const clearance = rear && waitAhead > 0 ? side * catcherSideGap : 0;
   const next = moveRunner(member, gripX + waitAhead * trackX + clearance * cos,
-    gripF + waitAhead * trackF - clearance * sin, receiverSprint * dt);
+    gripF + waitAhead * trackF - clearance * sin, catcherSprint * dt);
   // During a ground loop the outside wing can sweep past a runner even
   // when the aircraft centre is slow enough to follow.
   const gripSpeed = Math.hypot(sample.groundSpeed * trackX + (gripF - sample.forward) * sample.yawRate,
     sample.groundSpeed * trackF - (gripX - sample.right) * sample.yawRate);
-  next.holding = !clearance && gripSpeed <= receiverSprint &&
+  next.holding = !clearance && gripSpeed <= catcherSprint &&
     Math.hypot(next.right - gripX, next.forward - gripF) <= .35;
   return next;
 }
 
 // Both wheels are on the fuselage centreline. They carry the residual weight
 // but do not constrain bank like a pair of laterally separated landing wheels.
-export function createLandingRoll(hull, contact, weather, gustOffset, { windField, omitTipYaw = false, corneringStiffness = nominalCorneringStiffness, observeLoads } = {}) {
+export function createLandingRoll(hull, contact, weather, gustOffset, { windField, omitTipYaw = false, corneringStiffness = nominalCorneringStiffness, lineTakeupN = defaultLineTakeupN, observeLoads } = {}) {
   const dynamics = poweredFlightDynamics(profile, { edgeRight: 0, edgeForward: 0 }, weather, gustOffset, windField);
   const team = contact.catchers ?? waitingTeam(predictedCatcherStation(contact), contact.forward);
   const { station } = team;
@@ -66,6 +70,7 @@ export function createLandingRoll(hull, contact, weather, gustOffset, { windFiel
   let leftTip = contact.wing.leftTip, rightTip = contact.wing.rightTip;
   let leftTipRate = 0, rightTipRate = 0;
   let tyreRollMoment = 0;
+  let leftLoadFraction = 0, rightLoadFraction = 0;
 
   return function advance(sample, dt) {
     const settle = Math.max(0, 1 - (sample.t - contact.t) / .6);
@@ -94,8 +99,13 @@ export function createLandingRoll(hull, contact, weather, gustOffset, { windFiel
     // Each hand can lift its own side. The stiffness, damping and 110 N
     // limit are estimates for the simulation, applied only after arrival.
     const desiredMoment = -pivotInertia * (5 * bank + 3.5 * rollRate);
-    const catchMoment = Math.min(left.holding ? 110 * catchSpan : 0,
-      Math.max(right.holding ? -110 * catchSpan : 0, desiredMoment));
+    leftLoadFraction = left.holding ? Math.min(1, leftLoadFraction + dt / gripLoadSeconds) : 0;
+    rightLoadFraction = right.holding ? Math.min(1, rightLoadFraction + dt / gripLoadSeconds) : 0;
+    const supportMoment = Math.min(leftLoadFraction * wingSupportLimitN * arm,
+      Math.max(-rightLoadFraction * wingSupportLimitN * arm, desiredMoment));
+    // Taking up one line pulls that side down. At equal grip the two pulls
+    // cancel; the low wing can still be steadied by the upward hand reaction.
+    const catchMoment = supportMoment + (rightLoadFraction - leftLoadFraction) * lineTakeupN * arm;
     rollRate += (rates.p * profile.rollInertia + wheelMoment + tyreRollMoment + catchMoment) * dt / pivotInertia;
     bank += rollRate * dt;
     leftTipRate += rates.leftTipRate * dt;
