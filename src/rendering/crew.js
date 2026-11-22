@@ -6,28 +6,34 @@ import { createCrewMembers } from './crew-model.js';
 import layout from './biwa-platform.json' with { type: 'json' };
 import { deckHeight, deckRun, deckSlope } from './launch-deck.js';
 
-import { placeBone, poseRunner, reach } from './crew-motion.js';
+import { placeBone, poseRunner, reach, resetRunner } from './crew-motion.js';
 
-const segment = new THREE.Vector3(), down = new THREE.Vector3(0, -1, 0);
+const down = new THREE.Vector3(0, -1, 0);
 
-// Stop the runner before the curved lip, including the shoe and stride clearance.
-function runnerReleaseTime(launch, startX, startZ) {
-  function insideDeck(travel) {
-    const x = startX + travel * launch.rightStep;
-    const z = startZ - travel * launch.forwardStep;
-    return Math.abs(x) < layout.deck_half_width - .39 && Math.hypot(x, Math.max(0, deckRun - z) + 0.52) < 9.87;
+// Reserve the stopping distance before the curved lip. Both feet must stay
+// on the usable deck even on an oblique launch.
+function runnerHandoff(launch, startX, startZ) {
+  const braking = 7.5;
+  function release(travel) {
+    const at = launch.timeAtTravel?.(travel) ?? Math.sqrt(2 * travel / launch.acceleration);
+    const speed = rampAt(launch, at).speed;
+    return { at, travel, speed, duration: speed / braking };
   }
-  let stop = launch.pushed;
-  if (!insideDeck(stop)) {
-    let low = 0, high = stop;
-    for (let i = 0; i < 12; i++) {
-      const middle = (low + high) / 2;
-      if (insideDeck(middle)) low = middle;
-      else high = middle;
-    }
-    stop = low;
+  function canStop(handoff) {
+    const stop = handoff.travel + .5 * handoff.speed * handoff.duration;
+    const x = startX + stop * launch.rightStep;
+    const z = startZ - stop * launch.forwardStep;
+    return Math.abs(x) < layout.deck_half_width - .39 && Math.hypot(x, Math.max(0, deckRun - z) + .52) < 9.87;
   }
-  return launch.timeAtTravel?.(stop) ?? Math.sqrt(2 * stop / launch.acceleration);
+  const requested = release(launch.pushed);
+  if (canStop(requested)) return requested;
+  let low = 0, high = launch.pushed;
+  for (let i = 0; i < 16; i++) {
+    const mid = .5 * (low + high);
+    if (canStop(release(mid))) low = mid;
+    else high = mid;
+  }
+  return release(low);
 }
 
 export function createLaunchCrew(model, team = 'ryukai') {
@@ -63,6 +69,8 @@ export function createLaunchCrew(model, team = 'ryukai') {
   function update(launch, elapsed, onFootfall) {
     const time = Math.min(elapsed, launch.duration + 1.1);
     if (previousLaunch === launch && previousTime === time) return;
+    const reset = previousLaunch !== launch || time < previousTime;
+    const dt = reset ? 0 : time - previousTime;
     previousTime = time;
     previousLaunch = launch;
     const cos = Math.cos(launch.heading), sin = Math.sin(launch.heading);
@@ -74,42 +82,44 @@ export function createLaunchCrew(model, team = 'ryukai') {
       const aft = station.aft - releaseWheelAft;
       const startX = cos * lateral - sin * aft;
       const startZ = deckRun + sin * lateral + cos * aft;
-      const releasedAt = runnerReleaseTime(launch, startX, startZ);
-      const relax = THREE.MathUtils.smoothstep(Math.max(0, time - releasedAt), 0, 0.59);
-      const { travel } = rampAt(launch, Math.min(time, releasedAt));
+      if (reset) member.handoff = runnerHandoff(launch, startX, startZ);
+      const handoff = member.handoff;
+      const age = Math.max(0, time - handoff.at);
+      const relax = THREE.MathUtils.smoothstep(age, 0, .55);
+      const rolling = rampAt(launch, Math.min(time, handoff.at));
+      const brakingTime = Math.min(handoff.duration, age);
+      const speed = age ? Math.max(0, handoff.speed - 7.5 * brakingTime) : rolling.speed;
+      const travel = rolling.travel + brakingTime * (handoff.speed + speed) / 2;
       const x = startX + travel * launch.rightStep, z = startZ - travel * launch.forwardStep;
       member.root.position.set(x, deckHeight(z), z);
       member.root.rotation.y = -launch.heading;
-
-      // Lengthen steps through acceleration, from a short push-off to a sprint.
-      const startingStep = 0.64, finalStep = Math.sqrt(startingStep ** 2 + 0.45 * travel);
-      const steps = 2 * travel / ((startingStep + finalStep) * member.scale);
-      const gait = member.phase + steps * Math.PI;
-      // The two shoes alternate contact as their cosine swing crosses zero.
-      const footfall = Math.floor(gait / Math.PI + 0.5);
-      if (footfall > member.footfall && time <= releasedAt && Number.isFinite(elapsed))
-        onFootfall?.(member.side, footfall);
-      member.footfall = footfall;
-      const run = Math.min(1, travel * 2) * (1 - relax);
-      poseRunner(member, gait, run, .12 * relax, -.34 - .18 * run + .16 * relax,
-        cos * deckSlope, sin * deckSlope);
-
+      if (reset) resetRunner(member);
+      const action = age ? 'Release' : 'Push';
+      const weight = age ? 1 - THREE.MathUtils.smoothstep(age, .60, 1.05) : .9;
+      const slope = z < deckRun ? deckSlope : 0;
       const aircraftY = launch.edgeHeight + (RAMP_LENGTH - travel) * launch.dropStep + (launch.deckClearance ?? LAUNCH.deckClearance);
       const gripY = aircraftY + station.y - member.root.position.y;
       for (const arm of member.arms) {
         const { sign } = arm;
-        start.set(sign * 0.186, 0.45, 0).applyMatrix4(member.torso.matrix);
         const gripX = member.side
           ? (fuselageCrew ? member.side * station.grip - lateral + sign * .065 : sign * .174)
           : sign * .08 - lateral;
-        target.set(gripX, gripY, station.z - station.aft + 0.056).divideScalar(member.scale);
+        arm.grip.set(gripX, gripY, station.z - station.aft + 0.056).divideScalar(member.scale);
         if (member.line) {
-          target.x = .04 * sign;
-          target.y += sign * .075;
+          arm.grip.x = .04 * sign;
+          arm.grip.y += sign * .075;
         }
-        target.lerp(segment.set(sign * 0.22, 0.61, -0.16), relax);
+      }
+      const footfall = poseRunner(member, speed, dt, action, age ? relax : null, weight, cos * slope, sin * slope, 1 - relax);
+      if (footfall && speed > .1 && Number.isFinite(elapsed)) onFootfall?.(member.side, member.previousFootfall);
+
+      for (const arm of member.arms) {
+        const { sign } = arm;
+        start.set(sign * .186, .45, 0).applyMatrix4(member.torso.matrix);
+        target.copy(arm.grip).lerp(arm.freeHand, relax);
         reach(arm, start, target, pole.set(sign * .85, -1, .05));
       }
+      member.gaze = member.head.rotation.x;
       if (member.line) {
         // A removable handling line stays with the runner after release.
         const upper = member.arms[1].end.position, lower = member.arms[0].end.position;
@@ -119,7 +129,7 @@ export function createLaunchCrew(model, team = 'ryukai') {
         placeBone(member.line[0], start, upper, 1);
         placeBone(member.line[1], upper, lower, 1);
         target.copy(lower).addScaledVector(down, .25);
-        target.z += .06 * run;
+        target.z += .06 * Math.min(1, speed / 4);
         placeBone(member.line[2], lower, target, 1);
       }
     }
@@ -129,7 +139,7 @@ export function createLaunchCrew(model, team = 'ryukai') {
     const side = wing === 'left' ? -1 : wing === 'right' ? 1 : 0;
     const nod = Math.sin(Math.PI * Math.min(1, seconds / 0.48)) ** 2;
     for (const member of members) {
-      member.head.rotation.x = -member.torso.rotation.x * 0.65
+      member.head.rotation.x = member.gaze
         + (side && member.side === side ? 0.19 * nod : 0);
     }
   }

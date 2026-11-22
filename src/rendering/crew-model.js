@@ -62,7 +62,7 @@ function person(model, profile, team) {
   const arms = [-1, 1].map(sign => limb('Arm', sign));
   const legs = [-1, 1].map(sign => limb('Leg', sign));
   root.scale.setScalar(profile.scale);
-  return { root, torso, head, arms, legs, ...profile };
+  return { root, torso, head, arms, legs, clips: model.getObjectByName('GroundCrewRig').userData.crewMotion, ...profile };
 }
 
 export function createCrewMembers(model, team = 'ryukai', count = profiles.length) {

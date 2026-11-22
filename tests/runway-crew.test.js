@@ -7,6 +7,9 @@ import { createRenAircraft } from '../src/rendering/aircraft/ren.js';
 import { modelHull } from '../src/rendering/collision-hull.js';
 import { readModel } from '../analysis/model-fixture.js';
 import { createRunwaySupportCar } from '../src/rendering/runway-support-car.js';
+import { launchProfile } from '../src/domain/launch.js';
+import { createLaunchCrew } from '../src/rendering/crew.js';
+import { placeAircraft } from '../src/rendering/aircraft-pose.js';
 import { createRunwayCrew } from '../src/rendering/runway-crew.js';
 const [groundCrewModel, vanModel] = await Promise.all([readModel('ground-crew.glb'), readModel('chase-van.glb.gz')]);
 
@@ -122,4 +125,60 @@ test('追走車は左右ラダーの切り返しでも緩やかに向きを変�
     if (phase === 'aborted') break;
   }
   assert.ok(maxYaw > .04);
+});
+
+test('着地後のフレーム班は走ったまま両手を掛け、制動中の支持足を路面に残す', () => {
+  const trial = createRunwayTrial(modelHull(createRenAircraft()));
+  const crew = createRunwayCrew(groundCrewModel, vanModel.clone());
+  const base = new Group(), dt = 1 / 60;
+  function show(sample, phase, t) {
+    placeAircraft(base, sample);
+    crew.update(sample, phase, t, base);
+  }
+  show(trial.onGround, 'ready', 0);
+  const previous = new Map();
+  const torsoPitch = [];
+  let supportFrames = 0, heldSpeed = 0;
+  for (let frame = 1; frame <= 95 * 60; frame++) {
+    const t = frame * dt;
+    const { sample, phase } = trial.advance(t, 0, 0, t <= 50 ? 300 : 0);
+    show(sample, phase, t);
+    if (!sample.catchers?.frame.holding || sample.groundSpeed < 1) continue;
+    heldSpeed = Math.max(heldSpeed, sample.groundSpeed);
+    const member = crew.group.getObjectByName('フレームキャッチャー・' + sample.catchers.station + 'm');
+    torsoPitch.push(member.getObjectByName('Torso').rotation.x);
+    for (const [name, hand, sign] of [['L', '左手', -1], ['R', '右手', 1]]) {
+      const grip = base.localToWorld(new Vector3(sign * .027, 1.17 + sign * .055, .67));
+      assert.ok(grip.distanceTo(member.getObjectByName(hand).getWorldPosition(new Vector3())) < .001);
+      assert.ok(member.getObjectByName(name + '_LegLower').scale.y < 1.01);
+      const foot = member.getObjectByName(name + '_LegEnd').getWorldPosition(new Vector3());
+      const onSole = Math.abs(foot.y - .078 * member.scale.y) < 1e-7;
+      if (onSole && previous.has(name)) {
+        assert.ok(foot.distanceTo(previous.get(name)) < .001);
+        supportFrames++;
+      }
+      if (onSole) previous.set(name, foot);
+      else previous.delete(name);
+    }
+  }
+  assert.ok(heldSpeed > 4);
+  assert.ok(supportFrames > 80);
+  assert.ok(Math.max(...torsoPitch) - Math.min(...torsoPitch) > .18);
+});
+
+test('台上では手を離したあとも足を運び、傾斜面の端より手前で止まる', () => {
+  const launch = launchProfile();
+  const crew = createLaunchCrew(groundCrewModel);
+  const pusher = crew.group.children[1];
+  const distances = [];
+  for (let frame = 0; frame <= 4 * 60; frame++) {
+    crew.update(launch, frame / 60);
+    distances.push(pusher.position.z);
+  }
+  const speeds = distances.slice(1).map((z, i) => (distances[i] - z) * 60);
+  const peak = speeds.indexOf(Math.max(...speeds));
+  assert.ok(peak > 0 && distances[peak] - distances.at(-1) > 1);
+  assert.ok(speeds[peak + 12] > 1 && speeds[peak + 12] < speeds[peak]);
+  assert.equal(speeds.at(-1), 0);
+  assert.ok(distances.at(-1) > .5);
 });

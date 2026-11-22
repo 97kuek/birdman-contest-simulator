@@ -4,7 +4,7 @@ import { renSparHeight } from '../domain/ren-wing.js';
 import { catcherRunSpeed, catcherStations, catcherVerge, predictedCatcherStation, waitingCatcher, wingGripSpan, rearCatchPoints } from '../domain/runway-support.js';
 import { wingBendShape } from '../domain/wing-structure.js';
 import { createCrewMembers, waitingCrewModel } from './crew-model.js';
-import { placeBone, poseRunner, reach } from './crew-motion.js';
+import { placeBone, poseRunner, reach, resetRunner } from './crew-motion.js';
 import { createRunwaySupportCar } from './runway-support-car.js';
 
 const { clamp, smoothstep } = THREE.MathUtils;
@@ -16,8 +16,8 @@ const catcherRoles = [
   { name: '右翼', side: 1, x: 13.2, aft: .45, wing: true, stationOffset: 0 },
 ];
 const frameStarters = [-1, 1].map(side => ({
-  name: side < 0 ? '左フレーム' : '右フレーム', side, x: side * .37,
-  aft: 2.20, gripY: boomHeight, gripZ: 1.92, boom: true,
+  name: side < 0 ? '左フレーム' : '右フレーム', side, x: side * .28,
+  aft: 2.08, gripY: boomHeight, gripZ: 1.92, boom: true,
 }));
 const starterRoles = [catcherRoles[0], ...frameStarters, catcherRoles[2], catcherRoles[3]];
 // Illustrative reaction time between wheel lift and the two wing handlers
@@ -34,29 +34,36 @@ function addLine(member) {
   member.root.add(member.line);
 }
 
-function poseMember(member, speed, hold, modelBase, effort = 0, braking = 0) {
+function poseMember(member, speed, dt, hold, modelBase, action, progress, weight = 0) {
   const { role, root } = member;
-  const run = clamp(speed / 4.1, 0, 1);
-  const gait = member.phase + member.travel * Math.PI / (member.scale * (.82 + .30 * run));
-  const overhead = hold && role.name === 'テール';
-  poseRunner(member, gait, run, .035 * hold, overhead ? -.04 - .08 * run : -.09 - .16 * run - .12 * hold - .16 * effort + .35 * braking);
+
   if (hold && !role.wing) {
     root.updateMatrix();
     localGrip.copy(root.matrix).invert().multiply(modelBase.matrix);
   }
+  if (!member.lastRoot) resetRunner(member);
+  if (hold) {
+    for (const arm of member.arms) {
+      const { sign, grip } = arm;
+      if (role.wing) grip.set(sign * .07, 1.33 + sign * .035, -.26);
+      else if (role.name === 'テール' || role.boom) grip.set(role.side * .045, role.gripY - .03, role.gripZ + sign * .13).applyMatrix4(localGrip);
+      else grip.set(sign * .027, role.gripY + sign * .055, role.gripZ).applyMatrix4(localGrip);
+    }
+  }
+  poseRunner(member, speed, dt, action, progress, weight, 0, 0, hold);
   for (const arm of member.arms) {
     const sign = arm.sign;
     start.set(sign * .186, .45, 0).applyMatrix4(member.torso.matrix);
-    target.set(sign * .207, .72 + .10 * run, -.10 - .30 * sign * Math.sin(gait) * run);
+    target.copy(arm.freeHand);
     if (hold) {
-      // Both hands meet the rear cockpit pylon or the fixed tail boom.
-      // The two wing handlers grasp a line suspended from the moving spar.
-      if (role.wing) pole.set(sign * .07, 1.33 + sign * .035, -.26);
-      else if (role.name === 'テール' || role.boom) pole.set(role.side * .045, role.gripY - .03, role.gripZ + sign * .13).applyMatrix4(localGrip);
-      else pole.set(sign * .027, role.gripY + sign * .055, role.gripZ).applyMatrix4(localGrip);
-      target.lerp(pole, hold);
+      target.lerp(arm.grip, hold);
+      if (hold >= 1) (arm.lastGrip ??= new THREE.Vector3()).copy(target);
+    } else if (action === 'Release' && arm.lastGrip) {
+      // Recoil relative to the departing runner. The aircraft continues ahead.
+      target.lerp(arm.lastGrip, 1 - smoothstep(progress, 0, .45));
     }
     reach(arm, start, target, pole.set(sign * .85, -1, .05));
+    arm.end.rotation.set(-.15 * (1 - hold), sign * (role.wing ? .90 : .48) * hold, sign * .19 * hold);
   }
 }
 
@@ -76,10 +83,14 @@ function move(member, x, forward, seconds, turn) {
   const position = member.root.position;
   const dx = x - position.x, df = forward + position.z;
   const distance = Math.hypot(dx, df);
-  member.travel += distance;
-  if (turn && distance > .001) member.root.rotation.y = -Math.atan2(dx, df);
+  if (turn && distance > .001) turnTo(member, -Math.atan2(dx, df), seconds);
   position.set(x, 0, -forward);
   return seconds ? distance / seconds : 0;
+}
+
+function turnTo(member, heading, seconds) {
+  const delta = heading - member.root.rotation.y;
+  member.root.rotation.y += clamp(Math.atan2(Math.sin(delta), Math.cos(delta)), -5 * seconds, 5 * seconds);
 }
 
 export function createRunwayCrew(crewModel, van) {
@@ -94,15 +105,18 @@ export function createRunwayCrew(crewModel, van) {
     const catcherIndex = i - starterRoles.length;
     const role = catcherIndex < 0 ? starterRoles[i] : catcherRoles[catcherIndex % catcherRoles.length];
     member.role = role;
+    if (!role.wing) {
+      member.scale *= 1.055;
+      member.root.scale.setScalar(member.scale);
+    }
     for (const arm of member.arms) arm.end.name = arm.sign < 0 ? '左手' : '右手';
-    member.travel = 0;
     member.root.name = role.name + (catcherIndex < 0 ? 'スターター' : 'キャッチャー');
     if (role.wing) addLine(member);
     if (catcherIndex < 0) continue;
     if (member.line) member.line.visible = false;
     member.station = catcherStations[Math.floor(catcherIndex / catcherRoles.length)];
     member.root.name += '・' + member.station + 'm';
-    poseMember(member, 0, 0);
+    poseMember(member, 0, 0, 0);
     if (!waitingModels.has(member.phase)) waitingModels.set(member.phase, waitingCrewModel(member));
     member.waiting = waitingModels.get(member.phase).clone();
     member.waiting.name = member.root.name + '・待機';
@@ -111,8 +125,11 @@ export function createRunwayCrew(crewModel, van) {
   }
 
   let last, receiver, wingRelease, initialForward, carSpeed = 0;
+  let starterRight, starterHeading;
   function reset(sample) {
     initialForward = sample.forward;
+    starterRight = sample.right;
+    starterHeading = sample.heading;
     receiver = null;
     wingRelease = null;
     for (const member of starters) {
@@ -130,7 +147,11 @@ export function createRunwayCrew(crewModel, van) {
       if (member.line) member.line.visible = false;
       member.waiting.visible = true;
     }
-    for (const member of members) member.travel = 0;
+    for (const member of members) {
+      resetRunner(member);
+      member.catchAge = 0;
+      for (const arm of member.arms) arm.lastGrip = null;
+    }
     // Rear bumper just inside the south threshold, aligned behind the aircraft.
     car.group.position.set(0, 0, -2.7);
     car.group.rotation.y = 0;
@@ -144,25 +165,37 @@ export function createRunwayCrew(crewModel, van) {
         // Interpolate the release station even when a tab skips the entire
         // takeoff. Both the animated hands and the call use this same event.
         const fraction = clamp((at - sample.liftOffAt) / Math.max(.001, sample.t - sample.liftOffAt), 0, 1);
-        wingRelease = { at, forward: sample.liftOffForward + (sample.forward - sample.liftOffForward) * fraction };
+        wingRelease = { at, speed: sample.groundSpeed, forward: sample.liftOffForward + (sample.forward - sample.liftOffForward) * fraction };
       }
     }
     if (!wingRelease && sample.liftOffAt == null && sample.starterReleasedAt != null && sample.groundSpeed < .05) {
-      wingRelease = { at: elapsed, forward: sample.forward };
+      wingRelease = { at: elapsed, speed: 0, forward: sample.forward };
     }
+    if (!wingRelease || elapsed - wingRelease.at <= dt && dt < .5) {
+      starterRight = sample.right;
+      starterHeading = sample.heading;
+    }
+    const cos = Math.cos(starterHeading), sin = Math.sin(starterHeading);
     for (const member of starters) {
       const { side, x, aft, wing } = member.role;
       const release = wingRelease?.forward;
       const free = release != null;
       const age = free ? Math.max(0, elapsed - wingRelease.at) : 0;
       const relax = smoothstep(age, 0, .65);
-      const coast = 5 * (1 - Math.exp(-age / 1.3));
+      const coast = (wingRelease?.speed ?? 0) * 1.1 * (1 - Math.exp(-age / 1.1));
       const follow = Math.min(Math.max(0, sample.forward - (release ?? sample.forward)),
         5.8 * Math.min(age, 16) + 4 * (1 - Math.exp(-Math.max(0, age - 16))));
-      const forward = (free ? release + (wing ? follow : coast) : sample.forward) - aft;
+      const along = (free ? (wing ? follow : coast) : 0) - aft;
       const outward = wing ? Math.min(5.8, age * .68) : Math.min(19 - Math.abs(x), Math.max(0, age - .35) * 2.7);
-      const speed = move(member, x + side * outward, forward, dt, free);
-      poseMember(member, speed, 1 - relax, modelBase, smoothstep(sample.starterForceN, 0, 90));
+      const lateral = x + side * outward;
+      const right = starterRight + lateral * cos + along * sin;
+      const forward = (release ?? sample.forward) - lateral * sin + along * cos;
+      if (!free) member.root.rotation.y = -starterHeading + (wing ? 0 : side * .92);
+      const speed = move(member, right, forward, dt, free);
+      const action = free ? 'Release' : 'Push';
+      const weight = free ? 1 - smoothstep(age, .50, .90)
+        : (member.role.name === 'テール' ? .25 : .53 + .47 * smoothstep(sample.starterForceN, 0, 90));
+      poseMember(member, speed, dt, free ? 0 : 1, modelBase, action, free ? relax : null, weight);
       if (wing) {
         member.line.visible = !free;
         if (!free) holdWing(member, sample, x, modelBase);
@@ -182,7 +215,7 @@ export function createRunwayCrew(crewModel, van) {
       member.root.visible = Boolean(runner) || jogging;
       member.waiting.visible = !member.root.visible;
       member.waiting.position.copy(member.root.position);
-      if (member.root.visible) poseMember(member, speed, 0, modelBase);
+      if (member.root.visible) poseMember(member, speed, dt, 0, modelBase);
     }
   }
   function receive(sample, phase, dt, modelBase) {
@@ -208,10 +241,15 @@ export function createRunwayCrew(crewModel, van) {
       const distance = Math.hypot(dx, df);
       const fraction = Math.min(1, dt * catcherRunSpeed / (distance || 1));
       const speed = move(member, person ? person.right : root.position.x + dx * fraction,
-        person ? person.forward : -root.position.z + df * fraction, dt, true);
+        person ? person.forward : -root.position.z + df * fraction, dt, !person?.holding && distance > 1.35);
       const hold = person ? Number(person.holding) : slow ? 1 - smoothstep(distance, .35, 1) : 0;
-      if (hold) root.rotation.y = -sample.heading + (role.wing ? 0 : side * .92);
-      poseMember(member, speed, hold, modelBase, 0, !role.wing && person?.holding ? smoothstep(sample.groundSpeed, 0, 1) : 0);
+      const remaining = Math.hypot(target.x - root.position.x, target.z - root.position.z);
+      const reaching = !hold ? 1 - smoothstep(remaining, .25, 1.35) : 0;
+      if (hold || reaching) turnTo(member, -sample.heading + (role.wing ? 0 : side * .92), dt);
+      member.catchAge = hold ? member.catchAge + dt : 0;
+      const absorb = clamp(member.catchAge / .65, 0, 1);
+      poseMember(member, speed, dt, hold || reaching * .65, modelBase, 'Catch', absorb,
+        hold ? .65 + .35 * smoothstep(speed, .1, 2) : reaching);
       if (role.wing) {
         member.line.visible = hold > .95;
         if (member.line.visible) holdWing(member, sample, station, modelBase);
