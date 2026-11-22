@@ -97,8 +97,12 @@ export async function addFujikawaTerrain(scene) {
   for (const layer of ['river', 'mountains', 'fuji']) {
     addMountainHaze(landscape.getObjectByName('DEM_' + layer).material);
   }
+  const textures = new Set([grass, waterMask, surfaceGrain]);
   landscape.traverse(part => {
     const m = part.material;
+    // GLTFLoader resolves missing images to an untextured material.
+    if (m?.userData.sourceImage && !m.map) throw new Error('Could not load ' + m.userData.sourceImage);
+    if (m?.map) textures.add(m.map);
     // Blend a second sampling direction on the grass and gravel strips.
     if (m?.transparent && m.userData.tile) {
       m.onBeforeCompile = shader => {
@@ -116,7 +120,8 @@ export async function addFujikawaTerrain(scene) {
   shadow.receiveShadow = true;
   shadow.position.y = .017;
   pavement.add(shadow);
-  await addFlatlandDetail(landscape, 'fujikawa');
+  const landUseMasks = await addFlatlandDetail(landscape, 'fujikawa');
+  for (const mask of landUseMasks) textures.add(mask);
   scene.add(facility);
-  return { landscape, facility, riverTime };
+  return { landscape, facility, riverTime, textures };
 }

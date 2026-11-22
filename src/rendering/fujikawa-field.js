@@ -9,7 +9,7 @@ import { createSkyDome } from './sky.js';
 import { createRunwayCrew } from './runway-crew.js';
 import { addFujikawaTerrain } from './fujikawa-terrain.js';
 
-export async function createFujikawaField(crewModel, cameraRig, describe, readTime) {
+export async function createFujikawaField(crewModel, cameraRig, describe, readTime, renderer) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color();
   scene.fog = new THREE.FogExp2(0xcad7d8, 0.000018);
@@ -65,12 +65,42 @@ export async function createFujikawaField(crewModel, cameraRig, describe, readTi
       if (night) material.color.multiply(tint);
     }
   }
+  // Link the field's shaders while its terrain textures are being uploaded.
+  // Each large photo gets its own frame; small tiles share a short time slice.
+  async function nextUploadFrame() {
+    await new Promise(requestAnimationFrame);
+    if (renderer.getContext().isContextLost()) {
+      await new Promise(resolve => renderer.domElement.addEventListener('webglcontextrestored', resolve, { once: true }));
+    }
+  }
+  await nextUploadFrame();
+  renderer.compile(scene, cameraRig.camera);
+  let pixels = 0, started = 0;
+  for (const texture of terrain.textures) {
+    const size = texture.image.width * texture.image.height;
+    if (!started || pixels + size > 2_000_000 || performance.now() - started > 4) {
+      await nextUploadFrame();
+      pixels = 0;
+      started = performance.now();
+    }
+    renderer.initTexture(texture);
+    pixels += size;
+  }
+  let framePending;
   return {
     facility, modelBase, aircraft, display, scene, far: 65000, runwayOverview: true,
     hull, supportCar: crew.supportCar, answer: crew.answer,
     get supportCarSpeed() { return crew.supportCarSpeed; },
     get wingFollowersReleased() { return crew.wingFollowersReleased; },
     setWeather,
+    nextFrame() {
+      return framePending ??= new Promise(resolve => {
+        scene.onAfterRender = () => {
+          scene.onAfterRender = THREE.Scene.prototype.onAfterRender;
+          requestAnimationFrame(() => { framePending = null; resolve(); });
+        };
+      });
+    },
     pose(sample, phase = 'ready', seconds = 0) {
       pose(sample);
       crew.update(sample, phase, seconds, modelBase);

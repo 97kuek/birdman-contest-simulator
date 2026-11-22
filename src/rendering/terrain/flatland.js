@@ -18,8 +18,7 @@ export async function addFlatlandDetail(landscape, directory) {
   landscape.traverse(part => {
     if (part.material?.userData.flatlandMask) materials.add(part.material);
   });
-  if (!materials.size) return;
-  await Promise.all([...materials].map(async material => {
+  return Promise.all([...materials].map(async material => {
     const spec = material.userData;
     const [grain, mask] = await Promise.all([
       loadSurfaceGrain(), terrainAssets(directory).texture(spec.flatlandMask),
@@ -62,5 +61,6 @@ export async function addFlatlandDetail(landscape, directory) {
           }`);
     };
     material.needsUpdate = true;
+    return mask;
   }));
 }

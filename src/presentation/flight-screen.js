@@ -515,7 +515,7 @@ export function setupTrials({
     const version = ++venueVersion;
     const selected = venueControls.find(option => option.checked).value;
     const loading = $('loading');
-    $('launch').disabled = true;
+    $('previous-result').disabled = $('launch').disabled = true;
     let next;
     if (selected === 'fujikawa') {
       loading.textContent = '富士川滑空場を読み込み中…';
@@ -527,20 +527,23 @@ export function setupTrials({
         console.error(error);
         loading.textContent = '富士川滑空場を読み込めませんでした。もう一度会場を選んでください。';
         venueControls[0].checked = true;
-        $('launch').disabled = false;
+        $('previous-result').disabled = $('launch').disabled = false;
         return;
       }
     }
     if (version !== venueVersion) return;
     activateVenue(next);
-    if (field) resetRunway();
-    else if (session.weather !== selectedWeather()) changeConditions();
+    if (field) {
+      resetRunway();
+      await field.nextFrame();
+      if (version !== venueVersion) return;
+    } else if (session.weather !== selectedWeather()) changeConditions();
     else {
       aircraftPose.placeOnDeck(session.launch, session.onDeck);
       $('previous-result').hidden = !session.latest;
     }
     loading.hidden = true;
-    $('launch').disabled = false;
+    $('previous-result').disabled = $('launch').disabled = false;
   }
   for (const control of venueControls) control.onchange = chooseVenue;
   for (const button of document.querySelectorAll('[data-view]')) {

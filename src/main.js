@@ -279,7 +279,7 @@ async function start() {
       fieldPromise ??= Promise.all([import('./rendering/fujikawa-field.js'), import('./application/runway-trial.js')])
         .then(async ([{ createFujikawaField }, { createRunwayTrial }]) => {
           const site = await createFujikawaField(crewModel, cameraRig,
-            text => renderer.domElement.setAttribute('aria-description', text), flightClock.now);
+            text => renderer.domElement.setAttribute('aria-description', text), flightClock.now, renderer);
           return Object.assign(site, { trial: (weather, offset) => createRunwayTrial(site.hull, weather, offset, { preSpin: true }) });
         })
         .catch(error => { fieldPromise = null; throw error; });
