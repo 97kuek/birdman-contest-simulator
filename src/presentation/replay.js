@@ -3,7 +3,7 @@ import { poseAt, WATER_RUNOUT_SECONDS } from '../domain/flight.js';
 import { aircraftCards } from './aircraft-picker.js';
 import { byId } from './dom.js';
 
-export function setupReplay({ showPose, onClose, playSplash }) {
+export function setupReplay({ showPose, onClose, playSplash, readTime }) {
   const panel = byId('replay-panel'),
     play = byId('replay-play'),
     seek = byId('replay-seek'),
@@ -22,7 +22,7 @@ export function setupReplay({ showPose, onClose, playSplash }) {
     speed.setAttribute('aria-label', speed.title);
   }
   speed.onclick = () => {
-    tick(performance.now());
+    tick(readTime());
     setRate((rateIndex + 1) % rates.length);
   };
   function display() {
@@ -36,22 +36,19 @@ export function setupReplay({ showPose, onClose, playSplash }) {
   function tick(now) {
     if (!playing || now <= last) return;
     const previousTime = time;
-    if (!document.hidden) time = Math.min(endTime, time + ((now - last) * rates[rateIndex]) / 1000);
+    time = Math.min(endTime, time + ((now - last) * rates[rateIndex]) / 1000);
     if (previousTime < run.duration && time >= run.duration) playSplash(run.samples.at(-1));
     last = now;
     if (time >= endTime) playing = false;
     display();
   }
-  document.addEventListener('visibilitychange', () => {
-    last = performance.now();
-  });
   play.onclick = () => {
     if (playing) {
-      tick(performance.now());
+      tick(readTime());
       playing = false;
     } else {
       if (time >= endTime) time = 0;
-      last = performance.now();
+      last = readTime();
       playing = true;
     }
     display();
@@ -78,7 +75,7 @@ export function setupReplay({ showPose, onClose, playSplash }) {
       run = record.run;
       endTime = run.duration + WATER_RUNOUT_SECONDS;
       time = 0;
-      last = performance.now();
+      last = readTime();
       playing = true;
       setRate(0);
       seek.max = String(endTime);

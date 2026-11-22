@@ -9,7 +9,7 @@ import { createSkyDome } from './sky.js';
 import { createRunwayCrew } from './runway-crew.js';
 import { addFujikawaTerrain } from './fujikawa-terrain.js';
 
-export async function createFujikawaField(crewModel, cameraRig, describe) {
+export async function createFujikawaField(crewModel, cameraRig, describe, readTime) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color();
   scene.fog = new THREE.FogExp2(0xcad7d8, 0.000018);
@@ -74,7 +74,7 @@ export async function createFujikawaField(crewModel, cameraRig, describe) {
     pose(sample, phase = 'ready', seconds = 0) {
       pose(sample);
       crew.update(sample, phase, seconds, modelBase);
-      stoppedAt = phase === 'landed' ? performance.now() : null;
+      stoppedAt = phase === 'landed' ? readTime() : null;
       stoppedSeconds = seconds;
       modelBase.getWorldPosition(sun.target.position);
       sun.position.copy(sun.target.position).add(lightOffset);

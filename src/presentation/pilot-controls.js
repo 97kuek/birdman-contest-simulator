@@ -44,7 +44,7 @@ export function bindPilotControls({
   readHeading,
   setHeading,
   confirmHeading,
-  advanceToInputTime,
+  advanceToInputTime, readTime,
 }) {
   const tilt = setupTiltControl();
   const held = new Map();
@@ -84,15 +84,15 @@ export function bindPilotControls({
     button.onpointerdown = (e) => {
       if (!isAiming() || !e.isPrimary || e.button !== 0) return;
       button.setPointerCapture(e.pointerId);
-      heading.begin(e.pointerId, direction, performance.now());
+      heading.begin(e.pointerId, direction, readTime());
     };
     button.onpointermove = (e) => {
       if (button.hasPointerCapture(e.pointerId) && !button.contains(document.elementFromPoint(e.clientX, e.clientY)))
-        heading.end(e.pointerId, performance.now(), false);
+        heading.end(e.pointerId, readTime(), false);
     };
-    button.onpointerup = (e) => heading.end(e.pointerId, performance.now(), true);
+    button.onpointerup = (e) => heading.end(e.pointerId, readTime(), true);
     for (const event of ['pointercancel', 'lostpointercapture'])
-      button.addEventListener(event, (e) => heading.end(e.pointerId, performance.now(), false));
+      button.addEventListener(event, (e) => heading.end(e.pointerId, readTime(), false));
     // Enter and assistive-technology activation have no press duration.
     button.onclick = (e) => {
       if (isAiming() && e.detail === 0) setHeading(readHeading() + direction * TAP_HEADING_DEGREES);
@@ -142,7 +142,7 @@ export function bindPilotControls({
       aiming = isAiming();
     if (aiming && Math.abs(command) === 2) {
       e.preventDefault();
-      if (!e.repeat) heading.begin(e.key, Math.sign(command), performance.now());
+      if (!e.repeat) heading.begin(e.key, Math.sign(command), readTime());
     } else if (
       aiming &&
       e.code === 'Space' &&
@@ -156,7 +156,7 @@ export function bindPilotControls({
     }
   });
   window.addEventListener('keyup', (e) => {
-    heading.end(e.key, performance.now(), true);
+    heading.end(e.key, readTime(), true);
     if (held.has(e.key)) {
       e.preventDefault();
       setInput(e.key, 0);

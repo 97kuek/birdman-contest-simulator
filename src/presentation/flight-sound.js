@@ -175,6 +175,7 @@ export function setupFlightSound() {
   new MutationObserver(() => { if (dialog.open) silence(); }).observe(dialog, { attributes: true, attributeFilter: ['open'] });
 
   return {
+    silence,
     update(nextPhase, sample, reading, view, boatRange, boatSpeed, field = null, aircraftRange = 0) {
       const cockpit = view === 'pilot';
       if (nextPhase === 'setup' && view === 'boat') nextPhase = 'align';

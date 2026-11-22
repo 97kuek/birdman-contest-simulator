@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createFlightClock } from './application/flight-clock.js';
 import { FlightSession } from './application/flight-session.js';
 import { isOnPavement } from './domain/runway-support.js';
 import { createShoreline } from './domain/shoreline.js';
@@ -51,6 +52,32 @@ function enableReflection(group) {
 async function start() {
   const renderer = new THREE.WebGLRenderer({
     antialias: true, alpha: false, logarithmicDepthBuffer: true, powerPreference: 'high-performance',
+  });
+  const flightClock = createFlightClock(() => performance.now());
+  const sources = byId('source-dialog'), recovery = byId('graphics-recovery');
+  let trials, graphicsState = 'ready';
+  function syncPause() {
+    const paused = graphicsState !== 'ready' || sources.open || document.hidden;
+    if (paused === flightClock.paused) return;
+    flightClock.setPaused(paused);
+    if (paused) {
+      trials?.suspendInput();
+      sound.silence();
+    }
+  }
+  document.addEventListener('visibilitychange', syncPause);
+  new MutationObserver(syncPause).observe(sources, { attributes: true, attributeFilter: ['open'] });
+  syncPause();
+  recovery.oncancel = event => event.preventDefault();
+  renderer.domElement.addEventListener('webglcontextlost', event => {
+    event.preventDefault();
+    graphicsState = 'lost';
+    delete host.dataset.ready;
+    syncPause();
+    if (!recovery.open) recovery.showModal();
+  });
+  renderer.domElement.addEventListener('webglcontextrestored', () => {
+    graphicsState = 'redraw';
   });
   host.append(renderer.domElement);
   renderer.domElement.setAttribute('aria-label', '機体と松原湖岸の3Dモデル。ドラッグで回転、ホイールで拡大縮小');
@@ -108,7 +135,7 @@ async function start() {
   enableReflection(aircraft);
   modelBase.add(aircraft);
 
-  let trials, setNight, firstLand, current, field, fieldPromise;
+  let setNight, firstLand, current, field, fieldPromise;
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
   let marks;
   const boat = createChaseBoat(boatModel);
@@ -121,12 +148,27 @@ async function start() {
   });
   bindViewerControls(host, renderer, cameraRig);
   const motorPosition = new THREE.Vector3(), wheelPosition = new THREE.Vector3();
-  let last = 0, sceneTime = 0, lastImpactRun;
+  let lastFrame = -Infinity, sceneTime = 0, lastImpactRun;
+  const sceneStart = flightClock.now();
   const impactDirection = new THREE.Vector3(), impactPoint = new THREE.Vector3();
-  function renderFrame(now) {
-    if (last && now - last < 30) return;
-    if (last && !document.hidden) sceneTime += (now - last) / 1000;
-    last = now;
+  function renderFrame(timestamp) {
+    if (graphicsState === 'lost' || renderer.getContext().isContextLost()) return;
+    if (graphicsState === 'redraw') {
+      // Three restores its GPU resources on the first draw. Keep physics and
+      // controls paused until the last known aircraft pose is visible again.
+      renderer.render(field?.scene ?? scene, cameraRig.camera);
+      if (renderer.getContext().isContextLost()) return;
+      graphicsState = 'ready';
+      host.dataset.ready = 'true';
+      recovery.close();
+      syncPause();
+      lastFrame = timestamp;
+      return;
+    }
+    if (timestamp - lastFrame < 30) return;
+    lastFrame = timestamp;
+    const now = flightClock.now();
+    sceneTime = (now - sceneStart) / 1000;
     trials?.tick(now);
     if (field) {
       field.update(now);
@@ -236,7 +278,8 @@ async function start() {
     loadField() {
       fieldPromise ??= Promise.all([import('./rendering/fujikawa-field.js'), import('./application/runway-trial.js')])
         .then(async ([{ createFujikawaField }, { createRunwayTrial }]) => {
-          const site = await createFujikawaField(crewModel, cameraRig, text => renderer.domElement.setAttribute('aria-description', text));
+          const site = await createFujikawaField(crewModel, cameraRig,
+            text => renderer.domElement.setAttribute('aria-description', text), flightClock.now);
           return Object.assign(site, { trial: (weather, offset) => createRunwayTrial(site.hull, weather, offset, { preSpin: true }) });
         })
         .catch(error => { fieldPromise = null; throw error; });
@@ -257,12 +300,12 @@ async function start() {
     playSplash: sample => sound.splash(sample),
     soundHorn: () => sound.horn(),
     makeTrail: (run, color) => createFlightTrail(run, color, { facility, release }),
-    sceneSeconds: () => sceneTime,
+    sceneSeconds: () => sceneTime, flightClock,
   });
   renderFrame(performance.now());
   renderer.setAnimationLoop(renderFrame);
   status.hidden = true;
-  host.dataset.ready = 'true';
+  if (graphicsState === 'ready' && !renderer.getContext().isContextLost()) host.dataset.ready = 'true';
 }
 
 start().catch(error => {

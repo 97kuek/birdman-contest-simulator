@@ -39,7 +39,7 @@ export function setupTrials({
   setView,
   view,
   startLandingCamera,
-  sceneSeconds,
+  sceneSeconds, flightClock,
   playSplash, soundHorn,
 }) {
   const weatherControls = document.querySelectorAll('input[name="period"],input[name="difficulty"]');
@@ -52,7 +52,7 @@ export function setupTrials({
     atWater = false,
     review = null;
   const captions = setupCaptions();
-  const advanceToInputTime = () => tick(performance.now());
+  const advanceToInputTime = () => tick(flightClock.now());
   const pedals = bindPedalControls(advanceToInputTime);
   let countdown = null;
   let resultRecord = null;
@@ -76,8 +76,9 @@ export function setupTrials({
     $('previous-result').hidden = Boolean(field) || !session.latest;
   }
   const { tilt, pilotInput, clearInput, releaseInput, advanceHeading, stopHeading } = bindPilotControls({
-    isFlying: () => Boolean(active || runwayFlight),
-    isAiming: () => screen === 'align',
+    readTime: flightClock.now,
+    isFlying: () => !flightClock.paused && Boolean(active || runwayFlight),
+    isAiming: () => !flightClock.paused && screen === 'align',
     view,
     readHeading: () => session.launch.direction,
     setHeading,
@@ -91,23 +92,8 @@ export function setupTrials({
     $('direction-left').disabled = session.launch.direction === -MAX_LAUNCH_HEADING_DEGREES;
     $('direction-right').disabled = session.launch.direction === MAX_LAUNCH_HEADING_DEGREES;
   }
-  function resetCaptionClock() {
-    if (countdown) countdown.last = performance.now();
-    if (document.hidden || $('source-dialog').open) {
-      releaseInput();
-      captions.clear();
-    }
-  }
-  new MutationObserver(resetCaptionClock).observe($('source-dialog'), {
-    attributes: true,
-    attributeFilter: ['open'],
-  });
-  document.addEventListener('visibilitychange', () => {
-    resetCaptionClock();
-    if (active) active.previousTime = performance.now();
-    if (runwayFlight) runwayFlight.last = performance.now();
-  });
   const replay = setupReplay({
+    readTime: flightClock.now,
     playSplash,
     showPose(s, afterContact) {
       const { record } = review;
@@ -223,12 +209,12 @@ export function setupTrials({
   }
   function confirmHeading() {
     if (screen !== 'align') return;
-    advanceHeading(performance.now());
+    advanceHeading(flightClock.now());
     beginCountdown();
   }
   function beginCountdown() {
     tilt.calibrate();
-    countdown = { seconds: 0, last: performance.now() };
+    countdown = { seconds: 0, last: flightClock.now() };
     stage('countdown');
     displayCall(launchCue(0, session.aircraftId));
     $('launch-call').classList.remove('go');
@@ -289,7 +275,7 @@ export function setupTrials({
     clearInput();
     stage('landing');
     captions.show(commentary.landing(run), 3200);
-    landing = { record, start: performance.now(), boatAt: null };
+    landing = { record, start: flightClock.now(), boatAt: null };
   }
   function stopAttempt(sample, now, reason) {
     const { trail } = active.record;
@@ -347,7 +333,7 @@ export function setupTrials({
   }
   function flyRunway(now) {
     const flight = runwayFlight;
-    if (!document.hidden && !$('source-dialog').open) flight.seconds += Math.max(0, now - flight.last) / 1000;
+    flight.seconds += Math.max(0, now - flight.last) / 1000;
     flight.last = Math.max(now, flight.last);
     $('launch-call').hidden = flight.seconds >= GO_CAPTION_SECONDS;
     const frame = runway.advance(flight.seconds, pilotInput(), pilotInput(2), pedals.watts);
@@ -391,6 +377,7 @@ export function setupTrials({
     }
   }
   function tick(now) {
+    if (flightClock.paused) return;
     if (field && !countdown) {
       if (runwayFlight) flyRunway(now);
       return;
@@ -408,8 +395,7 @@ export function setupTrials({
       return;
     }
     if (countdown) {
-      if (!document.hidden && !$('source-dialog').open)
-        countdown.seconds += Math.max(0, now - countdown.last) / 1000;
+      countdown.seconds += Math.max(0, now - countdown.last) / 1000;
       countdown.last = Math.max(now, countdown.last);
       const cue = launchCue(countdown.seconds, session.aircraftId);
       if (field) {
@@ -443,7 +429,7 @@ export function setupTrials({
     }
     if (!active) return;
     const elapsed = Math.max(0, now - active.previousTime) / 1000;
-    if (!document.hidden) active.clock += elapsed;
+    active.clock += elapsed;
     active.previousTime = Math.max(now, active.previousTime);
     crewTime(active.clock);
     const { record, attempt } = active;
@@ -589,6 +575,7 @@ export function setupTrials({
   stage('setup');
   return {
     tick,
+    suspendInput() { releaseInput(); captions.clear(); },
     get showFlag() { return screen === 'align' || screen === 'countdown' || (active && !active.airborne); },
     get soundPhase() {
       if (field) return runwayFlight?.phase === 'flight' ? 'glide' : runwayFlight ? 'run' : screen;
@@ -613,7 +600,7 @@ export function setupTrials({
     waveTime() {
       if (review) return releaseWaveTimes.get(review.record.run) + replay.time;
       if (active) return active.record.releaseWaveTime + active.clock - session.launch.duration;
-      if (landing) return landing.record.releaseWaveTime + landing.record.run.duration + (performance.now() - landing.start) / 1000;
+      if (landing) return landing.record.releaseWaveTime + landing.record.run.duration + (flightClock.now() - landing.start) / 1000;
       return sceneSeconds();
     },
     get contactRun() {
