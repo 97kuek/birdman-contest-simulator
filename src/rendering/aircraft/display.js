@@ -15,6 +15,8 @@ export function createCockpitDisplay(aircraft, { describe, aircraftId, northInCo
   const ctx = canvas.getContext('2d');
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
+  // glTF puts the top of the authored display at V = 0.
+  texture.flipY = false;
   const face = aircraft.getObjectByName('cockpit-screen');
   face.material = new THREE.MeshBasicMaterial({ map: texture, toneMapped: false });
   ctx.textAlign = 'center';

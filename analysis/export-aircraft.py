@@ -10,11 +10,40 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import bpy
+from mathutils import Matrix
 
 scene = bpy.context.scene
 name = scene["aircraft_id"]
 root = Path(bpy.data.filepath).resolve().parents[1]
 assembly = bpy.data.collections[scene["aircraft_collection"]]
+# Keep the linked, editable hardware in the .blend. For this background
+# export, combine its fixed parts and keep the live display on a separate mesh.
+mount = bpy.data.objects["cockpit-display-mount"]
+instrument = mount.instance_collection
+mount.instance_type = "NONE"
+mount.instance_collection = None
+hardware = []
+for part in instrument.all_objects:
+    if part.type != "MESH":
+        raise ValueError(f"Instrument part must be a mesh: {part.name}")
+    obj = bpy.data.objects.new(part.name, part.data)
+    mount.users_collection[0].objects.link(obj)
+    obj.parent = mount
+    obj.matrix_parent_inverse = Matrix.Identity(4)
+    obj.matrix_local = Matrix.Translation(-instrument.instance_offset) @ part.matrix_world
+    obj["excludeFromHull"] = True
+    if part.get("partName") == "cockpit-screen":
+        obj.name = "cockpit-screen"
+    else:
+        hardware.append(obj)
+bpy.ops.object.select_all(action="DESELECT")
+for obj in hardware:
+    obj.select_set(True)
+body = hardware[0]
+body.data = body.data.copy()
+bpy.context.view_layer.objects.active = body
+bpy.ops.object.join()
+body.name = "cockpit-instrument-hardware"
 bpy.ops.object.select_all(action="DESELECT")
 for obj in assembly.all_objects:
     if obj.get("wingSide"):
