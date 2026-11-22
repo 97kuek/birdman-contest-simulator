@@ -4,7 +4,18 @@ import { loadVenueModel } from '../authored-models.js';
 
 // Geometry is available before a factory returns, including in command-line
 // flight analyses. Headless consumers read the identical exported mesh.
-export async function loadAircraftTemplate(id) {
+const templates = new Map();
+export function loadAircraftTemplate(id) {
+  if (!templates.has(id)) {
+    templates.set(id, readTemplate(id).catch(error => {
+      templates.delete(id);
+      throw error;
+    }));
+  }
+  return templates.get(id);
+}
+
+async function readTemplate(id) {
   const name = 'aircraft-' + id;
   let scene;
   if (typeof document !== 'undefined') {

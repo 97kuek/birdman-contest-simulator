@@ -9,6 +9,7 @@ import { setupFlightSound } from './presentation/flight-sound.js';
 import { selectedWeather, setupTrials } from './presentation/flight-screen.js';
 import { bindViewerControls, setupViewerShell, showCameraMode, trackViewportFraction } from './presentation/viewer-shell.js';
 import { createAircraftPose } from './rendering/aircraft-pose.js';
+import { loadAircraftTemplate } from './rendering/aircraft/model.js';
 import { createCockpitDisplay } from './rendering/aircraft/display.js';
 import { createDaylight } from './rendering/daylight.js';
 import { createPracticeBuoys } from './rendering/practice-buoys.js';
@@ -78,10 +79,10 @@ async function start() {
   const facility = new THREE.Group();
   facility.rotation.y = THREE.MathUtils.degToRad(65);
   scene.add(facility);
-  const [platformModel, buoyModel, crewModel, boatModel, { createAircraft }, { createQx25Aircraft }, { createRenAircraft }, landscape] = await Promise.all([
-    loadVenueModel('biwa-platform'), loadAuthoredModel('practice-buoy'),
+  const [platformModel, crewModel, boatModel, { createAircraft }, landscape] = await Promise.all([
+    loadVenueModel('biwa-platform'),
     loadAuthoredModel('ground-crew'), loadVenueModel('chase-boat'),
-    import('./rendering/aircraft.js'), import('./rendering/aircraft/qx25.js'), import('./rendering/aircraft/ren.js'),
+    import('./rendering/aircraft.js'),
     addLandscape(scene),
   ]);
   const platform = createPlatform({ shoreDistance: 168 }, platformModel);
@@ -109,9 +110,7 @@ async function start() {
 
   let trials, setNight, firstLand, current, field, fieldPromise;
   const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
-  const marks = createPracticeBuoys(buoyModel);
-  facility.add(marks);
-  enableReflection(marks);
+  let marks;
   const boat = createChaseBoat(boatModel);
   facility.add(boat.group);
   enableReflection(boat.group);
@@ -189,12 +188,22 @@ async function start() {
   firstLand = createShoreline(landscape.userData.shoreRings, facility.rotation.y);
   const { view, setView, startLandingCamera, moveCamera } = cameraRig;
   const fleet = new Map();
-  const aircraftFactories = { ryukai: () => ryukai, qx25: createQx25Aircraft, ren: createRenAircraft };
-  function selectAircraft(id) {
-    marks.visible = id === 'ren';
+  async function selectAircraft(id) {
     let entry = fleet.get(id);
     if (!entry) {
-      const model = aircraftFactories[id]();
+      let model = ryukai;
+      if (id === 'qx25') {
+        const [builder, template] = await Promise.all([import('./rendering/aircraft/qx25-model.js'), loadAircraftTemplate(id)]);
+        model = builder.createQx25Aircraft(template);
+      } else if (id === 'ren') {
+        const [builder, template, buoy] = await Promise.all([
+          import('./rendering/aircraft/ren-model.js'), loadAircraftTemplate(id), loadAuthoredModel('practice-buoy'),
+        ]);
+        model = builder.createRenAircraft(template);
+        marks = createPracticeBuoys(buoy);
+        enableReflection(marks);
+        facility.add(marks);
+      }
       if (model !== ryukai) enableReflection(model);
       const teamCrew = id === 'ryukai' ? toricaCrew : createLaunchCrew(crewModel, id);
       if (teamCrew !== toricaCrew) enableReflection(teamCrew.group);
@@ -208,6 +217,7 @@ async function start() {
       entry = { model, crew: teamCrew, session, display, aircraftPose };
       fleet.set(id, entry);
     }
+    if (marks) marks.visible = id === 'ren';
     if (aircraft !== entry.model) {
       modelBase.remove(aircraft);
       aircraft = entry.model;
@@ -222,7 +232,7 @@ async function start() {
     return entry;
   }
   trials = setupTrials({
-    ...selectAircraft('ryukai'), selectAircraft, setView, view, startLandingCamera, drawWindOffset,
+    ...await selectAircraft('ryukai'), selectAircraft, setView, view, startLandingCamera, drawWindOffset,
     loadField() {
       fieldPromise ??= Promise.all([import('./rendering/fujikawa-field.js'), import('./application/runway-trial.js')])
         .then(async ([{ createFujikawaField }, { createRunwayTrial }]) => {

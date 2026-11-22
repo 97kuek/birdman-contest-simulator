@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { loadVenueModel } from './authored-models.js';
 import { createAircraftPose } from './aircraft-pose.js';
 import { createCockpitDisplay } from './aircraft/display.js';
-import { createRenAircraft } from './aircraft/ren.js';
+import { createRenAircraft } from './aircraft/ren-model.js';
+import { loadAircraftTemplate } from './aircraft/model.js';
 import { modelHull } from './collision-hull.js';
 import { createSkyDome } from './sky.js';
 import { createRunwayCrew } from './runway-crew.js';
@@ -19,9 +20,9 @@ export async function createFujikawaField(crewModel, cameraRig, describe) {
   Object.assign(sun.shadow.camera, { left: -24, right: 24, top: 24, bottom: -24, near: 1, far: 140 });
   sun.shadow.normalBias = .015;
   scene.add(sky, sun, sun.target);
-  const [terrain, van] = await Promise.all([
+  const [terrain, van, template] = await Promise.all([
     addFujikawaTerrain(scene),
-    loadVenueModel('chase-van'),
+    loadVenueModel('chase-van'), loadAircraftTemplate('ren'),
   ]);
   const { facility, landscape, riverTime } = terrain;
   const lightOffset = new THREE.Vector3(-35, 62, 28);
@@ -33,7 +34,7 @@ export async function createFujikawaField(crewModel, cameraRig, describe) {
   landscape.traverse(part => {
     if (part.material?.isMeshBasicMaterial) terrainColours.set(part.material, part.material.color.clone());
   });
-  const aircraft = createRenAircraft();
+  const aircraft = createRenAircraft(template);
   const hull = modelHull(aircraft);
   const modelBase = new THREE.Group();
   modelBase.add(aircraft);

@@ -30,15 +30,22 @@ function showAircraft(id) {
 export function bindAircraftPicker(initialId, isPreparing, select) {
   const ids = Object.keys(aircraftCards);
   let index = ids.indexOf(initialId);
-  function step(direction) {
-    if (!isPreparing()) return;
+  const previous = byId('aircraft-prev'), following = byId('aircraft-next');
+  let loading = false;
+  async function step(direction) {
+    if (!isPreparing() || loading) return;
     const next = (index + direction + ids.length) % ids.length;
-    select(ids[next]);
-    index = next;
-    showAircraft(ids[index]);
+    loading = previous.disabled = following.disabled = true;
+    try {
+      if (await select(ids[next])) {
+        index = next;
+        showAircraft(ids[index]);
+      }
+    } finally {
+      loading = previous.disabled = following.disabled = false;
+    }
   }
-  for (const [id, direction] of [['aircraft-prev', -1], ['aircraft-next', 1]]) {
-    const button = byId(id);
+  for (const [button, direction] of [[previous, -1], [following, 1]]) {
     button.disabled = false;
     button.onclick = () => step(direction);
   }

@@ -62,6 +62,7 @@ export function setupTrials({
     stopHeading();
     if (name !== 'flight' && name !== 'countdown') tilt.end();
     screen = name;
+    if (name !== 'setup') $('loading').hidden = true;
     if (name !== 'flight') pedals.setActive(false);
     document.body.dataset.stage = screen;
     $('flight-settings').hidden = name !== 'setup';
@@ -553,15 +554,29 @@ export function setupTrials({
   for (const button of document.querySelectorAll('[data-view]')) {
     button.addEventListener('click', () => { if (runwayFlight) runwayFlight.showCockpitAtLift = false; });
   }
-  bindAircraftPicker(session.aircraftId, () => screen === 'setup', id => {
+  bindAircraftPicker(session.aircraftId, () => screen === 'setup', async id => {
     venueVersion++;
-    $('venue-choices').hidden = id !== 'ren';
-    venueControls[0].checked = true;
-    if (field) activateVenue(null);
-    $('loading').hidden = true;
-    $('launch').disabled = false;
-    ({ session, aircraftPose } = selectAircraft(id));
-    changeConditions();
+    const loading = $('loading'), venues = $('venue-choices');
+    venueControls[field ? 1 : 0].checked = true;
+    venues.disabled = $('launch').disabled = $('previous-result').disabled = true;
+    loading.textContent = aircraftCards[id].name + 'を読み込み中…';
+    loading.hidden = false;
+    try {
+      const entry = await selectAircraft(id);
+      if (field) activateVenue(null);
+      ({ session, aircraftPose } = entry);
+      venueControls[0].checked = true;
+      venues.hidden = id !== 'ren';
+      changeConditions();
+      loading.hidden = true;
+      return true;
+    } catch (error) {
+      console.error(error);
+      loading.textContent = aircraftCards[id].name + 'を読み込めませんでした。もう一度機体を選んでください。';
+      return false;
+    } finally {
+      venues.disabled = $('launch').disabled = $('previous-result').disabled = false;
+    }
   });
   $('launch').onclick = aim;
   $('launch').disabled = false;
