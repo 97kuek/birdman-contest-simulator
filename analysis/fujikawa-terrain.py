@@ -322,6 +322,37 @@ def bake_landmarks():
     (AUTHORING/'trees.json').write_text(json.dumps(stands, separators=(',', ':'))+'\n')
 
 
+def bake_floodplain_photo():
+    """Upgrade only the final georeferenced ground image, after all z17 pixel measurements."""
+    base = mosaic('seamlessphoto', 17, 116007, 51860, 6, 8)
+    detail = mosaic('seamlessphoto', 18, 232016, 103722, 9, 9)
+    frame = cv2.resize(base, (3072, 4096), interpolation=cv2.INTER_CUBIC)
+    # The detailed sheet starts two z18 tiles east and south of the frame origin.
+    x0, y0 = 512, 512
+    height, width = detail.shape[:2]
+    target = frame[y0:y0 + height, x0:x0 + width]
+    # Outline traced on a 768 × 1024 print, between the west levee and east gravel bars.
+    boundary = np.array([(204,145), (326,127), (369,151), (437,143), (540,126),
+                         (675,138), (680,494), (596,628), (467,685), (340,684),
+                         (310,645), (287,546), (268,452), (244,422), (221,299)])
+    dry = np.zeros((height, width), np.uint8)
+    cv2.fillPoly(dry, [boundary * 4 - [x0, y0]], 255)
+    dry = cv2.GaussianBlur(dry, (0, 0), 8)
+    water = cv2.imread(str(OUT / 'river-water.png'), cv2.IMREAD_GRAYSCALE)
+    if water is None:
+        raise FileNotFoundError(OUT / 'river-water.png')
+    water = cv2.resize(water, (frame.shape[1], frame.shape[0]), interpolation=cv2.INTER_LINEAR)
+    dry = np.minimum(dry, 255 - water[y0:y0 + height, x0:x0 + width])
+    x = np.arange(width)
+    y = np.arange(height)
+    border = np.minimum(np.minimum(x, x[::-1])[None, :], np.minimum(y, y[::-1])[:, None])
+    weight = (np.minimum(border, 24) / 24 * (dry / 255)).astype(np.float32)[:, :, None]
+    target[:] = np.rint(target * (1 - weight) + detail * weight).astype(np.uint8)
+    photo = cv2.resize(frame, (2048, 2731), interpolation=cv2.INTER_LANCZOS4)
+    if not cv2.imwrite(str(OUT / 'runway.webp'), photo, [cv2.IMWRITE_WEBP_QUALITY, 86]):
+        raise OSError('Failed to save the Fujikawa floodplain photograph')
+
+
 if __name__ == '__main__':
     CACHE.mkdir(parents=True, exist_ok=True)
     OUT.mkdir(parents=True, exist_ok=True)
@@ -344,3 +375,4 @@ if __name__ == '__main__':
     runway = dict(southThreshold=THRESHOLD, trueBearingDegrees=math.degrees(BEARING)%360,
                   length=850, width=30, elevation=FIELD_ALTITUDE)
     (OUT/'layers.json').write_text(json.dumps(dict(runway=runway, layers=layers[::-1], fuji=fuji), indent=2)+'\n')
+    bake_floodplain_photo()
