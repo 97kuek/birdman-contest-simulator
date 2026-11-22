@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { clone } from 'three/addons/utils/SkeletonUtils.js';
 import { propTurnsPerCrank } from '../../domain/ren-practice.js';
 import { loadAircraftTemplate, matchingParts } from './model.js';
 import { bindWingFlex } from './wing-flex.js';
@@ -7,45 +8,49 @@ const template = await loadAircraftTemplate('ren');
 
 function bindPedals(root) {
   const crank = root.getObjectByName('pedal-crank');
-  const [thighs, calves, shoes, knees] = ['cycling-thigh', 'cycling-calf', 'cycling-shoe', 'cycling-knee']
-    .map(name => matchingParts(root, name));
-  const legs = thighs.map((thigh, i) => ({ side: i ? 1 : -1, thigh, calf: calves[i], shoe: shoes[i], kneecap: knees[i] }));
-  const up = new THREE.Vector3(0, 1, 0), hip = new THREE.Vector3(), foot = new THREE.Vector3();
-  const knee = new THREE.Vector3(), delta = new THREE.Vector3();
-  function limb(part, a, b) {
-    part.position.copy(a).lerp(b, .5);
-    delta.subVectors(b, a);
-    part.scale.y = delta.length() / 2 + .018;
-    part.quaternion.setFromUnitVectors(up, delta.normalize());
+  const [pedals, hips, thighs, calves, knees, ankles] = [
+    'pedal', 'cycling-hip', 'cycling-thigh', 'cycling-calf', 'cycling-knee', 'cycling-ankle',
+  ].map(name => matchingParts(root, name));
+  const pilot = crank.parent;
+  const meanPitch = (pedals[0].rotation.x + pedals[1].rotation.x) / 2;
+  const legs = pedals.map((pedal, i) => ({
+    pedal, hip: hips[i].position, thigh: thighs[i], calf: calves[i], knee: knees[i], ankle: ankles[i],
+    pitchAmplitude: pedal.rotation.x - meanPitch,
+  }));
+  const foot = new THREE.Vector3(), delta = new THREE.Vector3(), bendDirection = new THREE.Vector3();
+  const thighAxis = new THREE.Vector3(), shinAxis = new THREE.Vector3();
+  const x = new THREE.Vector3(), z = new THREE.Vector3(), basis = new THREE.Matrix4();
+  function orient(bone, axis) {
+    // Use the bone roll authored in Blender, keeping the patella facing away from the seat.
+    z.set(0, -axis.z, axis.y).normalize();
+    x.crossVectors(axis, z);
+    bone.quaternion.setFromRotationMatrix(basis.makeBasis(x, axis, z));
   }
   return crankAngle => {
-    // +Z is aft. A rising crank at its top must travel toward the nose (-Z).
-    const angle = -crankAngle;
-    crank.rotation.x = angle;
-    for (const { side, thigh, calf, shoe, kneecap } of legs) {
-      hip.set(.112 * side, .169, -.08);
-      foot.set(.112 * side, crank.position.y + side * .166 * Math.cos(angle),
-        crank.position.z + side * .166 * Math.sin(angle) + .065);
-      const dy = foot.y - hip.y;
-      const dz = foot.z - hip.z;
-      const span = Math.hypot(dy, dz);
-      // Fit equal length femur and tibia, bending toward the windscreen.
-      const bend = Math.sqrt(Math.max(0, .48 ** 2 - span ** 2 / 4));
-      knee.copy(hip).lerp(foot, .5);
-      knee.y -= bend * dz / span;
-      knee.z += bend * dy / span;
-      kneecap.position.copy(knee);
-      limb(thigh, hip, knee);
-      limb(calf, knee, foot);
-      shoe.position.copy(foot);
-      shoe.position.z -= .048;
-      shoe.rotation.x = Math.PI / 2 - .38;
+    // The top of the crank moves toward the nose (-Z). The pedal bearing
+    // lets the shoe pitch gently instead of turning over with the crank.
+    crank.rotation.x = -crankAngle;
+    for (const { pedal, hip, thigh, calf, knee, ankle, pitchAmplitude } of legs) {
+      pedal.rotation.x = crankAngle + meanPitch + pitchAmplitude * Math.cos(crankAngle);
+      pilot.worldToLocal(ankle.getWorldPosition(foot));
+      delta.subVectors(foot, hip);
+      const span = delta.length();
+      const femur = thigh.userData.jointLength, tibia = calf.userData.jointLength;
+      const along = (femur ** 2 - tibia ** 2 + span ** 2) / (2 * span);
+      const bend = Math.sqrt(Math.max(0, femur ** 2 - along ** 2));
+      bendDirection.set(0, -delta.z, delta.y).normalize();
+      knee.position.copy(hip).addScaledVector(delta, along / span).addScaledVector(bendDirection, bend);
+      thigh.position.copy(hip).lerp(knee.position, .5);
+      calf.position.copy(knee.position).lerp(foot, .5);
+      orient(thigh, thighAxis.subVectors(knee.position, hip).normalize());
+      orient(calf, shinAxis.subVectors(foot, knee.position).normalize());
+      orient(knee, delta.addVectors(thighAxis, shinAxis).normalize());
     }
   };
 }
 
 export function createRenAircraft() {
-  const root = template.clone();
+  const root = clone(template);
   const poseWing = bindWingFlex(root), poseLegs = bindPedals(root);
   const rotor = root.getObjectByName('propeller');
   const elevator = root.getObjectByName('elevator-hinge'), rudder = root.getObjectByName('rudder-hinge');
