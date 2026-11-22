@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Group, Vector3 } from 'three';
+import { Group, PerspectiveCamera, Vector3 } from 'three';
 import { createRunwayTrial } from '../src/application/runway-trial.js';
 import { CG_HEIGHT } from '../src/domain/aircraft-dynamics.js';
 import { createRenAircraft } from '../src/rendering/aircraft/ren.js';
@@ -15,17 +15,47 @@ const [groundCrewModel, vanModel] = await Promise.all([readModel('ground-crew.gl
 
 
 test('追走車の四輪は近景と遠景の両方で回転し、車内外の鏡面が残る', () => {
-  const { group, setDistance } = createRunwaySupportCar(vanModel.clone());
+  const source = vanModel.clone();
+  const names = ['MirrorSurface', 'DoorMirrorPort', 'DoorMirrorStarboard'];
+  const mirrors = names.map(name => source.getObjectByName(name));
+  const meshes = new Set();
+  source.traverse(part => { if (part.isMesh) meshes.add(part); });
+  const { group, setDistance } = createRunwaySupportCar(source);
+  group.traverse(part => { if (part.isMesh) assert.ok(meshes.delete(part)); });
+  assert.equal(meshes.size, 0);
   setDistance(1.3, 7.2);
+  const camera = new PerspectiveCamera();
+  group.updateMatrixWorld(true);
   for (let i = 0; i < 4; i++) {
     const wheel = group.getObjectByName('Wheel' + i);
     assert.equal(wheel.rotation.x, -4);
     const lod = wheel.children.find(part => part.isLOD);
-    assert.deepEqual(lod.levels.map(level => level.object.name), ['Wheel' + i + 'Near', 'Wheel' + i + 'Far']);
+    const [near, far] = lod.levels.map(level => level.object);
+    assert.deepEqual([near.name, far.name], ['Wheel' + i + 'Near', 'Wheel' + i + 'Far']);
+    assert.equal(far.visible, false);
+    for (const distance of [80, 1]) {
+      camera.position.set(0, 0, distance);
+      camera.updateMatrixWorld();
+      lod.update(camera);
+      assert.equal(near.visible, distance === 1);
+      assert.equal(far.visible, distance === 80);
+    }
+    for (const child of far.children) assert.ok(near.children.some(part => part.material === child.material));
   }
-  for (const name of ['MirrorSurface', 'DoorMirrorPort', 'DoorMirrorStarboard']) {
-    assert.ok(group.getObjectByName(name).isReflector);
+  for (const mirror of mirrors) {
+    assert.equal(group.getObjectByName(mirror.name), mirror);
+    assert.equal(mirror.material.name, 'Silvered mirror glass');
   }
+  let windowPane;
+  group.traverse(part => { if (part.material?.userData.interiorOpacity !== undefined) windowPane = part; });
+  const glass = windowPane.material;
+  const exterior = glass.opacity;
+  camera.position.copy(group.getObjectByName('chase-car-camera').getWorldPosition(new Vector3()));
+  glass.onBeforeRender(null, null, camera);
+  assert.equal(glass.opacity, glass.userData.interiorOpacity);
+  camera.position.set(0, 3, 7);
+  glass.onBeforeRender(null, null, camera);
+  assert.equal(glass.opacity, exterior);
 });
 
 test('地上班は機体を押し、手放した後は翼端を追い、着地後は近くのキャッチャーが左右の翼を支える', () => {

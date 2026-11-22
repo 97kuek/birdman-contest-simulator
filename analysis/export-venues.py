@@ -178,8 +178,9 @@ def export_collection(scene_name, collection_name, filename, *, landscape=False)
         bpy.ops.object.join()
         for obj in list(collection.all_objects):
             if obj.name.startswith('Wheel') and obj.name.endswith('Far'):
-                obj.hide_viewport = False
-                obj.hide_render = False
+                for part in [obj, *obj.children_recursive]:
+                    part.hide_viewport = False
+                    part.hide_render = False
     bpy.context.view_layer.update()
     if landscape:
         # DEMs are photographed/unlit. A single normal on these surfaces removes
